@@ -1,38 +1,29 @@
-/* Story 1.10: wordmark logo Shotstash — lihat Logo.tsx untuk kontrak. */
+/* Product wordmark: see Logo.tsx for the contract. */
 
 .logo {
   display: inline-flex;
   align-items: center;
-  /* Identitas, bukan navigasi: tidak bisa diklik / diseleksi. */
+  /* Identity, not navigation: not clickable or selectable. */
   pointer-events: none;
   user-select: none;
   flex-shrink: 0;
 }
 
-.logo svg {
+.logo img {
   display: block;
   height: 100%;
   width: auto;
-  aspect-ratio: 1247 / 361; /* jendela crop viewBox 401 396 1247 361 */
+  aspect-ratio: var(--brand-logo-aspect, 1098.2 / 250); /* intrinsic ratio of the wordmark asset */
 }
 
-/* Gelap: wordmark polos. CATATAN (review G1): mix-blend lighten TIDAK
-   dipakai — setiap titik pemasangan membungkus logo dalam konteks
-   stacking (position:fixed, kartu ber-z-index) yang menjadi grup
-   terisolasi, sehingga blend tidak pernah menjangkau latar halaman
-   (inert). Detail ink di crop memang hanya ada DI DALAM glyph kuning
-   (counter huruf), jadi render polos sudah menghasilkan tampilan yang
-   dimaksud: kuning tampil, ink menyatu dengan glyph, bukan dengan latar. */
-
-/* Terang: kuning #efe749 di atas krem #f5f4ee hanya 1,1 : 1 — tidak akan
-   pernah terbaca. Warna logo TIDAK diubah (keputusan user); yang berubah
-   latarnya: bidang gelap "slate" dengan gradien, sudut, dan garis kilau
-   ATAS yang sama persis dengan panggung hero di bawahnya, sehingga terbaca
-   sebagai satu keluarga — bukan kapsul tempelan seperti logo-pill lama. */
+/* Light theme: the yellow accent on the light page background is about
+   1.1:1 and never readable. The logo color does not change; instead the
+   wordmark sits on a dark "slate" panel with the same gradient, radius and
+   top highlight as the hero stage below it. */
 :global([data-theme='light']) .logo {
   box-sizing: content-box;
   padding: 10px 18px;
-  border-radius: var(--spine-radius-lg); /* papan, bukan kapsul: di bidang 70px radius 28px masih terbaca membulat */
+  border-radius: var(--spine-radius-lg); /* a board, not a pill */
   background: radial-gradient(
     80% 60% at 50% 34%,
     var(--app-spine-stage-1) 0%,
@@ -44,7 +35,7 @@
     0 8px 20px -8px rgba(20, 19, 16, .45);
 }
 
-/* Tinggi: 40 header (app) / 50 login desktop / 42 login di HP. */
+/* Heights: 40 app header / 50 desktop login / 42 phone login. */
 .app {
   height: 40px;
 }
@@ -53,7 +44,7 @@
   height: 50px;
 }
 
-/* Header app di HP (Story 2.3). */
+/* App header on phones. */
 .mobile {
   height: 42px;
 }

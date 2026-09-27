@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AppSelect from '@/components/AppSelect';
+import { brand } from '@/lib/brand';
 import AuthPage from '@/components/auth/AuthPage';
 import AuthCard from '@/components/auth/AuthCard';
 import { FormAlert } from '@/components/form/FormAlert';
@@ -25,7 +26,7 @@ type QDef = {
 
 const DISCOVER_Q: QDef = {
   id: 'discover',
-  label: 'Dari mana kamu tahu Shotstash Shotstash?',
+  label: `Dari mana kamu tahu ${brand.productName}?`,
   options: [
     'Diundang / direkomendasikan admin',
     'Teman atau kolega',

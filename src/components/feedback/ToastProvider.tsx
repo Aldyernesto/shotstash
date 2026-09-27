@@ -18,11 +18,9 @@
  *       kegagalannya (`dashboard/shared/page.tsx:37,43,50`) Story 3.22
  *    4. Halaman Trash — Restore, Delete Forever, dan
  *       kegagalannya .................................... Story 3.21
- *    5. a removed page — gagal render final
- *       (`a removed page:116`) ..... Story 3.24
- *    6. Viewer / unduhan Agen .......................... Story 3.7
- *    7. Panel Diskusi project — gagal mengirim pesan .... Story 3.17
- *    8. `context-menu` — hasil aksi merusak ............. Story 3.3
+ *    5. Viewer / unduhan Agen .......................... Story 3.7
+ *    6. Panel Diskusi project: gagal mengirim pesan .... Story 3.17
+ *    7. `context-menu`: hasil aksi merusak ............. Story 3.3
  *
  * B. TETAP MEMAKAI `pushToast` / `alert()` / `confirm()` HARI INI,
  *    SAMPAI EPIC 4 — jangan disentuh di gelombang ini:

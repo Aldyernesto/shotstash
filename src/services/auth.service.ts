@@ -206,8 +206,8 @@ export class AdminActionError extends Error {
 
 export const MIN_PASSWORD_LENGTH = 8;
 const GENERATED_PASSWORD_LENGTH = 10;
-// Tanpa karakter ambigu: 0/O/o, 1/l/I/i.
-const GENERATED_PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+// No ambiguous characters: 0/O/o, 1/l/I/i. An alphabet, not a secret.
+const GENERATED_PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'; // gitleaks:allow
 
 export function generateReadablePassword(length = GENERATED_PASSWORD_LENGTH): string {
   let out = '';

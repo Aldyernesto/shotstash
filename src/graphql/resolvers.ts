@@ -587,7 +587,7 @@ export const resolvers = {
         if (!isSuperAdmin(currentUser)) {
           return { success: false, message: 'Forbidden: SUPER_ADMIN only' };
         }
-        if (!TEAM_CREATE_ROLES.includes(requestedRole)) {
+        if (!requestedRole || !TEAM_CREATE_ROLES.includes(requestedRole)) {
           return { success: false, message: 'Super Admin hanya boleh membuat Admin, Editor, Field Crew, atau Viewer dari panel ini' };
         }
       }

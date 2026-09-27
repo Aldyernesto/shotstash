@@ -1,17 +1,16 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  typescript: { ignoreBuildErrors: true },
-  // Next 16 memblokir 127.0.0.1 sebagai host dev lintas-origin: halaman
-  // berhenti di "Loading…" tanpa pesan apa pun karena hidrasi tidak pernah
-  // selesai. Izinkan keduanya supaya localhost dan 127.0.0.1 sama-sama jalan.
+  // Next 16 blocks 127.0.0.1 as a cross-origin dev host: the page stops at
+  // "Loading…" with no message because hydration never finishes. Allow both
+  // so localhost and 127.0.0.1 work.
   allowedDevOrigins: ["localhost", "127.0.0.1"],
-  // Akar proyek ditetapkan eksplisit (dokumen Next: turbopack.md → "Root
-  // directory"): bila ada package-lock.json lain di folder induk (mis. di
-  // home user), Next 16 menebak akar yang salah dan SEMUA rute — termasuk
-  // /api — menjawab 404, baik di dev maupun build. Dijangkarkan ke folder
-  // berkas konfigurasi ini, bukan cwd, supaya tidak bergantung dari mana
-  // next dijalankan; cwd hanya cadangan bila __dirname tidak ada.
+  // Pin the project root explicitly (Next docs: turbopack.md, "Root
+  // directory"): when another package-lock.json exists in a parent folder
+  // (for example the user's home), Next 16 guesses the wrong root and every
+  // route, /api included, answers 404 in dev and build. Anchored to this
+  // config file's folder rather than cwd; cwd is only a fallback when
+  // __dirname is unavailable.
   turbopack: { root: typeof __dirname !== "undefined" ? __dirname : process.cwd() },
 };
 

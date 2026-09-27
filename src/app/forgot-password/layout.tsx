@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import AuthPage from '@/components/auth/AuthPage';
+import { brand } from '@/lib/brand';
 
 export const metadata: Metadata = {
-  title: 'Reset Password — Shotstash',
+  title: `Reset Password | ${brand.productName}`,
 };
 
 // Story 1.20: kerangka glow lama (backgroundGlow/accentGlow dari

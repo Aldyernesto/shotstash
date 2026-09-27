@@ -1,6 +1,6 @@
 'use client';
 
-// Stories 1.16-1.19: panggung hero "collage" di kolom kiri login (/)
+// Stories 1.16-1.19: panggung hero kolase di kolom kiri login (/)
 // — glow kuning, hero-copy (h1 tunggal + stiker + tag-pill), hero-tile
 // desktop, photo-band (drift 1 putaran lalu berhenti), hero-stack-mobile,
 // fade tepi, dan tombol motion-pause.

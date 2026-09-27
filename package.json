@@ -24,8 +24,14 @@
     "build:folder-shell": "node scripts/build-folder-shell-geometry.mjs",
     "check:folder-shell": "node scripts/check-folder-shell.mjs",
     "start": "NODE_ENV=production tsx server.ts",
-    "lint": "eslint",
-    "check:tokens": "node scripts/check-design-tokens.mjs"
+    "lint": "eslint --max-warnings 296",
+    "check:tokens": "node scripts/check-design-tokens.mjs",
+    "check:legacy": "node scripts/check-legacy-allowlist.mjs",
+    "brand:css": "tsx scripts/gen-brand-css.ts",
+    "privacy:scan": "node scripts/privacy-scan.mjs",
+    "privacy:hash": "node scripts/privacy-hash.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"scripts/**/*.test.mjs\""
   },
   "dependencies": {
     "@apollo/client": "^3.14.1",

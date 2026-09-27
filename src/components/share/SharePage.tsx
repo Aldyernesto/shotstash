@@ -20,6 +20,7 @@
 
 import React, { useCallback, useId, useRef, useState } from "react";
 import Logo from "@/components/Logo";
+import { brand } from "@/lib/brand";
 import ThemeToggle from "@/components/ThemeToggle";
 import TagPill from "@/components/tag-pill/TagPill";
 import { ButtonPrimary, PillButton } from "@/components/form/buttons";
@@ -430,7 +431,7 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
 
         <div className={styles.card}>
           <p className={`spine-label ${styles.kick}`}>
-            Project · <b>{payload.projectName ?? "Shotstash"}</b>
+            Project · <b>{payload.projectName ?? brand.productName}</b>
             {payload.sectionLabel ? (
               <>
                 <br />

@@ -15,6 +15,7 @@ import {
   Text,
   render,
 } from '@react-email/components';
+import { brand } from '@/lib/brand';
 
 export type PasswordResetEmailProps = {
   name: string;
@@ -27,7 +28,7 @@ export type PasswordResetEmailProps = {
   googleOnly?: boolean;
 };
 
-export const PASSWORD_RESET_EMAIL_SUBJECT = 'Kode reset password Shotstash';
+export const PASSWORD_RESET_EMAIL_SUBJECT = `Kode reset password ${brand.productName}`;
 
 /** Jam kedaluwarsa dalam WIB, format HH:MM (24 jam). */
 export function formatWibTime(date: Date): string {
@@ -60,7 +61,7 @@ const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
 export default function PasswordResetEmail({ name, email, code, expiresAt, appUrl, googleOnly = false }: PasswordResetEmailProps) {
   const verifyUrl = passwordResetVerifyUrl(appUrl, email);
   const until = formatWibTime(expiresAt);
-  const greetingName = name?.trim() || 'Sahabat Shotstash';
+  const greetingName = name?.trim() || `Sahabat ${brand.productName}`;
 
   return (
     <Html lang="id" dir="ltr">
@@ -82,14 +83,14 @@ export default function PasswordResetEmail({ name, email, code, expiresAt, appUr
         >
           <Section style={{ textAlign: 'center' }}>
             <Img
-              src={`${appUrl}/brand/logo.png`}
+              src={`${appUrl}${brand.emailLogo}`}
               width="64"
               height="64"
-              alt="Shotstash"
+              alt={brand.productName}
               style={{ display: 'block', margin: '0 auto', borderRadius: '12px', border: 0 }}
             />
             <Text data-skip-in-text="true" style={{ margin: '10px 0 0', fontSize: '13px', fontWeight: 700, color: colors.muted, letterSpacing: '0.04em' }}>
-              Shotstash
+              {brand.productName}
             </Text>
           </Section>
 

@@ -47,7 +47,7 @@ html[data-theme='light'] .main {
 }
 
 /* ---------- split: panggung kiri + kartu kanan ----------
-   Mock 01 (design-collage, 1280×800): kartu 376px MENEMPEL KANAN
+   Mock 01 (design mock, 1280×800): kartu 376px MENEMPEL KANAN
    (right 36px), panggung mengisi sisa lebar (820px), celah panggung→kartu
    24px — bukan dua kolom 50/50. Kolom kartu ukurannya isi (auto), kolom
    panggung menyerap sisanya. */

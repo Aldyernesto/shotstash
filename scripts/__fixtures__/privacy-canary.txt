@@ -1,0 +1,3 @@
+This fixture proves the privacy scanner fires. It holds the canary term:
+privacy canary 4b1d9e
+It is skipped by normal scans and read only by scripts/privacy-scan.test.mjs.

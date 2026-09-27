@@ -23,6 +23,7 @@ import { notFound, redirect } from "next/navigation";
 import { headers } from "next/headers";
 import type { Metadata } from "next";
 import prisma from "@/lib/prisma";
+import { brand } from "@/lib/brand";
 import { resolveShare } from "@/lib/shareLink";
 import ShareRoot from "@/components/share/ShareRoot";
 
@@ -30,10 +31,8 @@ export const dynamic = "force-dynamic";
 
 // Story 1.19: og-image SATU berkas statis generik.
 const OG_IMAGE = {
-  url: "/brand/og.png",
-  width: 1200,
-  height: 630,
-  alt: "Shotstash: self-hosted media cloud for creators",
+  ...brand.ogImage,
+  alt: `${brand.productName}: ${brand.tagline}`,
 };
 
 function shareMetadata(title: string, description: string): Metadata {
@@ -46,7 +45,7 @@ function shareMetadata(title: string, description: string): Metadata {
   };
 }
 
-const GENERIC_METADATA = shareMetadata("Shotstash", "Self-hosted media cloud for creators.");
+const GENERIC_METADATA = shareMetadata(brand.productName, `${brand.tagline}.`);
 
 export async function generateMetadata({
   params,
@@ -62,8 +61,8 @@ export async function generateMetadata({
   if (res.state !== "ok") return GENERIC_METADATA;
 
   const p = res.payload;
-  const title = `${p.title} — Shotstash`;
-  const description = `${p.fileCount} file footage dari ${p.projectName ?? "Shotstash"}.`;
+  const title = `${p.title} | ${brand.productName}`;
+  const description = `${p.fileCount} file footage dari ${p.projectName ?? brand.productName}.`;
   return shareMetadata(title, description);
 }
 

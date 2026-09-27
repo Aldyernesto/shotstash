@@ -6,9 +6,9 @@ import sharp from 'sharp';
 import { promises as fs } from 'fs';
 import path from 'path';
 // heic-convert ships CJS only; require() avoids ESM interop issues
+type HeicConvert = (opts: { buffer: Buffer; format: 'JPEG' | 'PNG'; quality?: number }) => Promise<Buffer>;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const heicConvert: (opts: { buffer: Buffer; format: 'JPEG' | 'PNG'; quality?: number }) => Promise<Buffer>
-  = require('heic-convert');
+const heicConvert: HeicConvert = require('heic-convert');
 
 export interface ConvertedFile {
   storagePath: string;

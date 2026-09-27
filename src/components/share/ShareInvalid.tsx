@@ -19,6 +19,7 @@
 
 import React, { useEffect, useState } from "react";
 import Logo from "@/components/Logo";
+import { brand } from "@/lib/brand";
 import ThemeToggle from "@/components/ThemeToggle";
 import TagPill from "@/components/tag-pill/TagPill";
 import type { SharePayload } from "@/lib/shareTypes";
@@ -140,7 +141,7 @@ export default function ShareInvalid({
         </div>
 
         <div className={styles.card}>
-          <p className={`spine-label ${styles.kick}`}>Shotstash</p>
+          <p className={`spine-label ${styles.kick}`}>{brand.productName}</p>
           <h1 className={`spine-display-panel-mobile ${styles.cardTitle}`}>{copy.title}</h1>
           <p className={`spine-body ${styles.cardText}`}>
             {checking ? "Memeriksa akses…" : copy.text}

@@ -1,5 +1,7 @@
 # Shotstash
 
+[![CI](https://github.com/Aldyernesto/shotstash/actions/workflows/pr.yml/badge.svg?branch=main)](https://github.com/Aldyernesto/shotstash/actions/workflows/pr.yml)
+
 **Self-hosted media cloud for creators. Your footage, your hardware, your cloud.**
 
 Shotstash turns the PC, NAS, or spare drive you already own into a media cloud built for work: projects and sections instead of a flat photo stream, a viewer that respects portrait video, resumable chunked uploads straight from the browser, share links you can hand to a client, and roles for the people you work with. All of it behind a dark, deliberately premium UI.
@@ -36,6 +38,33 @@ Next.js 16 · React 19 · TypeScript · Apollo GraphQL + graphql-ws · Prisma 7 
 3. Docker Compose, `.env.example`, and a 10-minute quick start.
 4. Docs site: install, storage and networking, API reference, bring-your-own-AI guide, user guide.
 5. Public demo instance and launch.
+
+## Development
+
+Requires Node.js 24.
+
+```bash
+npm install
+cp .env.example .env
+npx prisma generate
+npm run dev:db      # embedded PostgreSQL (PGlite) on port 55433; keep it running
+npm run dev:seed    # in a second terminal: create the schema and demo data
+npm run dev         # app on http://localhost:3005
+```
+
+Before you push, run the same checks CI runs:
+
+```bash
+npx prisma generate
+npm run lint
+npm run typecheck
+npm run check:tokens && npm run check:legacy && npm run brand:css -- --check
+npm test
+node scripts/privacy-scan.mjs --all   # uses gitleaks when installed
+npm run build
+```
+
+Product name, logo and brand colors live in `src/lib/brand.ts`. To rebrand: edit it, replace the files in `public/brand/` and the favicon `src/app/icon.svg` (a copy of `public/brand/icon.svg`), then run `npm run brand:css`.
 
 ## License
 

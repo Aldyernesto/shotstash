@@ -7,7 +7,7 @@
 // Sumber angka: DESIGN.md → components.project-card.fan-rest / fan-open
 // ("kartu terselip rapat, rotate ±1°–±8°" / "x ±146 / ±76 / 0 px,
 // y −24 / −40 / −48 px, rotate ±14°–±18°") dan mock
-// `mockups/design-collage.html` yang memakai angka yang sama.
+// the design mock yang memakai angka yang sama.
 // Susunan 1 dan 2 kartu tidak ada di mock (mock hanya 3/4/5) — keduanya
 // diturunkan dari pola yang sama dan ditandai di bawah.
 

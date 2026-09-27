@@ -766,7 +766,7 @@ export default function DashboardPage() {
     if (currentFolderId && folderData?.folder) {
       const trail: { id: string; name: string }[] = [];
       // Walk parent chain
-      let cursor = folderData.folder;
+      const cursor = folderData.folder;
       trail.unshift({ id: cursor.id, name: cursor.name });
       // folderData only has current folder info; set minimal breadcrumb
       // Buka langsung lewat URL (?p=&f=): judul Project diambil dari
@@ -2262,7 +2262,7 @@ export default function DashboardPage() {
             {selectMode ? "Batal" : "Pilih"}
           </button>
         )}
-        {/* Aksi utama ikut baris alat (mock design-collage): satu baris
+        {/* Aksi utama ikut baris alat (design mock): satu baris
             berisi cari + tampilan + tombol aksi, bukan baris sendiri di atas. */}
         <div className={styles.pageActions}>
           {currentProjectId === null ? (
@@ -2642,7 +2642,7 @@ export default function DashboardPage() {
           <div className={styles.modalContent} onClick={e => e.stopPropagation()} style={{ maxWidth: "400px" }}>
             <h3>Rename Project</h3>
             <p style={{ color: 'var(--color-on-surface-variant)', fontSize: '0.9rem', marginBottom: '1rem' }}>
-              Enter a new name for "{renameProjectData.title}".
+              Enter a new name for &quot;{renameProjectData.title}&quot;.
             </p>
             <input type="text" value={renameProjectName} onChange={(e) => setRenameProjectName(e.target.value)} autoFocus
               className={styles.modalInput} style={{ marginBottom: '1rem' }}
@@ -2668,7 +2668,7 @@ export default function DashboardPage() {
           <div className={styles.modalContent} onClick={e => e.stopPropagation()} style={{ maxWidth: "400px" }}>
             <h3>Rename Folder</h3>
             <p style={{ color: 'var(--color-on-surface-variant)', fontSize: '0.9rem', marginBottom: '1rem' }}>
-              Enter a new name for "{renameFolderData.name}".
+              Enter a new name for &quot;{renameFolderData.name}&quot;.
             </p>
             <input type="text" value={renameFolderName} onChange={(e) => setRenameFolderName(e.target.value)} autoFocus
               className={styles.modalInput} style={{ marginBottom: '1rem' }}

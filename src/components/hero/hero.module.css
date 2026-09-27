@@ -1,7 +1,7 @@
-/* Stories 1.16-1.19: panggung hero "collage" — lihat HeroStage.tsx.
+/* Stories 1.16-1.19: panggung hero kolase, lihat HeroStage.tsx.
    Panggung SELALU gelap: semua warna dari token invarian stage-text dan
    stage-sub, jadi tema terang tidak mengubahnya. Geometri dari mock
-   design-collage.html; durasi/iterasi gerak dari token Gerak
+   the design mock; durasi/iterasi gerak dari token Gerak
    Story 1.5 (tidak ada kurva/durasi tulisan tangan di sini). */
 
 .stageWrap {

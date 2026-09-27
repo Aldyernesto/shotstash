@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /**
- * Membandingkan token warna spine di DESIGN.md dengan yang benar-benar terpasang
- * di src/app/globals.css. Dipakai sebagai gerbang mutu Story 1.1 dan seterusnya:
- * nilai warna hanya boleh berasal dari spine, tidak boleh dikarang di CSS.
+ * Compares the spine color tokens in docs/design/DESIGN.md with the values
+ * actually installed in src/app/globals.css. Color values may only come from
+ * the spine; they must never be invented in CSS.
  *
- *   node scripts/check-design-tokens.mjs        -> keluar 0 bila cocok
+ *   node scripts/check-design-tokens.mjs        -> exit 0 when they match
  *
- * Aturan yang dijaga:
- *   1. Setiap nama `colors:` di DESIGN.md hadir sebagai --app-spine-<nama>,
- *      kecuali 11 nama chrome bersufiks -light yang sengaja dilipat menjadi
- *      satu property yang berganti nilai di html[data-theme="light"].
- *   2. Nilainya persis sama dengan DESIGN.md (huruf kecil, tanpa spasi).
- *   3. Tidak ada --app-spine-* yang tidak dikenal DESIGN.md.
+ * Rules enforced:
+ *   1. Every `colors:` name in DESIGN.md exists as --app-spine-<name>, except
+ *      the 11 chrome names with a -light suffix, which fold into one property
+ *      that switches value under html[data-theme="light"].
+ *   2. The value is exactly the DESIGN.md value (lowercase, no spaces).
+ *   3. No --app-spine-* property exists that DESIGN.md does not know.
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -21,14 +21,13 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DESIGN = resolve(root, 'docs/design/DESIGN.md');
 const CSS = resolve(root, 'src/app/globals.css');
 
-/** Nama chrome yang dilipat: pasangan <nama>/<nama>-light jadi satu property. */
+/** Folded chrome names: each <name>/<name>-light pair becomes one property. */
 const FOLDED = ['bg', 'surface', 'surface-2', 'line', 'input-border', 'text',
   'text-soft', 'muted', 'nav-idle', 'meta', 'placeholder'];
 
 if (!existsSync(DESIGN)) {
-  // Spine hanya ada di repo pengembangan; server produksi tidak menerima
-  // docs/. Lewati dengan tenang supaya bukan alarm palsu.
-  console.log('Lewati: DESIGN.md tidak ada di lingkungan ini (gerbang token hanya berlaku di repo pengembangan).');
+  // Deployments may ship without docs/. CI always has it, so the gate still runs there.
+  console.log('Skipped: docs/design/DESIGN.md is not present in this environment.');
   process.exit(0);
 }
 
@@ -54,23 +53,23 @@ for (const [name, value] of spine) {
   const base = FOLDED.find((b) => name === `${b}-light`);
   const target = base ?? name;
   const values = installed.get(target);
-  if (!values) { problems.push(`HILANG  --app-spine-${target} (DESIGN.md: ${name} = ${value})`); continue; }
+  if (!values) { problems.push(`MISSING  --app-spine-${target} (DESIGN.md: ${name} = ${value})`); continue; }
   if (!values.includes(value)) {
-    problems.push(`NILAI   --app-spine-${target} tidak memuat ${value} dari DESIGN.md ${name} (ada: ${values.join(', ')})`);
+    problems.push(`VALUE    --app-spine-${target} does not carry ${value} from DESIGN.md ${name} (found: ${values.join(', ')})`);
   }
 }
 for (const name of installed.keys()) {
   const known = spine.has(name) || spine.has(`${name}-light`);
-  if (!known) problems.push(`ASING   --app-spine-${name} tidak ada di DESIGN.md colors:`);
+  if (!known) problems.push(`UNKNOWN  --app-spine-${name} is not in DESIGN.md colors:`);
 }
 for (const base of FOLDED) {
-  if (installed.has(`${base}-light`)) problems.push(`KEMBAR  --app-spine-${base}-light seharusnya dilipat ke --app-spine-${base}`);
+  if (installed.has(`${base}-light`)) problems.push(`DUPLICATE --app-spine-${base}-light should be folded into --app-spine-${base}`);
 }
 
 const checked = spine.size;
 if (problems.length) {
-  console.error(`Token warna TIDAK cocok dengan DESIGN.md (${problems.length} masalah dari ${checked} token):`);
+  console.error(`Color tokens do NOT match DESIGN.md (${problems.length} problems across ${checked} tokens):`);
   for (const p of problems) console.error('  ' + p);
   process.exit(1);
 }
-console.log(`Token warna cocok dengan DESIGN.md: ${checked} token spine, ${installed.size} property terpasang.`);
+console.log(`Color tokens match DESIGN.md: ${checked} spine tokens, ${installed.size} properties installed.`);

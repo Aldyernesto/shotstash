@@ -8,6 +8,17 @@
    supaya blok spine yang kelak dipindah tidak membuat var gagal diam-diam. */
 :root,
 html[data-theme="dark"] {
+  /* brand:start */
+  /* Generated from src/lib/brand.ts by `npm run brand:css`. Do not edit. */
+  --brand-name: "Shotstash";
+  --brand-accent: #efe749;
+  --brand-accent-edge: #b9b22c;
+  --brand-theme-color: #141310;
+  --brand-logo-on-dark: url("/brand/logo-on-dark.svg");
+  --brand-logo-on-light: url("/brand/logo-on-light.svg");
+  --brand-logo-aspect: 1098.2 / 250;
+  --brand-icon: url("/brand/icon.svg");
+  /* brand:end */
   --app-bg: var(--app-spine-bg, #0f0f0d);
   --app-surface: var(--app-spine-surface, #1b1b18);
   --app-surface-2: var(--app-spine-surface-2, #252521);
@@ -90,7 +101,7 @@ html[data-theme="light"] {
 }
 
 /* ============================================================
-   SPINE COLOR TOKENS — palet redesign "collage" (Story 1.1).
+   SPINE COLOR TOKENS: design spine palette (Story 1.1).
    Sumber nilai: DESIGN.md → Colors
    (docs/design/DESIGN.md).
    Konvensi nama: --app-spine-<nama DESIGN.md>. Prefix --app- = gaya rumah,
@@ -263,7 +274,7 @@ html[data-theme="light"] {
 }
 
 /* ============================================================
-   SPINE TOKENS STRUKTURAL — Stories 1.3-1.6 ("collage")
+   SPINE TOKENS STRUKTURAL: Stories 1.3-1.6
    Sumber nilai: DESIGN.md frontmatter typography/rounded/spacing/
    motion + bagian Elevation & Depth. Prefix-nya --spine-* (BUKAN
    --app-spine-*, yang teregistrasi check:tokens khusus warna).

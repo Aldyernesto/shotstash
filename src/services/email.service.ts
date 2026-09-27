@@ -8,7 +8,9 @@
 //
 // JANGAN pernah me-log isi pesan (subject/html/text bisa berisi kode reset).
 
-export const DEFAULT_EMAIL_FROM = 'Shotstash <no-reply@example.com>';
+import { brand } from '@/lib/brand';
+
+export const DEFAULT_EMAIL_FROM = `${brand.productName} <${brand.emailFrom}>`;
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 const SEND_TIMEOUT_MS = 10_000;
 

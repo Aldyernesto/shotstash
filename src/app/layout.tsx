@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
+import { brand } from "@/lib/brand";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -29,8 +30,8 @@ import { ApolloWrapper } from "@/components/ApolloWrapper";
 import { AuthProvider } from "@/components/AuthContext";
 
 export const metadata: Metadata = {
-  title: "Shotstash",
-  description: "Cinematic Asset Intelligence",
+  title: brand.productName,
+  description: brand.tagline,
 };
 
 export const viewport: Viewport = {
@@ -38,7 +39,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   viewportFit: "cover",
-  themeColor: "#141310",
+  themeColor: brand.themeColor,
 };
 
 // Anti-FOUC: set data-theme SEBELUM paint pertama supaya tidak berkedip.

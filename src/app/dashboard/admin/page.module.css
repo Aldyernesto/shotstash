@@ -275,9 +275,8 @@
   display: block;
   margin-top: 12px;
   color: var(--app-spine-text);
-  /* Kartu statistik Admin Panel memakai 34px (mock key-admin-panel),
-     berbeda dari token 42px yang dipakai a removed page dan System
-     Health (mock masing-masing). Pengecualian lokal, token tidak diubah. */
+  /* Admin Panel stat cards use 34px instead of the 42px token.
+     Local exception; the token itself is unchanged. */
   font-size: clamp(1.625rem, 3.2vw, 2.125rem);
 }
 

@@ -1,17 +1,16 @@
-// Story 1.11: manifest PWA — ikon 192/512 (Opsi C) + 512 maskable
-// (glyph 60% untuk safe zone Android), tema ink. Berkas ikon statis
-// di-commit (lihat scripts/generate-brand-assets.mjs).
+// PWA manifest. Name, description, icon and colors come from src/lib/brand.ts.
 import type { MetadataRoute } from "next";
+import { brand } from "@/lib/brand";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Shotstash",
-    short_name: "Shotstash",
-    description: "Self-hosted media cloud for creators.",
+    name: brand.productName,
+    short_name: brand.productName,
+    description: brand.description,
     start_url: "/",
     display: "standalone",
-    background_color: "#141310",
-    theme_color: "#141310",
-    icons: [{ src: "/brand/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }],
+    background_color: brand.themeColor,
+    theme_color: brand.themeColor,
+    icons: [{ src: brand.icon, sizes: "any", type: "image/svg+xml", purpose: "any" }],
   };
 }
