@@ -1,0 +1,214 @@
+/* Story 1.20: shell halaman (container, glow, kartu, judul) pindah ke
+   src/components/auth/ — glow lama (backgroundGlow/accentGlow) PUNSIUN
+   (konsumen terakhirnya, forgot-password/layout.tsx, ikut pindah shell).
+   Story 1.21: .authTabs digantikan komponen AuthTabs; .formGroup dan
+   sisa aturan role-question (.signupNote/.agentRule/.roleQuestions*)
+   disapu — markupnya dihapus bersamaan. Sisa modul ini hanya GAYA ISI
+   SLOT kartu auth: form-stack + divider + tombol Google (Story 1.22)
+   dan baris status PENDING (Story 1.23); slot-pairing kini milik
+   komponen PairingSlot (Story 1.24, css modulnya sendiri). */
+
+/* Slot-form (Story 1.21): satu <form> untuk kedua tab; jarak antar elemen
+   memakai jarak slot spine (16px) — sama dengan jarak antar slot kartu. */
+.formStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spine-field-gap);
+}
+
+/* Hint "Minimal 8 karakter." (Sign Up): ditampilkan SEBELUM field password,
+   menempel di blok field-nya — jarak hint→label = jarak label→field (8px). */
+.minHint {
+  color: var(--app-spine-muted);
+}
+
+/* Baris "Lupa password?" rata kanan (urutan slot-form Login, AC 1.21). */
+.linkRow {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Cabang fallback saat status fitur reset belum diketahui — teks bisa
+   disembunyikan (visibility) tanpa menggeser layout. */
+.linkFallback {
+  color: var(--app-spine-muted);
+}
+
+/* Copy signup (dipertahankan, hanya gayanya yang baru — AC 1.21). */
+.signupNote {
+  color: var(--app-spine-muted);
+}
+
+.signupNote strong {
+  color: var(--app-spine-text);
+}
+
+/* Slot-help (Login saja): foot mock — footnote muted di tengah,
+   bagian penting berwarna teks penuh. */
+.helpText {
+  text-align: center;
+  color: var(--app-spine-muted);
+}
+
+.helpText strong {
+  color: var(--app-spine-text);
+}
+
+/* ---------- slot-alt (Story 1.22): pemisah OR + tombol Google ---------- */
+
+/* Pemisah "OR" — typography.micro disuplai kelas utilitas .spine-micro
+   di markup (12px/700/jarak-huruf .18em = mock .or persis). Glyph garis
+   = pseudo-elemen kosong (tak dibacakan); kata visual "OR" aria-hidden;
+   pembaca layar menerima kata "atau" yang tersembunyi-visual (.srOnly). */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  /* Slot-alt sendiri sudah dapat jarak 16px dari slot sebelumnya (.slot +
+     .slot); mock .or memakai margin 20px — sisanya 4px di atas, 20px di
+     bawah (jarak ke tombol Google tidak diatur slot). */
+  margin: 4px 0 20px;
+  color: var(--app-spine-muted);
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--app-spine-line);
+}
+
+/* Wadah tombol Google (mock .gwrap): radius saja — TANPA tint latar;
+   sorotan (varian .googleWrapHl) cukup outline + kalimat pendamping. */
+.googleWrap {
+  width: 100%;
+  border-radius: var(--spine-radius-md); /* 16px */
+}
+
+/* Sorotan akun Google-only (AC 1.22): outline 2px kuning (gelap) / ink
+   (terang) offset 3px — var ring spine sudah berganti tema sendiri.
+   Warna SAJA tidak pernah cukup: kalimat pendamping (.ghint) selalu
+   dirender bersama outline ini. Padding 8px = mock .gwrap.hl. */
+.googleWrapHl {
+  padding: 8px;
+  outline: 2px solid var(--spine-ring-color);
+  outline-offset: 3px;
+}
+
+.ghint {
+  margin: 2px 4px 8px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--app-spine-text);
+}
+
+/* Kotak tombol: min-height 40px dicadangkan SEJAK RENDER PERTAMA — sebelum
+   GSI termuat, selama tombol cadangan tampil, dan setelah renderButton
+   menggantinya — supaya pergantian cadangan → GSI tidak menggeser satu
+   piksel pun di bawahnya (AC 1.22; gerbang layout-shift 0 slot-alt).
+   display block sengaja: gsi-host dan tombol cadangan sama-sama mengatur
+   lebarnya sendiri (100%) — flex-baris memeras keduanya jadi setengah
+   lewat flex-shrink. 40px = tinggi tombol GSI size 'large' — SATU-SATUNYA
+   pengecualian target sentuh 48px di spine, diikat kontrak Google. */
+.googleBox {
+  width: 100%;
+  min-height: 40px;
+}
+
+/* Tombol cadangan (GSI gagal/belum termuat): meniru persis tombol resmi
+   GSI (size large, shape pill, theme outline) supaya pergantian tidak
+   terlihat — tinggi 40px, pill, putih, border #dadce0. Warna-warna ini
+   adalah kontrak brand Google Identity (sama dengan iframe aslinya). */
+.gsiFallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 400px;
+  height: 40px; /* tinggi GSI large — pengecualian 48px, lihat .googleBox */
+  margin: 0 auto;
+  padding: 0 16px;
+  border: 1px solid #dadce0;
+  border-radius: var(--spine-radius-full);
+  background: #fff;
+  color: #1f1f1f;
+  font: 500 0.875rem/1 Roboto, 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+}
+
+.gsiFallback svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ---------- baris status PENDING (Story 1.23) ----------
+   BUKAN error — role="status" (polite), bukan role="alert"; tampil hanya
+   selama pengalihan ke /pending atau /onboarding. Ikon jam SELALU ikut
+   (status tidak pernah lewat warna saja). Nilai = mock .alert.warning
+   dengan pasangan var warning spine. */
+.pendingRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--app-spine-warning-bg);
+  border: 1px solid var(--app-spine-warning-border);
+  border-radius: var(--spine-radius-md);
+  color: var(--app-spine-warning-text); /* #d4a83c — gelap */
+}
+
+.pendingRow svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+}
+
+.pendingRow strong {
+  font-weight: 700;
+}
+
+html[data-theme='light'] .pendingRow {
+  background: var(--app-spine-warning-bg-light);
+  border-color: var(--app-spine-warning-border-light);
+  color: var(--app-spine-warning-text-light); /* #7a5905 — emas terang kurang terbaca di terang */
+}
+
+/* Story 1.24: .qrContainer/.qrBox/.qrText dihapus — markup QR lama
+   diganti komponen PairingSlot (slot `pairing`, CSS modul sendiri). */
+
+/* Tersembunyi-visual untuk pembaca layar (pemisah "OR" → "atau"). */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* HP (mock .auth.m .or margin 16px 0): jarak atas sudah disuplai slot
+   (16px), jadi cukup jarak bawah ke tombol Google. */
+@media (max-width: 899px) {
+  .divider {
+    margin: 0 0 16px;
+  }
+}
+
+/* Pergantian tab Login <-> Sign Up: isi form naik sedikit sambil memudar masuk,
+   supaya kolom yang bertambah/berkurang terasa disengaja, bukan menyentak.
+   Mode kalem mematikannya lewat kill-switch data-motion di globals.css. */
+@keyframes authSwapIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.formStack {
+  animation: authSwapIn 220ms ease-out both;
+}

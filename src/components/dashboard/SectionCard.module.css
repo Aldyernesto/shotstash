@@ -1,0 +1,349 @@
+/* ============================================================
+   Story 2.10 — Kartu Section: tumpukan tiga kartu bernomor
+   ============================================================
+   Sepenuhnya tumpukan CSS. TIDAK ada canvas dan tidak ada context
+   WebGL tambahan di sini — objek 3D hanya milik Kartu Project.
+
+   Yang sengaja TIDAK ADA (dibandingkan FolderCard warisan):
+   garis aksen kiri, chip "SECTION", dan ikon folder generik.
+
+   Kontrak satu tautan sama dengan Kartu Project: `::after` tautan
+   direntangkan seluas kartu, jadi rantai dari tautan sampai `.cell`
+   dijaga `position: static`.
+   ------------------------------------------------------------ */
+
+.cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 290px;
+}
+
+.stack {
+  position: relative;
+  width: min(206px, 100%);
+  height: 232px;
+  margin: 0 auto;
+}
+
+/* dua kartu belakang — cuplikan file lain, diredupkan */
+.backCard {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 20px;
+  height: 196px;
+  border-radius: var(--spine-radius-lg);
+  border: 2px solid var(--app-spine-white-10, #ffffff1a);
+  background: var(--app-spine-rep-placeholder, #222222) center / cover no-repeat;
+  filter: brightness(0.5) saturate(0.8);
+  transition: transform var(--spine-motion-stack-swing);
+}
+.back1 {
+  transform: rotate(-6deg) translate(-4px, -6px);
+}
+.back2 {
+  transform: rotate(5deg) translate(6px, -10px);
+}
+
+/* kartu depan — cuplikan + scrim supaya judul terbaca */
+.frontCard {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 22px;
+  height: 206px;
+  overflow: hidden;
+  border-radius: var(--spine-radius-lg);
+  border: 2px solid var(--app-spine-white-16, #ffffff29);
+  background: var(--app-spine-rep-placeholder, #222222) center / cover no-repeat;
+  box-shadow: 0 24px 40px -18px rgba(0, 0, 0, 0.9);
+  transition: transform var(--spine-motion-stack-swing);
+}
+.frontCard::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    0deg,
+    var(--app-spine-scrim-92, #0a0a09eb) 0%,
+    var(--app-spine-scrim-85, #0a0a09d9) 40%,
+    transparent 75%
+  );
+}
+
+.title {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  z-index: 2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: var(--app-spine-object-text, #fafaf5);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* number-sticker "NO 10" */
+.numberSticker {
+  position: absolute;
+  left: -6px;
+  top: 6px;
+  z-index: 4;
+  padding: 7px 10px;
+  border-radius: var(--spine-radius-sticker);
+  background: var(--app-spine-yellow, #efe749);
+  color: var(--app-spine-ink, #141310);
+  transform: rotate(-6deg);
+  box-shadow: 0 6px 14px -4px rgba(0, 0, 0, 0.6);
+  transition: transform var(--spine-motion-stack-swing);
+  pointer-events: none;
+}
+.numberPrefix {
+  margin-right: 2px;
+  font-size: 0.5625rem; /* 9px */
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  vertical-align: 2px;
+}
+
+/* count-chip "116 file" DI BAWAH kartu */
+.countChip {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  min-height: 30px;
+  margin-top: 22px;
+  padding: 0 12px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  border: 1px solid var(--app-spine-line);
+  color: var(--app-spine-text-soft);
+}
+.countChip svg {
+  width: 13px;
+  height: 13px;
+  color: var(--app-spine-gold, #d4a83c);
+}
+
+/* ---------- satu tautan, area seluas kartu ---------- */
+.link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border-radius: var(--spine-radius-lg);
+}
+/* Satu penanda fokus saja — geometri & warna identik .spine-focus-ring. */
+.link:focus-visible {
+  outline: none;
+}
+.link:focus-visible::after {
+  outline: 2px solid var(--spine-ring-color);
+  outline-offset: 3px;
+}
+
+/* ---------- ayunan tumpukan (hover / fokus) ---------- */
+@media (hover: hover) {
+  .cell:hover .back1 {
+    transform: rotate(-13deg) translate(-26px, -4px);
+  }
+  .cell:hover .back2 {
+    transform: rotate(12deg) translate(28px, -8px);
+  }
+  .cell:hover .frontCard {
+    transform: translateY(-8px) rotate(-1.5deg);
+  }
+  .cell:hover .numberSticker {
+    transform: rotate(4deg) scale(1.12);
+  }
+}
+/* Story 3.3: `[data-menu-open]` sejajar dengan :focus-within — tumpukan
+   tetap mengayun selama menu aksi kartu ini terbuka. */
+.cell:focus-within .back1,
+.cell[data-menu-open] .back1 {
+  transform: rotate(-13deg) translate(-26px, -4px);
+}
+.cell:focus-within .back2,
+.cell[data-menu-open] .back2 {
+  transform: rotate(12deg) translate(28px, -8px);
+}
+.cell:focus-within .frontCard,
+.cell[data-menu-open] .frontCard {
+  transform: translateY(-8px) rotate(-1.5deg);
+}
+.cell:focus-within .numberSticker,
+.cell[data-menu-open] .numberSticker {
+  transform: rotate(4deg) scale(1.12);
+}
+
+/* ---------- section-empty (Story 2.8 dipakai ulang) ---------- */
+.frontEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px 14px 62px;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--app-spine-yellow-08, #efe74914) 0 10px,
+    transparent 10px 20px
+  );
+  border: 2px solid var(--app-spine-yellow-35, #efe74959);
+  box-shadow: none;
+}
+
+/* Section kosong tetap MENYEBUT namanya — tanpa ini tiga Section kosong
+   terlihat persis sama. Judul dan hint mengalir (bukan absolut) di dalam
+   slot hantu, CTA tetap sibling di atas tautan. */
+.frontEmpty .title {
+  position: static;
+  text-align: center;
+}
+/* section-empty TANPA scrim */
+.frontEmpty::after {
+  display: none;
+}
+:global(html[data-theme="light"]) .frontEmpty {
+  border-color: var(--app-spine-ink, #141310);
+}
+
+.emptyHint {
+  z-index: 2;
+  text-align: center;
+  color: var(--app-spine-object-meta, #9a988f);
+}
+
+/* CTA — SIBLING DI ATAS tautan (z-index 6 > ::after tautan) */
+.uploadCta {
+  position: absolute;
+  left: 50%;
+  bottom: 76px;
+  z-index: 6;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 16px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.uploadCta svg {
+  width: 15px;
+  height: 15px;
+}
+@media (min-width: 900px) {
+  /* menang atas `.pill` (48px) keluarga tombol Epic 1 tanpa bergantung
+     pada urutan berkas CSS */
+  .uploadCta.uploadCta {
+    min-height: 40px;
+  }
+}
+
+/* ---------- select-check & "⋯" — sibling DI ATAS tautan ----------
+   Story 2.12. Posisi mengikuti mockups/key-context-menu.html `.sc .selc`
+   / `.sc .morec`: keduanya di tepi kanan kartu depan (inset 4 px), centang
+   di atas (top 30 px) dan "⋯" tepat di bawahnya (top 64 px). */
+/* Spesifisitas ganda: menang atas `.wrap { position: relative }` milik
+   SelectCheck.module.css tanpa bergantung pada urutan berkas CSS. */
+.selectCheck.selectCheck {
+  position: absolute;
+  right: max(4px, calc(50% - 99px));
+  top: 30px;
+  z-index: 6;
+}
+.moreButton {
+  position: absolute;
+  right: max(4px, calc(50% - 99px));
+  top: 64px;
+  z-index: 6;
+  box-shadow: 0 8px 16px -6px #000;
+}
+
+/* Kapan keduanya tampil (AC 2.12): perangkat ber-hover = hover /
+   :focus-within / sudah ada pilihan; perangkat sentuh = "⋯" selalu,
+   centang hanya selama mode pilih dan "⋯" disembunyikan saat itu. */
+.selectCheck {
+  opacity: 0;
+  pointer-events: none;
+}
+@media (hover: hover) {
+  .cell:hover .selectCheck,
+  .cell:focus-within .selectCheck {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .moreButton {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .cell:hover .moreButton,
+  .cell:focus-within .moreButton,
+  .cell[data-menu-open] .moreButton {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+.cell[data-any-selected] .selectCheck,
+.cell[data-select-mode] .selectCheck {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (hover: none) {
+  .cell[data-select-mode] .moreButton {
+    display: none;
+  }
+}
+
+/* ---------- Story 2.17: sorotan seret (`drag-over`) di slot kartu ----------
+   Garis putus-putus + garis diagonal + chip bertulisan. Tidak pernah
+   ditandai lewat perubahan warna saja. */
+.dragOver .frontCard {
+  outline: 2px dashed var(--app-spine-yellow, #efe749);
+  outline-offset: 3px;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--app-spine-yellow-14, #efe74924) 0 10px,
+    transparent 10px 20px
+  );
+}
+:global(html[data-theme="light"]) .dragOver .frontCard {
+  outline-color: var(--app-spine-ink, #141310);
+}
+
+.dragChip {
+  position: absolute;
+  left: 50%;
+  top: 96px;
+  z-index: 7;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 16px);
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill, #0b0b0a);
+  color: var(--app-spine-object-text, #fafaf5);
+  font-weight: 700;
+  text-align: center;
+  transform: translateX(-50%);
+  box-shadow: 0 14px 28px -10px #000, 0 0 0 1px var(--app-spine-white-10, #ffffff1a);
+  pointer-events: none;
+}
+.dragChip svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--app-spine-yellow, #efe749);
+}

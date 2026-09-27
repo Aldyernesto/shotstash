@@ -1,0 +1,717 @@
+.adminContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+/* ============================================================
+   Story 3.18 — Admin Panel: `section-panel`, `approval-card`,
+   `select-pill`, `stat-tile`
+   ============================================================
+   Nilai dari mock `key-admin-panel.html` (desktop 1280 / HP 390):
+     .phead h2  56px display, p 15px muted
+     .panel     radius 28 (xl), surface + line, padding 28; HP 16
+     .panel.wait border yellow-35 (terang: ink)
+     .ph2 h3    27px display + `count-sticker` 15px/7px 12px
+     .pgrid     2 kolom, gap 16; HP 1 kolom
+     .pc        radius 22, surface-2 + line, padding 20; HP 16
+     .av        44px bulat kuning, teks ink 15px display
+     .selp      40px pill surface + input-border; HP (.l) 48px
+     .stats     4 kolom gap 16; HP 2 x 2
+     .stat      radius 22, surface-2 + line, padding 20/22,
+                label 11.5px KAPITAL tracking .1em, angka 34px display
+   ------------------------------------------------------------ */
+
+/* ---------- kepala halaman ---------- */
+
+.pageHead {
+  margin-bottom: 4px;
+}
+
+.pageTitle {
+  margin: 0;
+  color: var(--app-spine-text);
+}
+
+.pageSub {
+  margin: 12px 0 0;
+  color: var(--app-spine-muted);
+}
+
+/* ---------- section-panel ---------- */
+
+.panel {
+  padding: 28px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-xl);
+  background: var(--app-spine-surface);
+}
+
+/* Panel "Menunggu Persetujuan" berbingkai kuning; di tema terang kuning
+   di atas kertas terang tidak terbaca, jadi bingkainya menjadi ink. */
+.panelWait {
+  border-color: var(--app-spine-yellow-35);
+}
+
+:global(html[data-theme="light"]) .panelWait {
+  border-color: var(--app-spine-ink);
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.panelTitle {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  color: var(--app-spine-text);
+}
+
+/* count-sticker jumlah — pill hitam bernama kuning, seperti Kartu Project. */
+.countSticker {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 12px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill);
+  color: var(--app-spine-yellow);
+  font-size: 0.9375rem;
+}
+
+/* ---------- approval-card ---------- */
+
+.approvalGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.approvalCard {
+  padding: 20px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-surface-2);
+}
+
+.apHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.apWho {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.apAvatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+}
+
+.apName {
+  display: block;
+  margin: 0;
+  color: var(--app-spine-text);
+}
+
+.apEmail {
+  display: block;
+  color: var(--app-spine-muted);
+  overflow-wrap: anywhere;
+}
+
+.apDate {
+  display: block;
+  margin-top: 2px;
+  color: var(--app-spine-meta);
+}
+
+.apReq {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* tag-pill "Minta: Agent" — pill kuning berteks ink di kedua tema. */
+.tagPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+  white-space: nowrap;
+}
+
+.apCount {
+  color: var(--app-spine-meta);
+}
+
+.apAnswers {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--app-spine-line);
+}
+
+.apQ {
+  display: block;
+  color: var(--app-spine-muted);
+}
+
+.apA {
+  display: block;
+  margin-top: 2px;
+  color: var(--app-spine-text);
+  font-weight: 600;
+}
+
+.apNoAnswers {
+  margin: 12px 0 0;
+  color: var(--app-spine-muted);
+}
+
+.apDecision {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--app-spine-line);
+}
+
+.apDecisionLabel {
+  color: var(--app-spine-muted);
+}
+
+.apSpacer {
+  flex: 1;
+}
+
+/* ---------- select-pill ---------- */
+
+/* `<select>` asli yang DIBERI wujud pill: keyboard, pembaca layar, dan
+   pemilih bawaan perangkat tetap yang asli — hanya wujudnya yang baru.
+   Chevron-nya elemen SVG sungguhan (bukan gambar latar ber-warna tetap)
+   supaya warnanya ikut token dan ikut tema. */
+.selectWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.selectWrap > svg {
+  position: absolute;
+  right: 14px;
+  width: 14px;
+  height: 14px;
+  color: var(--app-spine-muted);
+  pointer-events: none;
+}
+
+.selectPill {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 40px;
+  padding: 0 34px 0 16px;
+  border: 1px solid var(--app-spine-input-border);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  color: var(--app-spine-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* ---------- stat-tile ---------- */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.statTile {
+  padding: 20px 22px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-surface-2);
+}
+
+.statLabel {
+  display: block;
+  color: var(--app-spine-muted);
+  text-transform: uppercase;
+}
+
+.statValue {
+  display: block;
+  margin-top: 12px;
+  color: var(--app-spine-text);
+  /* Kartu statistik Admin Panel memakai 34px (mock key-admin-panel),
+     berbeda dari token 42px yang dipakai a removed page dan System
+     Health (mock masing-masing). Pengecualian lokal, token tidak diubah. */
+  font-size: clamp(1.625rem, 3.2vw, 2.125rem);
+}
+
+/* ---------- keadaan runtime seksi ---------- */
+
+.skeletonRow {
+  height: 56px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-surface-2);
+}
+
+.skeletonRow + .skeletonRow {
+  margin-top: 12px;
+}
+
+.emptyState {
+  padding: 28px 8px;
+  color: var(--app-spine-muted);
+  text-align: center;
+}
+
+.errorBox {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--app-spine-danger-border);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-danger-bg);
+}
+
+.errorBox > svg {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  color: var(--app-spine-danger-text);
+}
+
+.errorTitle {
+  display: block;
+  margin: 0;
+  color: var(--app-spine-text);
+}
+
+.errorCause {
+  display: block;
+  margin: 4px 0 0;
+  color: var(--app-spine-text-soft);
+}
+
+.errorRetry {
+  margin-top: 14px;
+}
+
+/* ---------- HP: ambang spine 900 px ---------- */
+
+@media (max-width: 899px) {
+  .panel {
+    padding: 16px;
+  }
+
+  .approvalGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .approvalCard {
+    padding: 16px;
+  }
+
+  .apDecision {
+    margin-top: 12px;
+    padding-top: 12px;
+  }
+
+  /* Label memakai satu baris penuh, lalu pemilih & tombol membagi lebar. */
+  .apDecisionLabel {
+    flex-basis: 100%;
+  }
+
+  .apSpacer {
+    display: none;
+  }
+
+  .apDecision .selectWrap {
+    flex: 1;
+  }
+
+  .apDecision .selectPill {
+    height: 48px;
+  }
+
+  /* Baris keputusan memakai 48 px (AC 3.18 + mock `.mpanel .dec .pill`).
+     `ButtonDanger` bersama membesar menjadi 52 px di bawah 599 px karena
+     aturan `confirm-sheet` Story 3.1 — itu untuk tombol BERTUMPUK di
+     dalam sheet, bukan untuk baris sebaris ini. Penyetelannya DIBATASI
+     ke `.apDecision` supaya tombol merusak di layar lain tidak ikut
+     berubah. */
+  .apDecision button {
+    min-height: 48px;
+    height: 48px;
+    /* Mock `.mpanel .dec .pill{padding:0 14px}` — padding pill baku
+       (0 22px) menyisakan terlalu sedikit ruang untuk `select-pill`
+       di lebar 360 px, sehingga nama role-nya terpotong. */
+    padding: 0 14px;
+  }
+
+  /* Pemilih role tidak boleh menyusut di bawah lebar yang masih
+     terbaca; bila sempit, biarkan ia turun ke barisnya sendiri. */
+  .apDecision .selectWrap {
+    flex: 1 1 140px;
+  }
+
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ============================================================
+   Story 3.19 — tabel user, role, status, dan pencarian
+   ============================================================
+   Nilai dari mock `key-admin-panel.html` (desktop 1280):
+     .tools2  flex gap 12, `search-pill` melar
+     .search  48px pill surface + input-border, padding 0 18
+     .tbl th  padding 0 12 12, 11.5px KAPITAL tracking .1em, meta,
+              garis bawah line; kolom terakhir rata kanan
+     .tbl td  padding 12, garis bawah line, 14px text-soft
+     .nm      700 14px text
+     .gb      `google-badge` 24px pill surface-2 + input-border,
+              ikon 13px, teks 12px
+     .acts    gap 8 rata kanan; pill aksi 40px padding 0 14, 13px
+   `status-chip` memakai komponen bersama `StatusChip` (28px, titik 7px).
+   ------------------------------------------------------------ */
+
+.tools {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+/* search-pill — melar mengisi baris alat. */
+.searchPill {
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  padding: 0 18px;
+  border: 1px solid var(--app-spine-input-border);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  color: var(--app-spine-text);
+  font: inherit;
+  font-size: 0.875rem;
+}
+
+.searchPill::placeholder {
+  color: var(--app-spine-placeholder);
+}
+
+/* Pemilih role di baris alat memakai `select-pill` setinggi 48 px
+   supaya sejajar dengan `search-pill` di sampingnya. */
+.filterPill {
+  height: 48px;
+}
+
+/* ---------- tabel user ---------- */
+
+.userTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.userTable th {
+  padding: 0 12px 12px;
+  border-bottom: 1px solid var(--app-spine-line);
+  color: var(--app-spine-meta);
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.userTable th:last-child {
+  text-align: right;
+}
+
+.userTable td {
+  padding: 12px;
+  border-bottom: 1px solid var(--app-spine-line);
+  color: var(--app-spine-text-soft);
+  font-size: 0.875rem;
+  vertical-align: middle;
+}
+
+.userTable tr:last-child td {
+  border-bottom: 0;
+}
+
+.userName {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--app-spine-text);
+}
+
+/* google-badge — huruf "G" resmi + kata "Google"; kata itu yang membawa
+   arti, warnanya hanya penguat (NFR15). */
+.googleBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px 0 7px;
+  border: 1px solid var(--app-spine-input-border);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-text-soft);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.googleBadge svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+
+.userEmail {
+  overflow-wrap: anywhere;
+}
+
+/* Baris aksi rata kanan; tiap pill 40 px. */
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.rowActions button {
+  min-height: 40px;
+  height: 40px;
+  padding: 0 14px;
+  font-size: 0.8125rem;
+}
+
+/* Akun yang tidak boleh disentuh (diri sendiri / SUPER_ADMIN) menulis
+   ALASANNYA sebagai teks, bukan sekadar kosong. */
+.rowNote {
+  color: var(--app-spine-meta);
+  white-space: nowrap;
+}
+
+.tableEmpty {
+  padding: 32px 12px;
+  color: var(--app-spine-muted);
+  text-align: center;
+}
+
+/* ============================================================
+   Story 3.20 — dialog Reset Password dan `one-time-secret`
+   ============================================================
+   Bentuk dialog, `radio-card`, `info-note`, dan `one-time-secret`
+   seluruhnya milik lapisan bersama Story 3.1 — di sini hanya kalimat
+   pendamping di sekitar isian.
+   ------------------------------------------------------------ */
+
+/* Panjang minimal ditulis di ATAS field (pola `text-field` Story 1.13),
+   bukan sebagai placeholder. */
+.minHint {
+  margin: 0; /* jarak diatur .dlgStack / .field, bukan margin sendiri */
+  color: var(--app-spine-muted);
+}
+
+.resetHint {
+  margin: 0;
+  color: var(--app-spine-muted);
+}
+
+.resetLead {
+  margin: 0;
+  color: var(--app-spine-text-soft);
+}
+
+.resetLead strong {
+  color: var(--app-spine-text);
+}
+
+.resetWarn {
+  margin: 0;
+  color: var(--app-spine-danger-text);
+}
+
+/* ============================================================
+   Story 3.21 — Hapus akun, Add User, dan kartu user versi HP
+   ============================================================
+   Nilai dari mock `key-admin-panel.html` (HP 390):
+     .uc      radius 22 (lg), surface-2 + line, padding 16, jarak 12
+     .uc .r1  nama + `status-chip` sebaris, rata atas
+     .uc .em  email di bawah nama, 13px muted
+     .uc .r2  label ROLE 44px + `select-pill` melar
+     .uc .r3  tombol MEMBAGI lebar, tinggi 48
+   ------------------------------------------------------------ */
+
+/* `select-pill` selebar dialog (Add User). */
+.selectWrapBlock {
+  display: flex;
+  width: 100%;
+}
+
+/* ---------- HP: tabel → satu kartu per user ----------
+   Ambang `{spacing.breakpoint-lg}` 900 px MENGGANTIKAN 768 px lama.
+   Markup tetap `<table>` semantik; hanya tata letaknya yang berubah,
+   jadi pembaca layar tetap mendapat baris & judul kolom. */
+
+@media (max-width: 899px) {
+  .userTable,
+  .userTable tbody,
+  .userTable tr,
+  .userTable td {
+    display: block;
+  }
+
+  /* Judul kolom tidak dibuang dari pohon aksesibilitas — hanya
+     disembunyikan secara visual, karena kartunya sudah menulis
+     labelnya sendiri. */
+  .userTable thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .userTable tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    margin-bottom: 12px;
+    padding: 16px;
+    border: 1px solid var(--app-spine-line);
+    border-radius: var(--spine-radius-lg);
+    background: var(--app-spine-surface-2);
+  }
+
+  .userTable td {
+    padding: 0;
+    border-bottom: 0;
+  }
+
+  /* r1 — nama kiri, status kanan. */
+  .userTable td:nth-child(1) {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .userTable td:nth-child(4) {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  /* email */
+  .userTable td:nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-top: 4px;
+    color: var(--app-spine-muted);
+    font-size: 0.8125rem;
+  }
+
+  /* r2 — label ROLE + `select-pill` melar. */
+  .userTable td:nth-child(3) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    grid-column: 1 / -1;
+    grid-row: 3;
+    margin-top: 12px;
+  }
+
+  .userTable td:nth-child(3)::before {
+    content: attr(data-label);
+    flex: none;
+    width: 44px;
+    color: var(--app-spine-meta);
+    font-size: 0.71875rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
+  .userTable td:nth-child(3) .selectWrap {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .userTable td:nth-child(3) .selectPill {
+    height: 48px;
+  }
+
+  /* r3 — tombol MEMBAGI lebar, tinggi 48 px. */
+  .userTable td:nth-child(5) {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    margin-top: 12px;
+  }
+
+  .rowActions {
+    flex-wrap: nowrap;
+    justify-content: stretch;
+  }
+
+  .rowActions button {
+    flex: 1;
+    min-width: 0;
+    height: 48px;
+    min-height: 48px;
+    padding: 0 8px;
+  }
+
+  /* Catatan "Akun kamu" tetap sebaris dan tidak ikut membagi lebar. */
+  .rowNote {
+    align-self: center;
+  }
+}
+
+/* Tumpukan kolom isian di dialog Add User: jarak antar-field memakai token
+   spine (16px). Sebelumnya kolom-kolom itu anak langsung Dialog tanpa jarak,
+   jadi label satu kolom menempel ke kolom sebelumnya. */
+.dlgStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spine-field-gap);
+}

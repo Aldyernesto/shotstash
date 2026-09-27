@@ -1,0 +1,868 @@
+.dashboardContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+/* ============================================================
+   Story 2.5 - page-head + baris alat (satu baris untuk TIGA tingkat:
+   Projects, detail project, isi Section). Geometri & warna dari
+   DESIGN.md components.page-head / search-pill / view-toggle /
+   sort-pills / back-pill / count-chip / select-toggle. Semua warna
+   lewat --app-spine-* (satu property yang ikut tema) - tidak ada nilai
+   warna yang dikarang di sini.
+   ============================================================ */
+
+.pageHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.pageHeadMain {
+  min-width: 0;
+}
+
+/* back-pill - DI ATAS judul (mock key-file-grid), 34 px; area sentuh
+   48 px di HP datang dari utilitas .spine-hit-area di markup. */
+.backPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 34px;
+  margin-bottom: 12px;
+  padding: 0 14px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  border: 1px solid var(--app-spine-line);
+  color: var(--app-spine-text-soft);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.backPillLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pageTitle {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 0;
+  color: var(--app-spine-text);
+}
+
+.pageTitleText {
+  overflow-wrap: anywhere;
+}
+
+/* count-chip - 30 px, radius penuh, ikon emas. */
+.countChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  border: 1px solid var(--app-spine-line);
+  color: var(--app-spine-text-soft);
+  white-space: nowrap;
+}
+
+.countChip svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--app-spine-gold);
+}
+
+.pageSub {
+  margin: 10px 0 0;
+  color: var(--app-spine-muted);
+}
+
+/* Rincian isi per jenis (Story 2.4) di sub-judul isi Section; dipangkas
+   di < 900 px sehingga tersisa "{n} file · {tanggal}". */
+.subDetail {
+  display: inline;
+}
+
+/* Petunjuk "mengintip" hanya untuk perangkat ber-hover (di perangkat
+   sentuh tidak ada kipas yang bisa diintip). Mode daftar tidak
+   merendernya sama sekali - itu keputusan JSX, bukan CSS. */
+.hoverHint {
+  display: none;
+}
+
+@media (hover: hover) {
+  .hoverHint {
+    display: inline;
+  }
+}
+
+.pageActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ---------------- baris alat ---------------- */
+/* Desktop: sort-pills menempel kiri (margin-right auto), sisanya kanan.
+   Susunannya sama persis di mode grid dan mode daftar - tidak ada
+   kontrol yang berpindah tempat saat view-toggle ditekan. */
+.toolbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.sortPills {
+  display: flex;
+  margin-right: auto;
+  padding: 4px;
+  max-width: 100%;
+  width: max-content;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  border: 1px solid var(--app-spine-line);
+}
+
+.sortPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: var(--spine-radius-full);
+  background: transparent;
+  color: var(--app-spine-meta);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sortPillActive {
+  background: var(--app-spine-text);
+  color: var(--app-spine-bg);
+}
+
+.sortGlyph {
+  font-size: 0.625rem;
+}
+
+/* search-pill - min(290px, 100%), tinggi 48, batas input-border
+   (>= 3 : 1 di kedua tema). SATU penanda fokus: cincin digambar di pill
+   lewat :focus-within, input sendiri tidak menggambar apa pun. */
+.searchPill {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: min(290px, 100%);
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  border: 1px solid var(--app-spine-input-border);
+}
+
+.searchPill:focus-within {
+  outline: 2px solid var(--spine-ring-color);
+  outline-offset: 3px;
+}
+
+.searchIcon {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin-right: 10px;
+  color: var(--app-spine-muted);
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  min-height: 46px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--app-spine-text);
+  font: var(--text-body-md);
+}
+
+.searchInput::placeholder {
+  color: var(--app-spine-placeholder);
+}
+
+/* Isian di dalam modal. TIDAK boleh memakai .searchInput: kelas itu sengaja
+   tanpa border/latar karena kapsul cari yang menggambar bingkainya — dipakai
+   di modal, kolomnya jadi tak terlihat sama sekali. */
+.modalInput {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--app-spine-input-border);
+  border-radius: var(--spine-radius-md);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-text);
+  font: var(--text-body-md);
+}
+
+.modalInput::placeholder {
+  color: var(--app-spine-placeholder);
+}
+
+.modalInput:focus-visible {
+  border-color: var(--app-spine-input-border);
+}
+
+textarea.modalInput {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.searchInput:focus,
+.searchInput:focus-visible {
+  outline: none;
+}
+
+.searchDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: var(--spine-radius-md);
+  background: var(--app-spine-surface-2);
+  border: 1px solid var(--app-spine-input-border);
+  box-shadow: 0 30px 60px -20px #000;
+  z-index: 50;
+}
+
+.searchEmpty {
+  padding: 16px;
+  color: var(--app-spine-muted);
+  font: var(--text-body-sm);
+  text-align: center;
+}
+
+/* Keadaan gagal: satu baris, tidak menumpuk, dan tidak pernah menyamar
+   jadi "tidak ada hasil". */
+.searchFailed {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 14px;
+  color: var(--app-spine-text);
+  font: var(--text-body-sm);
+}
+
+/* Kalimatnya utuh di satu baris sendiri; tombolnya turun ke baris
+   berikutnya di lebar pill 290 px, bukan memotong kalimat. */
+.searchFailed span {
+  flex: 1 1 100%;
+}
+
+.retryBtn {
+  flex: none;
+  margin-left: auto;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  border: 1px solid var(--app-spine-input-border);
+  color: var(--app-spine-text);
+  font-size: 0.8125rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.searchResultItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--spine-radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.searchResultItem:hover {
+  background: var(--app-spine-surface);
+}
+
+.searchResultName {
+  font: var(--text-body-md);
+  color: var(--app-spine-text);
+}
+
+.searchResultProject {
+  font-size: 0.6875rem;
+  color: var(--app-spine-meta);
+}
+
+/* view-toggle - kapsul surface + line, padding 3, dua tombol 40 px. */
+.viewToggle {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  border: 1px solid var(--app-spine-line);
+}
+
+.viewBtn {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--spine-radius-full);
+  background: transparent;
+  color: var(--app-spine-muted);
+  cursor: pointer;
+}
+
+.viewBtn svg {
+  width: 17px;
+  height: 17px;
+}
+
+.viewBtnActive {
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+}
+
+/* Tema terang: kuning di atas putih hanya 1,30 : 1, jadi item aktif
+   diberi cincin ink. Sengaja box-shadow, BUKAN outline: outline adalah
+   satu-satunya penanda fokus (.spine-focus-ring) dan tidak boleh
+   direbut keadaan aktif. */
+html[data-theme="light"] .viewBtnActive {
+  box-shadow: inset 0 0 0 1.5px var(--app-spine-ink);
+}
+
+.iconBtn {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  border: 1px solid var(--app-spine-line);
+  color: var(--app-spine-text-soft);
+  cursor: pointer;
+}
+
+.iconBtn svg {
+  width: 19px;
+  height: 19px;
+}
+
+/* Story 3.17: `chat-button` menjadi KUNING selama panel Diskusi project
+   terbuka (keadaannya juga tertulis di `aria-expanded`, jadi warnanya
+   hanya penguat — NFR15). Di tema terang keadaan aktif diberi bingkai
+   ink supaya tidak larut di latar terang, sama dengan `viewBtnActive`. */
+.iconBtnOn {
+  background: var(--app-spine-yellow);
+  border-color: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+}
+
+html[data-theme="light"] .iconBtnOn {
+  box-shadow: inset 0 0 0 1.5px var(--app-spine-ink);
+}
+
+/* select-toggle - pill varian surface + ikon centang 16 px. Labelnya
+   yang membawa keadaan ("Pilih" -> "Batal"), jadi TANPA aria-pressed.
+   Hanya dirender di perangkat tanpa hover / lebar HP. */
+.selectToggle {
+  display: none;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  border: 1px solid var(--app-spine-line);
+  color: var(--app-spine-text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.selectToggle svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+@media (hover: none) {
+  .selectToggle {
+    display: inline-flex;
+  }
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sectionTitle {
+  font: var(--text-headline-md);
+  color: var(--color-on-surface);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: var(--spacing-card-gap);
+}
+
+/* Story 2.15: tabel daftar warisan (.listTable, .listRow, .listCheckbox,
+   .listBadge, .listActionBtn) DIHAPUS — mode daftar sekarang milik
+   ListView.module.css. Story 2.13: .bulkActionBar warisan digantikan
+   BulkBar.module.css.
+   ------------------------------------------------------------ */
+
+/* Tombol di dalam modal warisan (Rename, Create, Delete, pemilih Section).
+   Sebelumnya menumpang nama `.bulkBtn*` milik bar aksi massal; karena bar
+   itu pindah ke BulkBar.module.css, kelasnya dipindahkan ke nama yang
+   jujur DENGAN GAYA YANG SAMA PERSIS — modal warisan tidak berubah
+   wujudnya di gelombang ini. */
+.modalBtnSecondary {
+  background: transparent;
+  border: 1px solid var(--color-outline-variant);
+  color: var(--color-on-surface);
+  padding: 8px 16px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+.modalBtnSecondary:hover {
+  background: var(--color-surface-container-highest);
+}
+.modalBtnPrimary {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  border: none;
+  padding: 8px 20px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+.modalBtnPrimary svg {
+  width: 18px;
+  height: 18px;
+}
+.modalBtnPrimary:hover {
+  transform: scale(1.05);
+  background: var(--color-primary-hover, #4a3aff);
+}
+
+.actionBtn {
+  /* HOTFIX isu #4 (pemeriksa pra-deploy): var --color-* lama memberi oker
+     kusam 2,46 : 1 di tema terang dan pil putih di tema gelap. Ikut palet
+     spine seperti button-primary: kuning + teks ink di kedua tema. */
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+  border: none;
+  border-radius: var(--spine-radius-full);
+  padding: 10px 24px;
+  font: var(--text-label-lg);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.actionBtn:hover {
+  background: var(--app-spine-yellow-edge);
+}
+
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modalContent {
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  width: 400px;
+  max-width: 90vw;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.modalContent h3 {
+  font: var(--text-headline-md);
+  color: var(--color-on-surface);
+  margin-bottom: 8px;
+}
+
+/* === Preview lightbox — sizes to the natural media dimensions === */
+.previewLightbox {
+  width: auto !important;
+  max-width: 95vw !important;
+  max-height: 95vh !important;
+  background: #0a0a0a !important;
+  padding: 16px !important;
+  position: relative;
+  display: inline-flex !important;
+  flex-direction: column;
+  animation: previewIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes previewIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.previewMedia {
+  max-width: min(1400px, 90vw);
+  max-height: 78vh;
+  width: auto;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+/* Mobile (≤768px) — stacked layout, full-width inputs, list table → card rows */
+/* Story 2.5 — di bawah batas spine 900 px baris alat menjadi DUA baris:
+   baris 1 search-pill + "Diskusi project", baris 2 view-toggle +
+   sort-pills + "Pilih" (AC). Tanpa gulir horizontal halaman: yang
+   melebar hanyalah kapsul sort-pills, yang menggulir di dalam dirinya
+   sendiri (lihat catatan implementasi spec). */
+@media (max-width: 899px) {
+  .pageHead {
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .pageActions {
+    width: 100%;
+  }
+
+  /* Rincian isi dipangkas: "{n} file · {tanggal}" saja. */
+  .subDetail {
+    display: none;
+  }
+
+  .toolbar {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .searchPill {
+    width: 100%;
+  }
+
+  .toolbarInProject {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "search search chat"
+      "view sort select";
+    column-gap: 8px;
+    row-gap: 12px;
+    align-items: center;
+  }
+
+  .toolbarInProject .searchPill {
+    grid-area: search;
+  }
+
+  .toolbarInProject .iconBtn {
+    grid-area: chat;
+  }
+
+  .toolbarInProject .viewToggle {
+    grid-area: view;
+  }
+
+  /* Kapsul sort menggulir DI DALAM dirinya sendiri (halaman tidak pernah
+     menggulir horizontal); tepi kanan memudar sebagai tanda masih ada
+     pilihan lain di sebelah kanan. */
+  .toolbarInProject .sortPills {
+    grid-area: sort;
+    margin-right: 0;
+    width: auto;
+    overflow-x: auto;
+    scrollbar-width: none;
+    mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
+  }
+
+  .toolbarInProject .sortPills::-webkit-scrollbar {
+    display: none;
+  }
+
+  .toolbarInProject .selectToggle {
+    grid-area: select;
+  }
+
+  /* Tinggi item sort 48 px di HP (hit-area) tanpa melebarkan kapsul. */
+  .sortPill {
+    min-height: 48px;
+    padding: 8px 10px;
+  }
+
+  .selectToggle {
+    display: inline-flex;
+    padding: 0 14px;
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboardContainer {
+    gap: 20px;
+  }
+
+  .searchInput {
+    font-size: 16px; /* prevent iOS zoom */
+  }
+
+  .searchDropdown {
+    max-height: 50vh;
+  }
+
+  .actionBtn {
+    width: 100%;
+    flex: 1 1 100%;
+    min-height: 44px;
+    padding: 12px 20px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+
+  /* Mode daftar HP: milik ListView.module.css (Story 2.16).
+     Bar aksi massal HP: milik BulkBar.module.css (Story 2.13). */
+
+  /* Modal — bottom sheet style */
+  .modalContent {
+    width: 100%;
+    max-width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 20px;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    margin-top: auto;
+    margin-bottom: 0;
+    align-self: flex-end;
+  }
+
+  .modalOverlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+}
+
+/* Preview lightbox — fullscreen on mobile */
+@media (max-width: 768px) {
+  .previewLightbox {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100vh;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    padding: 12px !important;
+    align-self: stretch !important;
+    display: flex !important;
+    overflow-y: auto;
+  }
+
+  .previewMedia {
+    max-width: 100%;
+    max-height: 70vh;
+  }
+}
+
+@media (max-width: 480px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
+
+  .toolbarInProject {
+    column-gap: 6px;
+  }
+
+  .sortPill {
+    padding: 8px 8px;
+  }
+
+  .selectToggle {
+    padding: 0 12px;
+  }
+}
+
+/* ============================================================
+   Story 2.7 — kolom grid Projects
+   ============================================================
+   NFR18: 1 kolom di < 600 px, 2 di >= 600 px, 3 di >= 900 px, dan
+   4+ auto-fill (sel minimum 280 px) di >= 1280 px, dengan jarak
+   {spacing.grid-gap-projects} 20 px. Gutter halaman datang dari
+   --spacing-container-margin (12 px di <= 480 px = {spacing.gutter-mobile}).
+   ============================================================ */
+
+.gridProjects {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spine-grid-gap-projects);
+}
+
+@media (min-width: 600px) {
+  .gridProjects { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (min-width: 900px) {
+  .gridProjects { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (min-width: 1280px) {
+  .gridProjects { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
+}
+
+/* ============================================================
+   Story 2.10 / 2.11 — dua grid bersarang di dalam Project
+   ============================================================
+   Section dan file punya jumlah kolom yang BERBEDA di lebar yang sama
+   (NFR18: Section 1/2/3/4+, file 2/3/4/6), jadi keduanya tidak bisa
+   berada di satu grid. Wadah luar (.gridStack) menyusunnya sebagai dua
+   baris; kotak seleksi bebas tetap digambar di wadah luar itu.
+   ============================================================ */
+
+.gridStack {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spine-grid-gap-sections);
+}
+
+/* Kolom Kartu Section: 1 / 2 / 3 / 4+ auto-fill sel minimum 216 px. */
+.gridSections {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spine-grid-gap-sections);
+}
+
+@media (min-width: 600px) {
+  .gridSections { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (min-width: 900px) {
+  .gridSections { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (min-width: 1280px) {
+  .gridSections { grid-template-columns: repeat(auto-fill, minmax(216px, 1fr)); }
+}
+
+/* Story 2.11 — kolom file 2 / 3 / 4 / 6 (NFR18), jarak 20 px di desktop
+   dan {spacing.grid-gap-files-mobile} 12 px di HP. */
+.gridFiles {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spine-grid-gap-files-mobile);
+}
+
+@media (min-width: 600px) {
+  .gridFiles { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (min-width: 900px) {
+  .gridFiles {
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--spine-grid-gap-files);
+  }
+}
+
+@media (min-width: 1280px) {
+  .gridFiles { grid-template-columns: repeat(6, 1fr); }
+}
+
+/* ============================================================
+   Story 2.17 — `drag-over` area konten (di dalam Section / project)
+   ============================================================
+   Menggantikan overlay "📥 Drop to upload → {folder}". Sorotan TIDAK
+   PERNAH lewat warna saja: selalu garis putus-putus DAN label bertulisan.
+   ------------------------------------------------------------ */
+.dropArea {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  border-radius: var(--spine-radius-xl);
+  background: var(--app-spine-scrim-85, #0a0a09d9);
+  outline: 2px dashed var(--app-spine-yellow, #efe749);
+  outline-offset: -2px;
+  pointer-events: none;
+}
+html[data-theme="light"] .dropArea {
+  outline-color: var(--app-spine-ink, #141310);
+}
+
+.dropCircle {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--app-spine-yellow, #efe749);
+  color: var(--app-spine-ink, #141310);
+}
+.dropCircle svg {
+  width: 28px;
+  height: 28px;
+}
+
+.dropLabel {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  max-width: 28ch;
+  /* Lapisan scrim SELALU gelap, jadi teksnya memakai warna objek invarian
+     supaya tetap terbaca di kedua tema. */
+  color: var(--app-spine-object-text, #fafaf5);
+  text-align: center;
+}

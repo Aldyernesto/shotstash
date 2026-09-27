@@ -1,0 +1,27 @@
+/* Story 1.20: TagPill komponen bersama — diekstrak dari hero.module.css
+   (.tagPill, Story 1.16) supaya slot-head kartu auth memakai pill yang
+   sama tanpa komponen dispesifikasi dua kali. Geometri identik — nol
+   delta visual di panggung hero. Tipografi datang dari utilitas
+   .spine-tag yang ditambahkan komponen; ukuran mobile diganti di sini
+   (dulu di blok media hero.module.css). */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: var(--spine-radius-sm);
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+  transform: skewX(-6deg); /* kemiringan pill milik komponen, bukan token */
+  text-transform: uppercase;
+  white-space: nowrap; /* pill tidak pernah melipat baris dalam kotaknya */
+}
+
+@media (max-width: 899px) {
+  .pill {
+    height: 24px;
+    padding: 0 10px;
+    font-size: 0.75rem; /* = spine-tag-mobile */
+  }
+}

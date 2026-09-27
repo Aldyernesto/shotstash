@@ -1,0 +1,177 @@
+/* ============================================================
+   Story 2.13 — `bulk-bar`
+   ============================================================
+   Desktop: pill mengambang di bawah-tengah AREA KONTEN (bukan tengah
+   layar) — `.section` halaman adalah containing block-nya, jadi bar tidak
+   pernah dijangkarkan ke tepi panel yang lebarnya mengikuti layar.
+
+   < 900 px: kartu ber-radius 28 px di posisi `bottom-bar`, yang selama
+   mode pilih TIDAK dirender (lihat dashboard-frame.module.css).
+   ------------------------------------------------------------ */
+
+.bar {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 96;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: calc(100% - 2 * var(--spine-gutter-desktop, 36px));
+  padding: 8px 8px 8px 14px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  border: 1px solid var(--app-spine-line);
+  box-shadow: 0 30px 60px -18px #000, 0 0 0 1px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+}
+:global(html[data-theme="light"]) .bar {
+  box-shadow: 0 24px 50px -18px rgba(20, 19, 16, 0.45), 0 0 0 1px rgba(20, 19, 16, 0.06);
+}
+
+.row1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.count {
+  margin-right: 4px;
+  font-weight: 700;
+  color: var(--app-spine-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.selectAll {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 12px;
+  font-weight: 700;
+  color: var(--app-spine-text-soft);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.selectAllBox {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border: 2px solid var(--app-spine-input-border, #6b695f);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.selectAllBox:checked {
+  background: var(--app-spine-yellow, #efe749);
+  border-color: var(--app-spine-yellow, #efe749);
+}
+:global(html[data-theme="light"]) .selectAllBox:checked {
+  border-color: var(--app-spine-ink, #141310);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ---------- tombol ---------- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 22px;
+  border: 1px solid transparent;
+  border-radius: var(--spine-radius-full);
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pill svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.pillSurface {
+  background: var(--app-spine-surface);
+  border-color: var(--app-spine-line);
+  color: var(--app-spine-text);
+}
+.pillDanger {
+  background: var(--app-spine-surface);
+  border-color: var(--app-spine-danger-border, #e5484d59);
+  color: var(--app-spine-danger-text, #f07a7e);
+}
+.pillYellow {
+  background: var(--app-spine-yellow, #efe749);
+  color: var(--app-spine-ink, #141310);
+}
+:global(html[data-theme="light"]) .pillYellow {
+  outline: 1.5px solid var(--app-spine-ink, #141310);
+  outline-offset: -1.5px;
+}
+.zipSuffix {
+  font-size: 0.78125rem; /* 12,5px */
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+/* ============================================================
+   < 900 px — kartu pengganti `bottom-bar`
+   ============================================================ */
+@media (max-width: 899.98px) {
+  .bar {
+    left: var(--spine-gutter-mobile, 12px);
+    right: var(--spine-gutter-mobile, 12px);
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    translate: none;
+    display: block;
+    width: auto;
+    max-width: none;
+    padding: 12px;
+    border-radius: var(--spine-radius-xl);
+    box-shadow: 0 24px 44px -12px rgba(0, 0, 0, 0.95);
+    white-space: normal;
+  }
+  :global(html[data-theme="light"]) .bar {
+    box-shadow: 0 20px 44px -14px rgba(20, 19, 16, 0.4);
+  }
+
+  /* baris 1: jumlah + "Pilih semua" */
+  .row1 {
+    justify-content: space-between;
+    padding: 0 0 8px 8px;
+  }
+  .count {
+    margin-right: 0;
+    white-space: normal;
+  }
+
+  /* baris 2: aksi utama selebar penuh 52 px. "Batal" tidak diulang di
+     sini — baris alat sudah membawanya sebagai tombol "Batal". */
+  .actions {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .actions .pill {
+    width: 100%;
+    min-height: 52px;
+    padding: 0 14px;
+  }
+  .actions .pill svg {
+    width: 18px;
+    height: 18px;
+  }
+  .cancelButton {
+    display: none;
+  }
+}

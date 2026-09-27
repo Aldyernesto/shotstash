@@ -1,0 +1,101 @@
+/* ============================================================
+   Story 3.2 — `toast`
+   ============================================================
+   Nilai dari DESIGN.md → toast dan mock `key-context-menu.html`
+   (`.toast`). Satu-satunya sumber toast bergaya baru untuk seluruh app.
+   ------------------------------------------------------------ */
+
+.host {
+  position: fixed;
+  left: 0;
+  right: 0;
+  /* Di atas SEMUA lapisan (termasuk viewer): kegagalan unduh Agen harus
+     terbaca walau viewer sedang terbuka. */
+  z-index: calc(var(--spine-z-viewer) + 100);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 0 var(--spine-gutter-mobile);
+  /* Bawah-tengah area konten (desktop). */
+  bottom: 24px;
+  pointer-events: none;
+}
+
+.host > * {
+  pointer-events: auto;
+}
+
+/* HP: tepat DI ATAS `bottom-bar`; bila sebuah sheet terbuka, naik lagi
+   setinggi tepi sheet lewat --mam-toast-lift (diset `Dialog`). */
+@media (max-width: 899px) {
+  .host {
+    /* Story 3.15: toast duduk DI ATAS `upload-dock` bila dock sedang
+       tampil — tumpukan lapisan bawah HP. */
+    bottom: calc(
+      var(--spine-bottombar-height) + var(--mam-bulkbar-height, 0px) +
+        var(--mam-dock-height, 0px) + var(--mam-toast-lift, 0px) + 12px
+    );
+  }
+}
+
+.toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(520px, 100%);
+  min-height: 52px;
+  padding: 8px 20px 8px 8px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-text);
+  box-shadow: var(--spine-elevation-popover);
+}
+
+:global(html[data-theme="light"]) .toast {
+  box-shadow: 0 18px 40px -16px rgba(60, 50, 30, 0.35);
+}
+
+.icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+}
+
+.icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.toastError .icon {
+  background: var(--app-spine-danger);
+  color: var(--app-spine-ink);
+}
+
+.text {
+  min-width: 0;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+/* Tombol tutup toast error — chip `.tx` dari mock. */
+.close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  margin-left: 4px;
+  padding: 0 12px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-full);
+  background: transparent;
+  color: var(--app-spine-text);
+  font-weight: 800;
+  cursor: pointer;
+}

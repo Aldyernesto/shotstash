@@ -1,0 +1,109 @@
+/* ============================================================
+   Story 3.2 — `copy-pill`
+   ============================================================
+   SATU tombol utuh yang SELURUH permukaannya menyalin — bukan teks
+   dengan ikon salin kecil di sampingnya. Nilai dari DESIGN.md →
+   copy-pill (+ varian 56px untuk kotak hasil `share-modal`).
+   ------------------------------------------------------------ */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  /* max-width: 100% + min-width: 0 → alamat panjang TIDAK PERNAH
+     memaksa lebar induknya. */
+  max-width: 100%;
+  min-width: 0;
+  height: 44px;
+  padding: 0 6px 0 16px;
+  border: 1px solid var(--app-spine-input-border);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+@media (max-width: 899px) {
+  .pill {
+    height: 48px;
+  }
+}
+
+/* Varian besar 56px: kotak hasil `share-modal` (Story 3.8). Alamatnya
+   memakai {typography.display-secret}. */
+.large {
+  height: 56px;
+  padding: 0 8px 0 20px;
+}
+
+.addr {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  flex: 1;
+  /* Alamat bisa diblok manual kalau clipboard ditolak browser. */
+  user-select: all;
+  -webkit-user-select: all;
+}
+
+.scheme {
+  flex: none;
+  font-weight: 600;
+  color: var(--app-spine-meta);
+}
+
+/* Potongan tengah "…": kepala menyusut dengan ellipsis, ekor tetap utuh.
+   CSS tidak punya ellipsis tengah, jadi dibelah dua di komponennya. */
+.head {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  color: var(--app-spine-text);
+}
+
+.tail {
+  flex: none;
+  white-space: nowrap;
+  font-weight: 700;
+  color: var(--app-spine-text);
+}
+
+.large .head,
+.large .tail {
+  font-weight: 900;
+}
+
+.icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: 50%;
+  background: var(--app-spine-surface);
+  color: var(--app-spine-text-soft);
+}
+
+.large .icon {
+  width: 40px;
+  height: 40px;
+}
+
+.icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.large .icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.fallback {
+  margin: 8px 0 0;
+  color: var(--app-danger);
+}

@@ -1,0 +1,91 @@
+/* Story 1.15: status-chip — lihat StatusChip.tsx. */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--spine-radius-full);
+}
+
+/* Titik diwarnai warna ISI (bukan varian *-text — teks tidak pernah
+   dipakai sebagai isian warna), mengikuti warna teks chip. */
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+}
+
+/* Story 1.24: ikon 14px (pairing-slot) menggantikan titik bila prop icon
+   diberikan — mewarisi warna teks chip. */
+.iconBox {
+  width: 14px;
+  height: 14px;
+}
+
+.iconBox svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.ok {
+  background: var(--app-spine-ok-bg);
+  border-color: var(--app-spine-ok-border);
+  color: var(--app-spine-ok-text);
+}
+
+.ok .dot {
+  background: var(--app-spine-ok);
+}
+
+:global([data-theme='light']) .ok {
+  background: var(--app-spine-ok-bg-light);
+  border-color: var(--app-spine-ok-border-light);
+  color: var(--app-spine-ok-text-light);
+}
+
+.danger {
+  background: var(--app-spine-danger-bg);
+  border-color: var(--app-spine-danger-border);
+  color: var(--app-spine-danger-text);
+}
+
+.danger .dot {
+  background: var(--app-spine-danger);
+}
+
+:global([data-theme='light']) .danger {
+  background: var(--app-spine-danger-bg-light);
+  border-color: var(--app-spine-danger-border-light);
+  color: var(--app-spine-danger-text-light);
+}
+
+.warning {
+  background: var(--app-spine-warning-bg);
+  border-color: var(--app-spine-warning-border);
+  color: var(--app-spine-warning-text);
+}
+
+.warning .dot {
+  background: var(--app-spine-warning);
+}
+
+:global([data-theme='light']) .warning {
+  background: var(--app-spine-warning-bg-light);
+  border-color: var(--app-spine-warning-border-light);
+  color: var(--app-spine-warning-text-light);
+}
+
+/* Netral: bercincin, tanpa warna status. */
+.neutral {
+  background: var(--app-spine-surface-2);
+  border-color: var(--app-spine-line);
+  color: var(--app-spine-muted);
+}
+
+.neutral .dot {
+  background: var(--app-spine-muted);
+}

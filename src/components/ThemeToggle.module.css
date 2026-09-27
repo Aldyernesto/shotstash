@@ -1,0 +1,56 @@
+/* Story 1.12: theme-toggle kapsul — lihat ThemeToggle.tsx untuk kontrak. */
+
+.capsule {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--app-spine-surface);
+  border: 1px solid var(--app-spine-line);
+}
+
+.item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--app-spine-muted);
+  cursor: pointer;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.item svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+.item[data-active='true'] {
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+}
+
+/* Tema terang: kuning di atas kertas putih kurang kontras — beri garis
+   tepi ink 1,5px (AC 1.12). */
+:global([data-theme='light']) .item[data-active='true'] {
+  box-shadow: 0 0 0 1.5px var(--app-spine-ink);
+}
+
+/* HP: item 44x40, ikon 16 (AC 1.12). */
+@media (max-width: 599px) {
+  .item {
+    width: 44px;
+    height: 40px;
+  }
+
+  .item svg {
+    width: 16px;
+    height: 16px;
+  }
+}

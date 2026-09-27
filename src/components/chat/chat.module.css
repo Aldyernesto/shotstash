@@ -1,0 +1,389 @@
+/* ============================================================
+   Story 3.16 — kosa kata percakapan bersama
+   ============================================================
+   SATU sumbernya untuk `chat-composer`, `mention-dropdown`,
+   `mention-chip`, `attachment-chip`, `role-chip`, dan `project-tag`.
+   Dikonsumsi panel Diskusi project (Story 3.17), Chat Monitor
+   (Story 3.24), dan pipeline (Story 3.29–3.31) — jangan dibangun
+   ulang per layar.
+
+   Nilai diambil dari mock `key-project-chat.html` pada lebar 1280:
+     .ccomp  padding 12/16/16, border-top 1px line
+     .inp2   min-height 48, padding 0 18, radius full, surface-2 +
+             input-border, 14px
+     .send   48 × 48 bulat, kuning → ink; abu saat kosong; kuning
+             redup saat mengirim
+     .mdrop  radius 22, surface-2 + input-border, padding 6,
+             baris 44 (HP 48), tag tipe 22
+     .mch    23px pill hitam teks kuning
+     .att    min-height 28 (tray 36) surface + line, ikon emas 13
+     .role   22px pill surface + line; varian admin bertint kuning
+     .plab.s 28px pill hitam teks kuning 12.5px
+
+   Bagian yang SENGAJA menyimpang dari mock dicatat di tempatnya.
+   ------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ */
+/* chat-composer                                                       */
+/* ------------------------------------------------------------------ */
+
+.composer {
+  flex: none;
+  position: relative;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--app-spine-line);
+}
+
+/* Tray lampiran di ATAS baris tulis (slot Epic 4 — belum diisi di
+   gelombang ini oleh panel Diskusi project). */
+.tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0 18px;
+  border: 1px solid var(--app-spine-input-border);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-text);
+  font: inherit;
+  font-size: 0.875rem;
+  caret-color: auto;
+}
+
+.input::placeholder {
+  color: var(--app-spine-placeholder);
+}
+
+/* SATU penanda fokus saja: cincin `.spine-focus-ring`.
+   PERBEDAAN SPINE vs KODE (dilaporkan, bukan dipilih diam-diam):
+   AC 3.16 menulis "fokus = batas kuning + focus-ring", sedangkan
+   Story 1.7 / `TextField.module.css` sudah menetapkan bahwa border
+   kolom TIDAK ikut berganti warna karena dua garis sewarna yang
+   bertumpuk terbaca sebagai outline ganda. Kode mengikuti aturan
+   yang sudah terpasang (satu penanda fokus). */
+.input:focus-visible {
+  border-color: var(--app-spine-input-border);
+}
+
+.send {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+  cursor: pointer;
+}
+
+.send svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Kosong: abu, `aria-disabled` (BUKAN `disabled` — fokus tidak hilang). */
+.sendOff {
+  background: var(--app-spine-surface-2);
+  border-color: var(--app-spine-line);
+  color: var(--app-spine-meta);
+  cursor: default;
+}
+
+/* Mengirim: kuning redup + spinner. */
+.sendBusy {
+  background: var(--app-spine-yellow-14);
+  border-color: var(--app-spine-yellow-35);
+  color: var(--app-spine-yellow);
+  cursor: default;
+}
+
+:global(html[data-theme="light"]) .sendBusy {
+  background: var(--app-spine-surface-2);
+  border-color: var(--app-spine-input-border);
+  color: var(--app-spine-text);
+}
+
+/* Spinner tombol kirim. Di mode kalem (`prefers-reduced-motion`) putaran
+   berhenti dan yang tersisa adalah indikator DIAM — AC 3.16. */
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: chat-spin 700ms linear infinite;
+}
+
+@keyframes chat-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}
+
+.hint {
+  margin: 10px 4px 0;
+  color: var(--app-spine-meta);
+}
+
+/* ------------------------------------------------------------------ */
+/* mention-dropdown                                                    */
+/* ------------------------------------------------------------------ */
+
+.drop {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: calc(100% - 4px);
+  z-index: 5;
+  padding: 6px;
+  border: 1px solid var(--app-spine-input-border);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-surface-2);
+  box-shadow: var(--spine-elevation-popover, 0 30px 60px -18px #000);
+  /* Tidak pernah keluar layar: tinggi dibatasi lalu digulir. */
+  max-height: min(60vh, 320px);
+  overflow-y: auto;
+}
+
+.dropHead {
+  padding: 8px 10px 6px;
+  color: var(--app-spine-muted);
+  text-transform: uppercase;
+}
+
+.dropRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--spine-radius-input-mobile);
+  background: transparent;
+  color: var(--app-spine-text);
+  font: inherit;
+  font-size: 0.84375rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Baris aktif ditandai CINCIN, bukan warna latar saja (AC 3.16). */
+.dropRowOn {
+  background: var(--app-spine-surface);
+  outline: 2px solid var(--app-spine-yellow);
+  outline-offset: -2px;
+}
+
+:global(html[data-theme="light"]) .dropRowOn {
+  outline-color: var(--app-spine-ink);
+}
+
+.dropName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dropMeta {
+  flex: none;
+  color: var(--app-spine-meta);
+}
+
+/* ------------------------------------------------------------------ */
+/* project-tag — versi mini label Kartu Project                        */
+/* ------------------------------------------------------------------ */
+
+.projectTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill);
+  color: var(--app-spine-yellow);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  text-decoration: none;
+  box-shadow: inset 0 0 0 1px var(--app-spine-white-10);
+}
+
+.projectTag > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Blok INVARIAN: pill hitam + teks kuning di kedua tema (AC 3.16 —
+   "tidak ada teks kuning maupun emas di tema terang" berlaku untuk teks
+   di atas latar terang; `project-tag` dan `mention-chip` tetap pill
+   hitam sehingga kontrasnya sudah aman). */
+
+/* Tipe hasil di `mention-dropdown` (PROJECT / SECTION / FILE) memakai
+   bentuk yang sama, tanpa bayangan dalam. */
+.typeTag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill);
+  color: var(--app-spine-yellow);
+  letter-spacing: 0.04em;
+}
+
+/* ------------------------------------------------------------------ */
+/* mention-chip                                                        */
+/* ------------------------------------------------------------------ */
+
+.mentionChip {
+  display: inline-flex;
+  align-items: center;
+  height: 23px;
+  padding: 0 9px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill);
+  color: var(--app-spine-yellow);
+  font-size: 0.78125rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: -2px;
+}
+
+/* ------------------------------------------------------------------ */
+/* attachment-chip                                                     */
+/* ------------------------------------------------------------------ */
+
+.attChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  color: var(--app-spine-text-soft);
+  font-size: 0.78125rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+:global(html[data-theme="light"]) .attChip {
+  background: var(--app-spine-bg);
+}
+
+.attChip svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: var(--app-spine-gold);
+}
+
+.attName {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Varian tray: lebih tinggi karena membawa tombol hapus. */
+.attChipRemovable {
+  min-height: 36px;
+  padding-right: 4px;
+}
+
+.attRemove {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--app-spine-muted);
+  cursor: pointer;
+}
+
+.attRemove svg {
+  width: 13px;
+  height: 13px;
+  color: var(--app-spine-muted);
+}
+
+/* ------------------------------------------------------------------ */
+/* role-chip                                                           */
+/* ------------------------------------------------------------------ */
+
+.roleChip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  color: var(--app-spine-text-soft);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+:global(html[data-theme="light"]) .roleChip {
+  background: var(--app-spine-bg);
+}
+
+/* Admin bertint kuning; di tema terang teks INK + bingkai ink 1,5 px —
+   tidak pernah teks kuning di atas latar terang (AC 3.16). */
+.roleChipAdmin {
+  border-color: var(--app-spine-yellow-35);
+  background: var(--app-spine-yellow-08);
+  color: var(--app-spine-yellow);
+}
+
+:global(html[data-theme="light"]) .roleChipAdmin {
+  border: 1.5px solid var(--app-spine-ink);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-ink);
+}
+
+/* ------------------------------------------------------------------ */
+/* HP — baris dropdown 48 px, dropdown ikut gutter HP                  */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 899px) {
+  .drop {
+    left: 12px;
+    right: 12px;
+  }
+
+  .dropRow {
+    min-height: 48px;
+  }
+}

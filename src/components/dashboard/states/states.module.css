@@ -1,0 +1,212 @@
+/* ============================================================
+   Story 2.8 — `empty-state`, `skeleton-row`, `error-box`
+   ============================================================
+   SATU-SATUNYA sumber ketiga komponen ini untuk seluruh app.
+   Story lapisan bersama di Epic 3 (UX-DR69) MEMPERLUAS berkas ini
+   (varian toast / per layar) dan tidak membangunnya ulang.
+
+   Aturan keras AC 2.8: ketiganya TIDAK punya gerak apa pun —
+   termasuk di luar mode kalem. Tidak ada shimmer, tidak ada
+   transition, tidak ada animation. Jangan menambahkannya.
+   ------------------------------------------------------------ */
+
+/* ---------- empty-state ---------- */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 20px;
+  text-align: center;
+}
+
+/* Varian 1: slot hantu bergaris, TANPA label — bentuk yang sama
+   dengan {components.project-empty}. */
+.ghost {
+  width: 108px;
+  height: 118px;
+  border: var(--spine-empty-ghost-border, 2px solid var(--app-spine-yellow-35));
+  border-bottom: 0;
+  border-radius: var(--spine-radius-md) var(--spine-radius-md) 0 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--app-spine-yellow-08) 0 10px,
+    transparent 10px 20px
+  );
+}
+
+/* Tema terang: garis hantu memakai {colors.ink} (kuning tipis tidak
+   terbaca di atas kertas). */
+:global(html[data-theme="light"]) .ghost {
+  border-color: var(--app-spine-ink);
+}
+
+/* Varian 2: tile ikon 56 px miring -6°. */
+.tile {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  /* Story 3.2: garis tile disamakan dengan mock (`.empt .tile`). */
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-card-sm);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-gold);
+  transform: rotate(-6deg);
+}
+
+/* Tema terang: ikon emas terang (#d4a83c) gagal kontras di atas kertas. */
+:global(html[data-theme="light"]) .tile {
+  color: var(--app-spine-accent-light);
+}
+.tile svg {
+  width: 26px;
+  height: 26px;
+}
+
+.emptyTitle {
+  margin: 0;
+  color: var(--app-spine-text);
+}
+
+.emptyText {
+  margin: 0;
+  max-width: 44ch;
+  color: var(--app-spine-muted);
+}
+
+/* CTA SELALU sibling — tidak pernah kontrol bersarang di dalam tautan. */
+.emptyAction {
+  margin-top: 4px;
+}
+
+/* ---------- skeleton-row ---------- */
+.skeletonRegion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spine-list-gap);
+}
+
+.skeletonRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-surface);
+}
+
+.skeletonThumb {
+  flex: none;
+  width: 56px;
+  height: 64px;
+  border-radius: var(--spine-radius-sticker);
+  background: var(--app-spine-surface-2);
+}
+
+.skeletonBars {
+  flex: 1;
+  min-width: 0;
+}
+
+.skeletonBar {
+  height: 12px;
+  border-radius: var(--spine-radius-sm);
+  background: var(--app-spine-surface-2);
+}
+
+.skeletonBar + .skeletonBar {
+  height: 10px;
+  width: 46%;
+  margin-top: 10px;
+}
+
+/* Story 3.2 (perluasan): baris TABEL/daftar — Admin, Shared, Trash, chat.
+   Tetap DIAM, tetap tanpa shimmer; hanya susunannya yang berbeda. */
+.skeletonTableRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 56px;
+  padding: 12px 16px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-surface);
+}
+
+.skeletonCell {
+  flex: 1;
+  min-width: 0;
+}
+
+.skeletonCell:first-child {
+  flex: 2;
+}
+
+.skeletonCell .skeletonBar + .skeletonBar {
+  display: none;
+}
+
+/* ---------- error-box ---------- */
+.errorBox {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--app-danger-border);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-danger-bg);
+}
+
+/* Story 3.2 (perluasan): pita lebar penuh untuk KEPALA HALAMAN.
+   Isi, ikon, dan role="alert" identik — yang berubah hanya bentuknya. */
+.errorBanner {
+  align-items: center;
+  width: 100%;
+  border-radius: var(--spine-radius-md);
+  padding: 14px 18px;
+}
+
+.errorBanner .errorAction {
+  margin-top: 0;
+  margin-left: auto;
+}
+
+@media (min-width: 600px) {
+  .errorBanner .errorBody {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .errorBanner .errorText {
+    margin: 0;
+  }
+}
+
+.errorIcon {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  color: var(--app-danger);
+}
+
+.errorBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.errorTitle {
+  margin: 0;
+  color: var(--app-spine-text);
+}
+
+.errorText {
+  margin: 6px 0 0;
+  color: var(--app-spine-text-soft);
+}
+
+.errorAction {
+  margin-top: 12px;
+}

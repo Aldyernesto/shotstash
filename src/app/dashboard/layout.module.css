@@ -1,0 +1,24 @@
+/* Story 2.2/2.3: kerangka app (app-bar desktop, header + bottom-bar HP)
+   kini milik src/components/dashboard/dashboard-frame.module.css. Modul ini
+   hanya menyimpan cangkang halaman: kolom layout, dan <main> yang dijaga
+   tak tertutup bottom-bar di HP (scroll-padding-bottom ada di globals). */
+
+.dashboardLayout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--color-background);
+}
+
+.mainContent {
+  flex: 1;
+  padding: var(--spacing-container-margin);
+}
+
+/* Bottom-bar menempel penuh di bawah (64px + safe-area) — konten terakhir
+   tidak boleh tersembunyi di baliknya. */
+@media (max-width: 899.98px) {
+  .mainContent {
+    padding-bottom: calc(var(--spine-bottombar-height) + 16px);
+  }
+}

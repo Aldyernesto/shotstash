@@ -1,0 +1,345 @@
+/* ============================================================
+   Story 3.17 — `chat-panel` Diskusi project
+   ============================================================
+   SATU pohon markup, dua wujud: panel samping 420 px di ≥ 900 px,
+   sheet layar penuh di bawahnya. Perbedaannya seluruhnya CSS —
+   tidak ada breakpoint di JavaScript, jadi tidak ada ketidakcocokan
+   hidrasi.
+
+   Nilai dari mock `key-project-chat.html` (desktop 1280 / HP 360):
+     .cpanel  right 0, top 76 (= tinggi app bar), bottom 0, lebar 420,
+              surface + border-left line, bayangan -30px 0 60px -20px
+     .ch      padding 16/16/14, border-bottom line, judul 17 px
+     .cfeed   flex 1, gap 12, padding 16, isi rapat ke BAWAH
+     .msg     radius 22, surface-2 + line, padding 12/16/14
+     .csheet  inset 0 bg; .ch padding 52/12/12 surface; .msg surface;
+              .ccomp padding 10/12/26 surface
+   ------------------------------------------------------------ */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--spine-z-modal);
+  background: var(--app-spine-scrim-60);
+}
+
+.panel {
+  position: fixed;
+  top: var(--spine-appbar-height);
+  right: 0;
+  bottom: 0;
+  z-index: var(--spine-z-modal);
+  display: flex;
+  flex-direction: column;
+  width: 420px;
+  max-width: 100%;
+  background: var(--app-spine-surface);
+  border-left: 1px solid var(--app-spine-line);
+  box-shadow: -30px 0 60px -20px #000;
+}
+
+:global(html[data-theme="light"]) .panel {
+  box-shadow: -30px 0 60px -26px rgba(20, 19, 16, 0.35);
+}
+
+/* ---------- kepala ---------- */
+
+.head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid var(--app-spine-line);
+}
+
+.headMain {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.title {
+  display: block;
+  margin: 0;
+  color: var(--app-spine-text);
+  /* Mock menulis tracking -0.01em; token spine `display-button` memakai
+     0.04em. Token yang dipakai — perbedaannya dicatat di laporan story,
+     bukan ditambal di sini. */
+}
+
+.sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 9px;
+  min-width: 0;
+}
+
+.count {
+  color: var(--app-spine-meta);
+}
+
+/* Tombol tutup 40 px (desktop) / kembali 48 px (HP) — `icon-button`. */
+.iconBtn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--app-spine-line);
+  border-radius: 50%;
+  background: var(--app-spine-surface);
+  color: var(--app-spine-text-soft);
+  cursor: pointer;
+}
+
+.iconBtn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ---------- feed ---------- */
+
+.feed {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  /* Pesan terbaru di bawah: isi yang belum penuh tetap rapat ke bawah,
+     persis mock `.cfeed`. */
+  justify-content: flex-end;
+}
+
+/* Keadaan kosong / gagal berada di TENGAH feed. */
+.feedCentered {
+  justify-content: center;
+}
+
+/* Memuat: siluet rapat ke atas supaya tidak melompat saat isi datang. */
+.feedTop {
+  justify-content: flex-start;
+}
+
+/* ---------- message-card ---------- */
+
+.msg {
+  flex: none;
+  padding: 12px 16px 14px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-surface-2);
+}
+
+.msgHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+/* Slot untuk `role-chip` di SAMPING nama pengirim. Kosong di gelombang
+   ini (FR28 jatuh di Story 4.1) — ruangnya sudah ada supaya penyisipan
+   nanti tidak mengubah tata letak. */
+.msgWho {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--app-spine-text);
+}
+
+.msgName {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.msgTime {
+  flex: none;
+  color: var(--app-spine-meta);
+}
+
+.msgBody {
+  margin: 0;
+  color: var(--app-spine-text-soft);
+  overflow-wrap: anywhere;
+}
+
+.msgFoot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* Sedang dikirim: kartu redup, waktu menulis "mengirim…". */
+.msgSending {
+  opacity: 0.72;
+}
+
+/* ---------- memuat / kosong / gagal ---------- */
+
+/* Siluet DIAM — tanpa shimmer (AC 3.17). */
+.skeleton {
+  flex: none;
+  padding: 14px 16px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-surface-2);
+}
+
+.skeleton i {
+  display: block;
+  height: 12px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+}
+
+.skeleton i + i {
+  margin-top: 10px;
+}
+
+.loadingText {
+  margin: 0 0 4px;
+  color: var(--app-spine-muted);
+  text-align: center;
+}
+
+.empty {
+  padding: 8px 0;
+  text-align: center;
+}
+
+.emptyTile {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 14px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-tile);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-gold);
+  transform: rotate(-6deg);
+}
+
+.emptyTile svg {
+  width: 26px;
+  height: 26px;
+}
+
+.emptyTitle {
+  margin: 0;
+  color: var(--app-spine-text);
+}
+
+.emptyText {
+  margin: 8px auto 0;
+  max-width: 320px;
+  color: var(--app-spine-muted);
+}
+
+.errorBox {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 18px;
+  border: 1px solid var(--app-spine-danger-border);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-danger-bg);
+}
+
+.errorBox > svg {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  color: var(--app-spine-danger-text);
+}
+
+.errorTitle {
+  display: block;
+  margin: 0;
+  color: var(--app-spine-text);
+}
+
+.errorCause {
+  display: block;
+  margin: 4px 0 0;
+  color: var(--app-spine-text-soft);
+}
+
+.errorRetry {
+  margin-top: 14px;
+}
+
+/* ---------- HP: sheet layar penuh ---------- */
+
+@media (max-width: 899px) {
+  .scrim {
+    /* Sheet menutup layar penuh — scrim tidak punya pekerjaan lagi. */
+    display: none;
+  }
+
+  .panel {
+    top: 0;
+    left: 0;
+    right: 0;
+    /* Tinggi diikat ke visualViewport lewat --mam-chat-vh supaya kolom
+       tulis menempel di ATAS keyboard, bukan tertutup olehnya. */
+    height: var(--mam-chat-vh, 100dvh);
+    bottom: auto;
+    width: auto;
+    max-width: none;
+    background: var(--app-spine-bg);
+    border-left: 0;
+    box-shadow: none;
+  }
+
+  .head {
+    padding: calc(12px + env(safe-area-inset-top, 0px)) var(--spine-gutter-mobile) 12px;
+    background: var(--app-spine-surface);
+  }
+
+  .iconBtn {
+    width: 48px;
+    height: 48px;
+  }
+
+  .iconBtn svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .feed {
+    padding: var(--spine-gutter-mobile);
+  }
+
+  /* Kartu pesan memakai `surface` di atas `bg` pada sheet HP (AC 3.17). */
+  .msg,
+  .skeleton {
+    padding: 12px 14px;
+    background: var(--app-spine-surface);
+  }
+
+  .skeleton i {
+    background: var(--app-spine-surface-2);
+  }
+
+  /* `.panel` ikut disebut supaya aturan ini MENANG atas `.composer`
+     bawaan `chat.module.css` — keduanya mendarat di elemen yang sama, dan
+     dengan kekhususan setara yang menang hanyalah urutan bundel. */
+  .panel .composer {
+    padding: 10px var(--spine-gutter-mobile) calc(26px + env(safe-area-inset-bottom, 0px));
+    background: var(--app-spine-surface);
+  }
+}

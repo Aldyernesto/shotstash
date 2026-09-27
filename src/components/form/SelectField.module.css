@@ -1,0 +1,163 @@
+/* ============================================================
+   Story 3.32 — `select-field` (combobox + listbox)
+   ============================================================
+   Nilai dari mock `key-onboarding.html`:
+     .sel      min-height 52px (HP 48px), padding 0 16 0 18,
+               radius 16 (HP 14), surface-2 + input-border, 15px
+     .sel span padding 12px 0, line-height 1.3 — jawaban panjang
+               MEMBUNGKUS maksimal 2 baris, tidak dipotong
+     .sel.open border kuning + focus-ring tunggal Epic 1
+     .lb       listbox radius 16, surface-2 + input-border, padding 6
+     .lb .op   opsi 48px, radius 12, 14px/1.3
+     .lb .op.on kuning/ink + centang (tema terang: + outline ink)
+     .lb .op.kf cincin fokus DI DALAM opsi (offset -2px)
+   ------------------------------------------------------------ */
+
+.wrap {
+  position: relative;
+}
+
+.control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 52px;
+  padding: 0 16px 0 18px;
+  border: 1px solid var(--app-spine-input-border);
+  border-radius: var(--spine-radius-md);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-text);
+  font-size: 0.9375rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* SATU penanda fokus: cincin Epic 1 lewat utilitas .spine-focus-ring di
+   markup; terbuka hanya mengubah warna bingkainya. */
+.controlOpen {
+  border-color: var(--app-spine-yellow);
+}
+
+:global(html[data-theme="light"]) .controlOpen {
+  border-color: var(--app-spine-ink);
+}
+
+.controlInvalid,
+.controlInvalid.controlOpen {
+  border-color: var(--app-danger-solid);
+}
+
+/* Jawaban panjang membungkus maksimal 2 baris, tidak dipotong. */
+.value {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  padding: 12px 0;
+  line-height: 1.3;
+}
+
+.placeholder {
+  color: var(--app-spine-placeholder);
+}
+
+.chevron {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: var(--app-spine-muted);
+  transition: transform 180ms ease;
+}
+
+.chevron svg {
+  width: 18px;
+  height: 18px;
+}
+
+.controlOpen .chevron {
+  transform: rotate(180deg);
+  color: var(--app-spine-text);
+}
+
+.listbox {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: var(--spine-z-popover);
+  max-height: 264px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--app-spine-input-border);
+  border-radius: var(--spine-radius-md);
+  background: var(--app-spine-surface-2);
+  box-shadow: var(--spine-elevation-popover);
+  margin: 0;
+  list-style: none;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 48px;
+  padding: 8px 12px;
+  border-radius: var(--spine-radius-xs);
+  color: var(--app-spine-text);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.option:hover {
+  background: var(--app-spine-surface);
+}
+
+.optionSelected {
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+  font-weight: 700;
+}
+
+/* Tema terang: kuning di atas kertas terang butuh garis luar ink supaya
+   opsi terpilih tetap terbaca sebagai "terpilih", bukan sekadar warna. */
+:global(html[data-theme="light"]) .optionSelected {
+  outline: 2px solid var(--app-spine-ink);
+  outline-offset: -2px;
+}
+
+/* Fokus keyboard ditandai cincin DI DALAM opsi supaya tidak terpotong
+   tepi listbox. */
+.optionActive {
+  outline: 2px solid var(--spine-ring-color);
+  outline-offset: -2px;
+}
+
+.check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+}
+
+.check svg {
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 599.98px) {
+  .control {
+    min-height: 48px;
+    border-radius: var(--spine-radius-input-mobile);
+  }
+}

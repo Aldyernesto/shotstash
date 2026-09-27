@@ -1,0 +1,149 @@
+/* Story 1.13: kontrak visual text-field — lihat TextField.tsx.
+   Kelas .controlWrap/.hasSuffix/.eyeBtn dipakai bersama PasswordInput. */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spine-label-gap); /* 8px — jarak label ke field */
+}
+
+.label {
+  color: var(--app-spine-text-soft);
+  text-transform: uppercase; /* KAPITAL via text-transform — label tetap ditulis normal */
+}
+
+.controlWrap {
+  position: relative;
+  display: flex;
+}
+
+.input {
+  width: 100%;
+  min-height: 52px; /* 48px di HP — kontrol 52/48 */
+  padding: 14px 16px;
+  border: 1px solid var(--app-spine-input-border);
+  border-radius: var(--spine-radius-md); /* input-mobile 14px di HP */
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-text);
+  font: inherit;
+  font-size: 0.9375rem;
+  caret-color: auto; /* caret native — sengaja, jangan dikustom */
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.input::placeholder {
+  color: var(--app-spine-placeholder);
+}
+
+/* SATU penanda fokus saja: cincin .spine-focus-ring. Border kolom sengaja
+   TIDAK ikut berubah warna — dua garis sewarna yang bertumpuk (border kuning
+   + cincin kuning) terbaca sebagai outline ganda. Aturan "focus-ring tunggal"
+   dari Story 1.7. */
+.input:focus-visible {
+  border-color: var(--app-spine-input-border);
+}
+
+/* (0,2,0) sengaja: clearance mata TIDAK boleh tergantung urutan stylesheet
+   lawan `.input-field { padding: 16px }` di globals (temuan review G2).
+   Input TextField = .input.hasSuffix; input PasswordInput membawa kelas
+   global .input-field dari pemanggil → pasangkan lewat :global(). */
+.input.hasSuffix,
+.hasSuffix:global(.input-field) {
+  padding-right: 56px; /* 44px mata + napas */
+}
+
+.inputError {
+  border-color: var(--app-spine-danger);
+}
+
+.errorText {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  color: var(--app-spine-danger-text);
+}
+
+.errorText svg {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+}
+
+:global([data-theme='light']) .errorText {
+  color: var(--app-spine-danger-text-light);
+}
+
+.suffix {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: flex;
+}
+
+/* Tombol mata (PasswordInput): 44px desktop / 48px HP, flush kanan
+   DI DALAM field, tanpa aria-pressed (label teks saja yang berganti). */
+.eyeBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--app-spine-muted);
+  cursor: pointer;
+}
+
+.eyeBtn svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+@media (max-width: 599px) {
+  .input {
+    min-height: 48px;
+    padding: 12px 14px;
+    border-radius: var(--spine-radius-input-mobile);
+  }
+
+  .input.hasSuffix,
+  .hasSuffix:global(.input-field) {
+    padding-right: 60px; /* mata membesar 48px di HP */
+  }
+
+  .eyeBtn {
+    width: 48px;
+    height: 48px;
+  }
+
+  .suffix {
+    right: 0;
+  }
+}
+
+/* iOS Safari auto-zoom saat fokus ke input <16px (temuan review G2 —
+   paritas aturan lama `.input-field { font-size: 16px }` di globals).
+   ≤899px = rentang HP OQ-X26, termasuk tablet portrait. */
+@media (max-width: 899px) {
+  .input {
+    font-size: 1rem;
+  }
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

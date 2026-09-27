@@ -1,0 +1,281 @@
+/* ============================================================
+   Story 2.11 — grid isi Section: `file-card`, `video-marker`, `doc-card`
+   ============================================================
+   `file-card` adalah `rep-card` yang "sudah keluar dari saku": kartu
+   potret berbingkai terang, dengan nama dan ukuran DI BAWAH foto supaya
+   fotonya tetap bersih (tidak ada teks yang menimpa foto).
+
+   Kontrak satu kontrol sama dengan Kartu Project/Section: `::after`
+   tombol kartu direntangkan seluas kartu; `select-check` dan tombol
+   share adalah sibling DI ATASNYA.
+   ------------------------------------------------------------ */
+
+.cell {
+  position: relative;
+  min-width: 0;
+}
+
+.photo {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: var(--spine-radius-md);
+  border: 3px solid var(--app-spine-photo-frame, #eeeae2);
+  background: var(--app-spine-rep-placeholder, #222222) center / cover no-repeat;
+  box-shadow: 0 16px 28px -12px rgba(0, 0, 0, 0.85);
+  transition: transform var(--spine-motion-file-lift), box-shadow var(--spine-motion-file-lift);
+}
+
+.thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: var(--app-spine-rep-placeholder, #222222);
+}
+
+@media (hover: hover) {
+  .cell:hover .photo {
+    transform: translateY(-8px) rotate(-1.5deg);
+    box-shadow: 0 30px 40px -18px rgba(0, 0, 0, 0.95);
+  }
+}
+/* Story 3.3: kartu tetap terangkat selama menu aksinya terbuka. */
+.cell:focus-within .photo,
+.cell[data-menu-open] .photo {
+  transform: translateY(-8px) rotate(-1.5deg);
+  box-shadow: 0 30px 40px -18px rgba(0, 0, 0, 0.95);
+}
+
+/* Terpilih: bingkai kuning + cincin 4 px; penanda utamanya tetap
+   `select-check` yang tercentang, bukan warna bingkai saja. */
+.selected .photo {
+  border-color: var(--app-spine-yellow, #efe749);
+  box-shadow: 0 0 0 4px var(--app-spine-yellow-20, #efe74933),
+    0 16px 28px -12px rgba(0, 0, 0, 0.85);
+}
+:global(html[data-theme="light"]) .selected .photo {
+  border-color: var(--app-spine-ink, #141310);
+}
+
+/* ---------- nama & ukuran DI BAWAH foto ---------- */
+/* Story 2.12: baris caption = teks (fleksibel) + "⋯" di ujungnya, sesuai
+   `.fc .cap` di mockups/key-file-grid.html (flex, gap 6px). */
+.caption {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 0 2px;
+  min-width: 0;
+  /* Teksnya hanya label; yang bisa ditekan tetap tombol kartu di
+     bawahnya, kecuali tombol "⋯" yang mengaktifkan pointer-nya lagi. */
+  pointer-events: none;
+}
+.captionText {
+  flex: 1;
+  min-width: 0;
+}
+.moreButton {
+  pointer-events: auto;
+}
+.name {
+  display: block;
+  color: var(--app-spine-text-soft);
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.size {
+  display: block;
+  margin-top: 2px;
+  color: var(--app-spine-meta);
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+/* ---------- video-marker ---------- */
+.videoMarker {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px 0 9px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill, #0b0b0a);
+  color: var(--app-spine-yellow, #efe749);
+  box-shadow: 0 6px 14px -6px rgba(0, 0, 0, 0.8);
+}
+.videoMarker svg {
+  width: 9px;
+  height: 10px;
+  fill: currentColor;
+}
+
+/* ---------- doc-card ---------- */
+.doc {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    var(--app-spine-pocket-top, #2d2d2a) 0%,
+    var(--app-spine-pocket-mid, #1e1e1b) 50%,
+    var(--app-spine-pocket-bottom, #161614) 100%
+  );
+}
+.docSheet {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 48%;
+  aspect-ratio: 3 / 4;
+  transform: translate(-50%, -50%) rotate(-6deg);
+  border-radius: var(--spine-radius-sm);
+  /* sudut kanan-atas terlipat */
+  background: linear-gradient(225deg, transparent 0 13%, var(--app-spine-photo-frame, #eeeae2) 13%);
+  box-shadow: 0 18px 30px -12px rgba(0, 0, 0, 0.9);
+}
+.docSheet::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 19%;
+  aspect-ratio: 1;
+  border-radius: 0 0 0 5px;
+  background: linear-gradient(225deg, transparent 50%, #cdc8bb 50%);
+}
+.docSheet::after {
+  content: "";
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  top: 30%;
+  height: 44%;
+  background: repeating-linear-gradient(180deg, #c4bfb2 0 3px, transparent 3px 9px);
+}
+.docExt {
+  position: absolute;
+  right: 16%;
+  top: 57%;
+  padding: 7px 10px;
+  border-radius: var(--spine-radius-sticker);
+  background: var(--app-spine-yellow, #efe749);
+  color: var(--app-spine-ink, #141310);
+  transform: rotate(7deg);
+  box-shadow: 0 0.08em 0 var(--app-spine-yellow-edge, #b9b22c),
+    0 8px 18px -6px rgba(0, 0, 0, 0.7);
+}
+
+/* ---------- satu kontrol, area seluas kartu ---------- */
+.open {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  padding: 0;
+  border: 0;
+  border-radius: var(--spine-radius-md);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+/* Satu penanda fokus saja — geometri & warna identik .spine-focus-ring. */
+.open:focus-visible {
+  outline: 2px solid var(--spine-ring-color);
+  outline-offset: 3px;
+}
+
+/* ---------- select-check & share: sibling DI ATAS tombol kartu ---------- */
+/* Spesifisitas ganda: menang atas `.wrap { position: relative }` milik
+   SelectCheck.module.css tanpa bergantung pada urutan berkas CSS. */
+.selectCheck.selectCheck {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  z-index: 4;
+}
+
+/* Story 2.12 — kapan `select-check` tampil:
+   perangkat ber-hover = saat hover / :focus-within / sudah ada pilihan;
+   perangkat sentuh = hanya selama mode pilih. */
+.selectCheck {
+  opacity: 0;
+  pointer-events: none;
+}
+@media (hover: hover) {
+  .cell:hover .selectCheck,
+  .cell:focus-within .selectCheck {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+.cell[data-any-selected] .selectCheck,
+.cell[data-select-mode] .selectCheck {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* "⋯": desktop saat hover/fokus, HP selalu — kecuali selama mode pilih
+   di HP, di mana "⋯" disembunyikan (AC 2.12). */
+@media (hover: hover) {
+  .moreButton {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .cell:hover .moreButton,
+  .cell:focus-within .moreButton,
+  .cell[data-menu-open] .moreButton {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+@media (hover: none) {
+  .cell[data-select-mode] .moreButton {
+    display: none;
+  }
+}
+
+.shareButton {
+  position: absolute;
+  top: 8px;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: var(--app-spine-scrim-60, #0a0a0999);
+  color: var(--app-spine-object-text, #fafaf5);
+}
+.shareButton svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Tombol share HANYA saat hover atau :focus-within di perangkat
+   ber-hover; di layar sentuh selalu tampil. Muncul INSTAN (tanpa
+   transisi) supaya mode kalem tidak perlu perlakuan khusus. */
+@media (hover: hover) {
+  .shareButton {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .cell:hover .shareButton,
+  .cell:focus-within .shareButton {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}

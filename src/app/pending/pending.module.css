@@ -1,0 +1,109 @@
+/* ============================================================
+   Story 3.33 — `/pending`: `account-info` + dua pill
+   ============================================================
+   Nilai dari mock `key-onboarding.html` (bagian "menunggu persetujuan"):
+     .acct    panel menjorok: margin 0 0 20, padding 16, radius 16,
+              latar `bg` + garis line
+     .acct dt 11.5px KAPITAL tracking .1em meta
+     .acct dd 15px/1.4 text, `overflow-wrap: anywhere`
+     .duo     dua tombol 1fr 1fr gap 12
+     .poll    kalimat polling 12.5px/1.45 muted, margin 16px 4px 0
+   ------------------------------------------------------------ */
+
+.head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.title {
+  margin: 0;
+  color: var(--app-spine-text);
+}
+
+/* Mock `.screen .acard h2` = 23 px: judul kartu auth mengecil di HP. */
+@media (max-width: 599.98px) {
+  .title {
+    font-size: 1.4375rem;
+  }
+}
+
+.lead {
+  margin: 12px 0 0;
+  color: var(--app-spine-muted);
+}
+
+.leadBad {
+  color: var(--app-danger);
+}
+
+/* `account-info` — panel menjorok berlatar `bg`. */
+.account {
+  margin: 0 0 20px;
+  padding: 16px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-md);
+  background: var(--app-spine-bg);
+}
+
+.account dt {
+  margin: 0;
+  color: var(--app-spine-meta);
+  font-size: 0.71875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.account dd {
+  margin: 6px 0 0;
+  color: var(--app-spine-text);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.account dd + dt {
+  margin-top: 14px;
+}
+
+.rolePill {
+  margin-top: 2px;
+}
+
+/* Dua tombol membagi lebar; masing-masing >= 48 px. */
+.duo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.duo > * {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 12px;
+}
+
+.solo {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.poll {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 16px 4px 0;
+  color: var(--app-spine-muted);
+  font-size: 0.78125rem;
+  line-height: 1.45;
+}
+
+.poll svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+  color: var(--app-accent);
+}

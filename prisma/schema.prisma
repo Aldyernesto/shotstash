@@ -1,0 +1,239 @@
+// Shotstash database schema
+// Engine: PostgreSQL 17
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum AccountStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  FIELD_CREW
+  EDITOR
+  VIEWER
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+  DRAFT
+}
+
+enum ShareMode {
+  PUBLIC
+  PRIVATE
+}
+
+enum UploadStatus {
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+model User {
+  id            String          @id @default(uuid())
+  name          String
+  email         String          @unique
+  passwordHash  String?         // bcryptjs hash (nullable for Google-only users)
+  googleId      String?         @unique
+  role          Role            @default(EDITOR)
+  active        Boolean         @default(true)
+  accountStatus AccountStatus   @default(ACTIVE)  // ACTIVE utk user lama; signup baru -> PENDING
+  requestedRole Role?                            // role yang DIMINTA saat onboarding (bukan hak)
+  onboardedAt   DateTime?                        // kapan user isi onboarding
+  approvedById  String?                          // admin yang approve
+  approvedAt    DateTime?
+  avatarUrl     String?
+  signupAnswers Json?
+  sessions      Session[]
+  uploadedFiles MediaFile[]
+  shareLinks    ShareLink[]
+  uploadSessions UploadSession[]
+  chats         ProjectChat[]
+  notifications Notification[]
+  passwordResetRequests PasswordResetRequest[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@map("users")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // upload_complete, chat_mention, file_shared, project_created
+  title     String
+  body      String
+  data      Json?    // { projectId, fileId, chatId, etc }
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@map("sessions")
+}
+
+model Project {
+  id          String        @id @default(uuid())
+  title       String        // "Keberangkatan 12 Jan 2026"
+  description String?
+  coverImage  String?
+  status      ProjectStatus @default(ACTIVE)
+  files       MediaFile[]
+  folders     Folder[]
+  chats       ProjectChat[]
+  shareLinks  ShareLink[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@map("projects")
+}
+
+model Folder {
+  id        String      @id @default(uuid())
+  name      String
+  projectId String
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    Folder?     @relation("FolderToFolder", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[]    @relation("FolderToFolder")
+  files     MediaFile[]
+  shareLinks ShareLink[]
+  trashedAt DateTime?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([projectId])
+  @@index([parentId])
+  @@map("folders")
+}
+
+model MediaFile {
+  id            String       @id @default(uuid())
+  filename      String       // Nama file di storage (UUID-based)
+  originalName  String       // Nama asli dari user
+  mimeType      String
+  size          BigInt
+  md5Checksum   String       // MD5 hash untuk file integrity & dedup
+  storagePath   String       // Path di NAS: ./data/media/...
+  thumbnailPath String?
+  folderId      String
+  folder        Folder       @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  projectId     String
+  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedById  String
+  uploadedBy    User         @relation(fields: [uploadedById], references: [id])
+  shareLinks    ShareLink[]
+  chatMentions  ProjectChat[]
+  trashedAt     DateTime?
+  createdAt     DateTime     @default(now())
+
+  @@index([projectId, folderId])
+  @@index([md5Checksum])
+  @@map("media_files")
+}
+
+model ProjectChat {
+  id               String      @id @default(uuid())
+  message          String
+  projectId        String
+  project          Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  senderId         String
+  sender           User        @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  referencedFileId String?
+  referencedFile   MediaFile?  @relation(fields: [referencedFileId], references: [id], onDelete: SetNull)
+  createdAt        DateTime    @default(now())
+
+  @@index([projectId])
+  @@map("project_chats")
+}
+
+model ShareLink {
+  id          String     @id @default(uuid())
+  slug        String     @unique // nanoid(12) — URL-friendly
+  mode        ShareMode
+  fileId      String?
+  file        MediaFile? @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  folderId    String?
+  folder      Folder?    @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  projectId2  String?
+  projectRef  Project?   @relation(fields: [projectId2], references: [id], onDelete: SetNull)
+  createdById String
+  createdBy   User       @relation(fields: [createdById], references: [id])
+  accessCount Int        @default(0)
+  expiresAt   DateTime?
+  createdAt   DateTime   @default(now())
+
+  @@index([slug])
+  @@map("share_links")
+}
+
+model UploadSession {
+  id             String       @id @default(uuid())
+  filename       String
+  totalSize      BigInt
+  chunkSize      Int          @default(10485760) // 10MB default
+  totalChunks    Int
+  uploadedChunks Int          @default(0)
+  md5Expected    String?      // Client-provided MD5 untuk verifikasi
+  projectId      String
+  folderId       String
+  uploadedById   String
+  uploadedBy     User         @relation(fields: [uploadedById], references: [id])
+  status         UploadStatus @default(IN_PROGRESS)
+  createdAt      DateTime     @default(now())
+  expiresAt      DateTime     // Auto-cleanup temp files setelah 24 jam
+
+  @@map("upload_sessions")
+}
+
+// Reset password mandiri via email (kode OTP). Kode & token hanya disimpan sebagai hash.
+// Baris dihapus semua saat reset sukses; baris lama dibatalkan saat kode baru dikirim.
+model PasswordResetRequest {
+  id                  String    @id @default(uuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash            String    // HMAC-SHA256 kode 6 karakter
+  expiresAt           DateTime  // kode berlaku 15 menit; di-set ke masa lalu saat dibatalkan/terpakai
+  attempts            Int       @default(0)
+  resetTokenHash      String?   @unique // SHA-256 token reset (setelah kode benar)
+  resetTokenExpiresAt DateTime? // token berlaku 10 menit, sekali pakai
+  requestIp           String?
+  createdAt           DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@map("password_reset_requests")
+}

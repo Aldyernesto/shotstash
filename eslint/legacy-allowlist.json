@@ -1,0 +1,17 @@
+{
+  "description": "Files still outside src/modules. This list may only shrink.",
+  "files": [
+    "src/services/auth.service.ts",
+    "src/services/chat.service.ts",
+    "src/services/email.service.ts",
+    "src/services/folder.service.ts",
+    "src/services/google-auth.service.ts",
+    "src/services/heic-convert.service.ts",
+    "src/services/notification.service.ts",
+    "src/services/password-reset.service.ts",
+    "src/services/project.service.ts",
+    "src/services/share.service.ts",
+    "src/services/thumbnail.service.ts",
+    "src/services/upload.service.ts"
+  ]
+}

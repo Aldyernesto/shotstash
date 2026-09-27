@@ -1,0 +1,549 @@
+/* ============================================================
+   Story 2.15/2.16 — mode daftar: `list-row` di tiga tingkat
+   ============================================================
+   Geometri diukur dari mockups/key-list-view.html (`.lv`, `.lvh`, `.lvr`,
+   `.cols-p` / `.cols-s` / `.cols-f`).
+
+   Catatan perbedaan spine ↔ mock (dilaporkan, tidak dipilih diam-diam):
+     • radius baris — spine `{rounded.card-sm}` 18px, mock 22px → mock;
+     • padding baris — spine `12px 16px`, mock `4px 12px 4px 8px` → mock.
+   ------------------------------------------------------------ */
+
+.list {
+  display: block;
+}
+
+/* ---------- kepala kolom ---------- */
+.head {
+  display: grid;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px 10px 8px;
+  color: var(--app-spine-muted);
+}
+.headLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.71875rem; /* 11,5px */
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.headButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.headButtonActive {
+  color: var(--app-spine-text);
+}
+.headButton svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ---------- baris ---------- */
+.row {
+  position: relative;
+  display: grid;
+  align-items: center;
+  gap: 16px;
+  min-height: 80px;
+  padding: 4px 12px 4px 8px;
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-surface);
+  border: 1px solid var(--app-spine-line);
+}
+.row + .row {
+  margin-top: var(--spine-list-gap, 12px);
+}
+
+/* Kolom per tingkat — identik dengan `.cols-p` / `.cols-s` / `.cols-f`. */
+.projects {
+  grid-template-columns: minmax(0, 1fr) 200px 160px 48px;
+}
+.sections {
+  grid-template-columns: 44px minmax(0, 1fr) 200px 160px 48px;
+}
+.files {
+  grid-template-columns: 44px minmax(0, 1fr) 150px 104px 128px 184px 84px;
+}
+
+/* Hover/fokus: bingkai input-border + nama bergaris bawah kuning.
+   Angkat `rep-thumb` diatur di RepThumb.module.css lewat [data-list-row]. */
+@media (hover: hover) {
+  .row:hover {
+    border-color: var(--app-spine-input-border);
+  }
+  .row:hover .rowTitle,
+  .row:hover .projectLabel {
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-decoration-color: var(--app-spine-yellow, #efe749);
+    text-underline-offset: 4px;
+  }
+}
+/* Story 3.3: baris tetap dalam keadaan fokus selama menu aksinya terbuka
+   (fokus sendiri pindah ke popover yang dirender di portal). */
+.row:focus-within,
+.row[data-menu-open] {
+  border-color: var(--app-spine-input-border);
+}
+.row:focus-within .rowTitle,
+.row:focus-within .projectLabel {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--app-spine-yellow, #efe749);
+  text-underline-offset: 4px;
+}
+:global(html[data-theme="light"]) .row:hover .rowTitle,
+:global(html[data-theme="light"]) .row:hover .projectLabel,
+:global(html[data-theme="light"]) .row:focus-within .rowTitle,
+:global(html[data-theme="light"]) .row:focus-within .projectLabel {
+  text-decoration-color: var(--app-spine-ink, #141310);
+}
+
+/* Terpilih: tint + bingkai; penanda utamanya tetap centang, bukan warna. */
+.selected {
+  background: var(--app-spine-yellow-08, #efe74914);
+  border-color: var(--app-spine-yellow-35, #efe74959);
+}
+:global(html[data-theme="light"]) .selected {
+  background: var(--app-spine-surface-2);
+  border-color: var(--app-spine-ink, #141310);
+  box-shadow: inset 0 0 0 0.5px var(--app-spine-ink, #141310);
+}
+
+/* ---------- satu kontrol pembuka, seluas baris ---------- */
+.rowLink {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 0;
+  border: 0;
+  border-radius: var(--spine-radius-lg);
+  background: none;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.rowLink:focus-visible {
+  outline: 2px solid var(--spine-ring-color);
+  outline-offset: 3px;
+}
+
+/* Centang, "⋯", share, dan CTA adalah sibling DI ATAS kontrol itu. */
+.checkCell,
+.actions,
+.rowCta {
+  position: relative;
+  z-index: 2;
+}
+.checkCell {
+  display: grid;
+  place-items: center;
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+/* ---------- kolom nama ---------- */
+.nameCell {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.nameText {
+  flex: 1;
+  min-width: 0;
+}
+.titleLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.rowTitle {
+  min-width: 0;
+  color: var(--app-spine-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Nama file memakai teks body 14px, bukan display. */
+.fileTitle {
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+.meta {
+  display: block;
+  margin-top: 5px;
+  font-size: 0.78125rem; /* 12,5px */
+  line-height: 1.3;
+  color: var(--app-spine-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.metaGhost {
+  color: var(--app-spine-muted);
+  font-weight: 600;
+}
+
+/* Nama Project = pill hitam + teks kuning (invarian di dua tema). */
+.projectLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill, #0b0b0a);
+  color: var(--app-spine-yellow, #efe749);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.projectLabel span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* number-sticker "NO 25" */
+.numberSticker {
+  flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 5px 8px;
+  border-radius: 9px;
+  background: var(--app-spine-yellow, #efe749);
+  color: var(--app-spine-ink, #141310);
+  font-size: 0.8125rem; /* 13px */
+  transform: rotate(-6deg);
+  box-shadow: 0 6px 14px -4px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
+.numberPrefix {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+/* ---------- sel biasa ---------- */
+.num {
+  font-size: 0.9375rem; /* 15px */
+  font-weight: 800;
+  line-height: 1;
+  color: var(--app-spine-text);
+  white-space: nowrap;
+}
+.num small {
+  margin-left: 4px;
+  font-size: 0.78125rem;
+  font-weight: 600;
+  color: var(--app-spine-meta);
+}
+.date {
+  font-size: 0.84375rem; /* 13,5px */
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--app-spine-text-soft);
+  white-space: nowrap;
+}
+.dash {
+  color: var(--app-spine-meta);
+  font-weight: 600;
+}
+
+.typeChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface-2);
+  border: 1px solid var(--app-spine-line);
+  color: var(--app-spine-text-soft);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.typeChip svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: var(--app-spine-gold, #d4a83c);
+}
+:global(html[data-theme="light"]) .typeChip svg {
+  color: var(--app-spine-accent-light, #8a6508);
+}
+.typeChip .playGlyph {
+  width: 9px;
+  height: 10px;
+  fill: currentColor;
+}
+
+.uploader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 0.8125rem; /* 13px */
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--app-spine-text-soft);
+}
+.uploader i {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--app-spine-surface-2);
+  border: 1px solid var(--app-spine-line);
+  color: var(--app-spine-text);
+  font-size: 0.71875rem;
+  font-weight: 900;
+  font-style: normal;
+}
+.uploader span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- aksi di baris ---------- */
+.shareButton {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--app-spine-surface-2);
+  border: 1px solid var(--app-spine-line);
+  color: var(--app-spine-text-soft);
+  cursor: pointer;
+}
+.shareButton svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* "⋯" & share: desktop hanya saat hover/fokus, sentuh selalu tampil. */
+@media (hover: hover) {
+  .moreButton,
+  .shareButton {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .row:hover .moreButton,
+  .row:focus-within .moreButton,
+  .row[data-menu-open] .moreButton,
+  .row:hover .shareButton,
+  .row:focus-within .shareButton {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+@media (hover: none) {
+  .row[data-select-mode] .moreButton,
+  .row[data-select-mode] .shareButton {
+    display: none;
+  }
+}
+
+/* Centang: sama dengan grid — hover/fokus/ada pilihan di desktop, mode
+   pilih saja di perangkat sentuh. */
+.selectCheck {
+  opacity: 0;
+  pointer-events: none;
+}
+@media (hover: hover) {
+  .row:hover .selectCheck,
+  .row:focus-within .selectCheck {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+.row[data-any-selected] .selectCheck,
+.row[data-select-mode] .selectCheck {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ---------- CTA di baris Project kosong ---------- */
+.rowCta.rowCta {
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+.rowCta svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* ---------- Story 2.17: sorotan seret pada baris ---------- */
+.dropTarget {
+  outline: 2px dashed var(--app-spine-yellow, #efe749);
+  outline-offset: 3px;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--app-spine-yellow-08, #efe74914) 0 10px,
+    transparent 10px 20px
+  );
+}
+:global(html[data-theme="light"]) .dropTarget {
+  outline-color: var(--app-spine-ink, #141310);
+}
+.dragChip {
+  position: absolute;
+  left: 50%;
+  bottom: -18px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 16px);
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill, #0b0b0a);
+  color: var(--app-spine-object-text, #fafaf5);
+  font-weight: 700;
+  translate: -50% 0;
+  box-shadow: 0 14px 28px -10px #000, 0 0 0 1px var(--app-spine-white-10, #ffffff1a);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.dragChip svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--app-spine-yellow, #efe749);
+}
+
+/* ---------- Story 2.16: catatan keadaan ---------- */
+.loadingNote {
+  margin: 0 0 12px;
+  color: var(--app-spine-muted);
+}
+
+/* Meta satu baris HANYA di HP (desktop memakai kolom Tipe & Ukuran). */
+.metaMobile {
+  display: none;
+}
+
+/* ============================================================
+   Story 2.16 — baris versi HP (< 900 px)
+   ============================================================
+   Mengikuti `.mlr` di mockups/key-list-view.html: tinggi 72 px, kolom
+   `56px minmax(0,1fr) 48px` (mode pilih `40px 56px minmax(0,1fr)`),
+   jarak antar baris 8 px, "⋯" 48 px yang SELALU tampil.
+
+   Kolom Tanggal dan "Diunggah oleh" PINDAH ke viewer / panel info —
+   tidak dihapus dari data, hanya tidak muat di baris selebar HP.
+   ------------------------------------------------------------ */
+@media (max-width: 899.98px) {
+  /* Kepala kolom tidak dipakai di HP: barisnya bukan tabel lagi. */
+  .head {
+    display: none;
+  }
+
+  .row.row {
+    grid-template-columns: minmax(0, 1fr) 48px;
+    gap: 10px;
+    min-height: 72px;
+    padding: 4px 0 4px 6px;
+    border-radius: var(--spine-radius-stack-mobile);
+  }
+  .row + .row {
+    margin-top: 8px;
+  }
+
+  /* Selama mode pilih, centang mendapat kolomnya sendiri dan "⋯"
+     disembunyikan (AC 2.12) — persis `.mlr.sel-mode` di mock. */
+  .row.row[data-select-mode] {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+  .checkCell {
+    display: none;
+  }
+  .row[data-select-mode] .checkCell {
+    display: grid;
+  }
+  .row[data-select-mode] .actions {
+    display: none;
+  }
+
+  /* Kolom yang tidak muat di HP. */
+  .colMeta {
+    display: none;
+  }
+
+  .nameCell {
+    gap: 10px;
+  }
+  .metaMobile {
+    display: block;
+  }
+  .rowTitle {
+    font-size: 0.875rem; /* 14px display / 13,5px body */
+  }
+  .fileTitle {
+    font-size: 0.84375rem;
+  }
+  .meta {
+    margin-top: 4px;
+    font-size: 0.75rem; /* 12px */
+  }
+
+  /* "⋯" 48 px dan SELALU tampil di layar sentuh. */
+  .actions .moreButton {
+    width: 48px;
+    height: 48px;
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .actions .moreButton svg {
+    width: 20px;
+    height: 20px;
+  }
+  /* Tombol share tidak ikut ke baris HP — aksinya ada di menu "⋯". */
+  .shareButton {
+    display: none;
+  }
+
+  /* CTA baris Project kosong turun ke bawah nama supaya tidak memaksa
+     baris melebar (tanpa ini 360 px menghasilkan gulir horizontal). */
+  .rowCta.rowCta {
+    min-height: 48px;
+  }
+}
+
+@media (max-width: 899.98px) {
+  /* CTA "Upload footage pertama" TIDAK ikut hilang bersama kolom "Isi":
+     ia pindah ke baris kedua di dalam baris yang sama, sejajar nama. */
+  .row .ctaCell {
+    display: block;
+    grid-column: 1 / -1;
+    margin: 0 6px 6px 66px;
+  }
+}

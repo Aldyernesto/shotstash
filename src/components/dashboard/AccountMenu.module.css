@@ -1,0 +1,87 @@
+/* Kartu dropdown akun (Story 2.2) — posisi/penampilan kartu; z di bawah
+   modal (1200) sama seperti dropdown lama. */
+.card {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 240px;
+  background: var(--color-surface-container-high);
+  border: 1px solid var(--dash-chip-border, var(--app-spine-line));
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  padding: 6px;
+  z-index: 1000;
+}
+
+.header {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--dash-hairline, var(--app-spine-line));
+  margin-bottom: 4px;
+}
+
+/* Slot Profil bottom-bar (Story 2.3): kartu membuka ke atas. */
+.cardTop {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+.name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--app-spine-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.email {
+  font-size: 11px;
+  color: var(--app-spine-muted);
+  opacity: 0.75;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--app-spine-text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.item:hover {
+  background: var(--dash-hairline, var(--app-spine-surface-2));
+}
+
+.item svg {
+  width: 16px;
+  height: 16px;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+/* Pemisah 1px `line` — nilai sama dengan .sep ActionMenu (menu-popover). */
+.divider {
+  height: 1px;
+  margin: 6px 10px;
+  background: var(--app-spine-line);
+}
+
+.danger {
+  color: var(--app-danger);
+}
+
+.danger:hover {
+  background: var(--app-danger-bg);
+}

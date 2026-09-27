@@ -1,0 +1,256 @@
+/* ============================================================
+   `viewer-info-panel` / `viewer-info-sheet`
+   ============================================================
+   SATU-SATUNYA bagian `file-viewer` yang IKUT TEMA. Lapisan di
+   sekelilingnya (backdrop, bar atas, prev/next, `video-controls`)
+   tetap gelap di dua tema.
+   Nilai dari DESIGN.md → viewer-info-panel / viewer-info-sheet dan mock
+   `key-viewer-mobile.html` (`.info`, `.sheet`, `.idl`).
+   ------------------------------------------------------------ */
+
+.panel {
+  align-self: start;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 24px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-xl);
+  background: var(--app-spine-surface);
+  color: var(--app-spine-text);
+}
+
+/* Lapisan redup di bawah bar atas saat lembar PENUH — bar atas tetap
+   aktif, jadi redupnya mulai di bawahnya (104px). */
+.dim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 104px;
+  bottom: 0;
+  z-index: 1;
+  background: var(--app-spine-scrim-60);
+}
+
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  overflow: hidden;
+  padding: 0 20px 32px;
+  border-top: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-xl) var(--spine-radius-xl) 0 0;
+  background: var(--app-spine-surface);
+  color: var(--app-spine-text);
+  box-shadow: var(--spine-elevation-sheet);
+  /* Mode kalem: kill-switch Story 1.8 menjepit durasinya jadi 0 ms —
+     tingginya berganti INSTAN tanpa overshoot. */
+  transition: height var(--spine-motion-overlay);
+}
+
+/* Tinggi INTIP: 300px. Media tetap terlihat dan `video-controls` masih
+   bisa dipakai. */
+.peek {
+  height: 300px;
+}
+
+.peek::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 96px;
+  background: linear-gradient(180deg, transparent, var(--app-spine-surface) 45%);
+  pointer-events: none;
+}
+
+/* Tinggi PENUH: setinggi isi, maksimal 85 % layar lalu bergulir. */
+.full {
+  max-height: 85%;
+  overflow-y: auto;
+}
+
+/* Gagang = TOMBOL 96 × 28 px (area sentuh 48px lewat `spine-hit-area`). */
+.grab {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 28px;
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: grab;
+}
+
+.grab i {
+  display: block;
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--app-spine-input-border);
+}
+
+/* Pintu kedua ke tinggi penuh untuk yang tidak memakai gestur. */
+.more {
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 24px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-text);
+  font-size: 0.8125rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.more svg {
+  width: 16px;
+  height: 16px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 -8px 2px 0;
+}
+
+.headLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: uppercase;
+  color: var(--app-spine-muted);
+}
+
+/* Chip jenis di samping label "INFO FILE". */
+.kindChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-text-soft);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.kindChip svg {
+  width: 13px;
+  height: 13px;
+  color: var(--app-spine-gold);
+}
+
+:global(html[data-theme="light"]) .kindChip svg {
+  color: var(--app-spine-accent-light);
+}
+
+.close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--app-spine-text-soft);
+  cursor: pointer;
+}
+
+.close svg {
+  width: 20px;
+  height: 20px;
+}
+
+.fileName {
+  /* Nama file boleh putus DI MANA SAJA supaya tidak memaksa lebar. */
+  margin: 0 0 16px;
+  font-size: 1.0625rem; /* 17 px */
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--app-spine-text);
+  word-break: break-all;
+}
+
+.dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  row-gap: 14px;
+  column-gap: 12px;
+}
+
+.dl dt {
+  font-size: 0.71875rem; /* 11,5 px */
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--app-spine-meta);
+}
+
+.dl dd {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--app-spine-text-soft);
+  overflow-wrap: anywhere;
+}
+
+.rule {
+  border: 0;
+  border-top: 1px solid var(--app-spine-line);
+  margin: 18px 0;
+}
+
+/* Baris Section: stiker nomor + nama Section. */
+.location {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Stiker nomor tetap BLOK KUNING berteks ink di KEDUA tema — ia isian,
+   bukan teks kuning (aturan kontras DESIGN.md). */
+.numberSticker {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 5px 8px;
+  border-radius: var(--spine-radius-sticker);
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+  transform: rotate(-6deg);
+  white-space: nowrap;
+}
+
+.sectionName {
+  font-family: var(--font-poppins), "Arial Black", sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 900;
+  line-height: 1.1;
+  color: var(--app-spine-text);
+}
+
+/* Fokus DI DALAM panel memakai {colors.ink} saat tema terang; fokus di
+   lapisan gelap di sekelilingnya tetap kuning. Nilai itu sudah dipegang
+   --spine-ring-color, jadi `.spine-focus-ring` cukup. */

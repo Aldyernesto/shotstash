@@ -1,0 +1,327 @@
+/* ============================================================
+   Story 3.4 — `video-controls` kustom
+   ============================================================
+   Menggantikan atribut `controls` bawaan browser di viewer, halaman
+   `/s/[slug]`, dan `pipeline-card`. Nilai dari DESIGN.md →
+   video-controls dan mock `key-viewer-mobile.html` (`.vc`, `.scrub`,
+   `.crow`, `.cb`).
+
+   LAPISAN INVARIAN: kontrol ini TETAP GELAP di dua tema. Warnanya
+   memakai token invarian (`object-text`, `scrim-*`, `white-*`, kuning),
+   tidak pernah token chrome yang ikut tema.
+   ------------------------------------------------------------ */
+
+.wrap {
+  position: relative;
+  width: 100%;
+  /* Tinggi = lebar ÷ rasio tampil video (`--vp-ratio` dari VideoPlayer);
+     sebelum metadata 16/9 seperti `.dmedia` di mock. Pemakai yang
+     memberi tinggi eksplisit (viewer) menimpanya dengan `aspect-ratio: auto`. */
+  aspect-ratio: var(--vp-ratio, 16 / 9);
+  /* Wadah query: bar bawah menyesuaikan diri bila video potret di HP
+     pendek menjadi sangat sempit (< 240px). */
+  container-type: inline-size;
+  overflow: hidden;
+  background: #000;
+  /* Kursor ikut disembunyikan bersama kontrol saat video diputar. */
+  touch-action: pan-y;
+}
+
+.video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+}
+
+/* ---------- tombol tengah 76px (56px di pratinjau pipeline-card) ---------- */
+.big {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  margin: -38px 0 0 -38px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+  /* "tebal kertas" + jatuh bayangan. */
+  box-shadow: 0 5px 0 var(--app-spine-yellow-edge), 0 18px 36px -10px rgba(0, 0, 0, 0.8);
+  cursor: pointer;
+}
+
+.sm .big {
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+}
+
+.big svg {
+  width: 32px;
+  height: 32px;
+}
+
+.sm .big svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* Ikon putar sedikit ke kanan supaya segitiganya terlihat di tengah. */
+.big[data-icon="play"] svg {
+  margin-left: 4px;
+}
+
+/* Cincin fokus ganda kuning + ink, offset 3px DI LUAR "tebal kertas".
+   Ditulis di sini, bukan lewat `.spine-focus-ring--double`, karena kelas
+   itu memakai `box-shadow` untuk cincin ink-nya dan akan MENIMPA "tebal
+   kertas" tombol ini. Di sini ketiganya hidup berdampingan. */
+.big:focus-visible {
+  outline: 2px solid var(--app-spine-yellow);
+  outline-offset: 3px;
+  box-shadow: 0 5px 0 var(--app-spine-yellow-edge), 0 0 0 9px var(--app-spine-ink),
+    0 18px 36px -10px rgba(0, 0, 0, 0.8);
+}
+
+/* Memuat: lingkaran {colors.label-pill} + busur kuning berputar. */
+.big[data-state="buffering"] {
+  background: var(--app-spine-label-pill);
+  border: 1px solid var(--app-spine-white-14);
+  color: var(--app-spine-object-text);
+  box-shadow: 0 18px 36px -10px rgba(0, 0, 0, 0.8);
+  cursor: default;
+}
+
+.arc {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--app-spine-white-16);
+  border-top-color: var(--app-spine-yellow);
+  border-radius: 50%;
+  animation: vc-spin 1s linear infinite;
+}
+
+@keyframes vc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Label "Memuat video…" TETAP TERTULIS di mode kalem; hanya busurnya
+   yang berhenti (kill-switch CSS Story 1.8 menjepit durasinya ke 0). */
+.bufferLabel {
+  position: absolute;
+  left: 50%;
+  top: calc(46% + 50px);
+  translate: -50% 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-scrim-85);
+  color: var(--app-spine-object-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ---------- bar bawah ---------- */
+.bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 64px 8px 2px;
+  background: linear-gradient(
+    0deg,
+    var(--app-spine-scrim-92) 0%,
+    var(--app-spine-scrim-92) 30%,
+    transparent 100%
+  );
+}
+
+@media (min-width: 900px) {
+  .bar {
+    padding: 72px 16px 8px;
+  }
+}
+
+/* ---------- scrubber ---------- */
+.scrub {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 24px;
+  margin: 0 12px;
+  cursor: pointer;
+}
+
+/* Area sentuh 48px tanpa mengubah ukuran visual track 4px. */
+.scrub::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  right: -12px;
+  top: -12px;
+  bottom: -12px;
+}
+
+.track,
+.buffered,
+.fill {
+  position: absolute;
+  left: 0;
+  height: 4px;
+  border-radius: 4px;
+}
+
+.track {
+  right: 0;
+  background: var(--app-spine-white-25);
+}
+
+/* Rentang buffer: {colors.object-text} 40 % (#fafaf566) — nilai mock. */
+.buffered {
+  background: #fafaf566;
+}
+
+.fill {
+  background: var(--app-spine-yellow);
+}
+
+.knob {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: var(--app-spine-yellow);
+  box-shadow: 0 0 0 4px var(--app-spine-yellow-20);
+}
+
+/* ---------- baris kontrol ---------- */
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-height: 48px;
+}
+
+.left,
+.right {
+  display: flex;
+  align-items: center;
+}
+
+@media (min-width: 900px) {
+  .row {
+    min-height: 44px;
+  }
+
+  .left,
+  .right {
+    gap: 4px;
+  }
+}
+
+.time {
+  padding: 0 6px;
+  color: var(--app-spine-object-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (min-width: 900px) {
+  .time {
+    padding: 0 8px;
+    font-size: 0.78125rem;
+  }
+}
+
+.time span {
+  color: var(--app-spine-object-meta);
+  font-weight: 600;
+}
+
+.btn {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--app-spine-object-text);
+  cursor: pointer;
+}
+
+.btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+@media (min-width: 900px) {
+  .btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .btn svg {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+/* Cincin fokus di lapisan gelap TETAP KUNING di dua tema; varian
+   `--double` (kuning + ink) dipakai supaya terbaca di atas media apa
+   pun. `--inset` untuk tombol bar supaya tidak terpotong tepi media. */
+.btn:focus-visible {
+  outline: 2px solid var(--app-spine-yellow);
+  outline-offset: -4px;
+  box-shadow: inset 0 0 0 4px var(--app-spine-ink);
+}
+
+/* Video potret di HP pendek (mis. 360×640 → kotak ≈190px): chip waktu
+   disembunyikan supaya tombol bisu + layar penuh tetap 48px penuh.
+   Posisi tetap terbaca lewat aria-valuetext scrubber. */
+@container (max-width: 239px) {
+  .time {
+    display: none;
+  }
+  .row {
+    justify-content: flex-end;
+  }
+}
+
+/* ---------- sembunyi otomatis ---------- */
+.hidden .bar,
+.hidden .big,
+.hidden .bufferLabel {
+  display: none;
+}
+
+.hidden {
+  cursor: none;
+}
+
+/* Sisa saat kontrol sembunyi: garis progres 3px kuning, DEKORATIF. */
+.thin {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--app-spine-yellow);
+}

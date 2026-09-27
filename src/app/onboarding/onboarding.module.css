@@ -1,0 +1,69 @@
+/* ============================================================
+   Story 3.32 — `/onboarding`: `question-field`
+   ============================================================
+   Nilai dari mock `key-onboarding.html`:
+     .qf     margin-bottom 16
+     .qf .ql kalimat penuh 14px/1.4 berat 700 (BUKAN label KAPITAL),
+             margin 0 0 8px 4px
+     .ferr   pesan error field 12.5px/1.45 danger, margin 8px 4px 0
+     .okn    catatan ok = `form-alert` varian ok (komponen bersama)
+   ------------------------------------------------------------ */
+
+.questions {
+  display: block;
+}
+
+.field {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+/* Pertanyaan ditulis sebagai KALIMAT PENUH di atas field — label KAPITAL
+   11,5 px tidak terbaca untuk kalimat dua baris. */
+.label {
+  display: block;
+  margin: 0 0 8px 4px;
+  color: var(--app-spine-text-soft);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.fieldError {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 4px 0;
+  color: var(--app-danger);
+  font-size: 0.78125rem;
+  line-height: 1.45;
+}
+
+.fieldError svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+}
+
+.greeting {
+  margin: 0;
+  color: var(--app-spine-text);
+}
+
+.lead {
+  margin: 12px 0 0;
+  color: var(--app-spine-muted);
+}
+
+.loading {
+  margin: 0;
+  color: var(--app-spine-muted);
+  text-align: center;
+}
+
+.submit {
+  width: 100%;
+  margin-top: 8px;
+}
+

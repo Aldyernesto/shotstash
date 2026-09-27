@@ -1,0 +1,53 @@
+/* Story 1.26: code-input enam kotak (AC epics.md 1.26; mock
+   key-forgot-password.html .code). Kotak 56px, radius input HP 14px,
+   surface-2, border input-border, huruf display-code 22px; fokus border
+   kuning (terang: ink) + cincin fokus spine. Caret native penuh — tanpa
+   caretColor kustom (kontrak text-field, review G1: kuning tak terbaca
+   di permukaan terang). */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spine-label-gap);
+}
+
+.hint {
+  color: var(--app-spine-muted);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--spine-label-gap);
+}
+
+.box {
+  width: 100%;
+  min-width: 0;
+  height: 56px;
+  padding: 0;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--app-spine-text);
+  background: var(--app-spine-surface-2);
+  border: 1px solid var(--app-spine-input-border);
+  border-radius: var(--spine-radius-input-mobile);
+  transition: border-color 160ms ease;
+}
+
+/* Satu penanda fokus: cincin .spine-focus-ring. Border kotak tidak ikut
+   berubah warna supaya tidak terbaca sebagai outline ganda (sama dengan
+   TextField; aturan focus-ring tunggal Story 1.7). */
+.box:focus-visible {
+  border-color: var(--app-spine-input-border);
+}
+
+/* Server menolak kode: border danger menimpa fokus, isi dipertahankan. */
+.rowInvalid .box,
+.rowInvalid .box:focus {
+  border-color: var(--app-spine-danger);
+}
+
+.box:disabled {
+  opacity: 0.6;
+}

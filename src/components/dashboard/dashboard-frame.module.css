@@ -1,0 +1,497 @@
+/* Story 2.2: app-bar desktop — 76px (var --spine-appbar-height), padding-x
+   28px (--spine-appbar-x), latar bg (flip otomatis di tema terang). Kotak,
+   tipografi, dan warna memakai token spine. Story 3.34: item nav-capsule
+   yang tidak muat pindah ke pemicu "Lainnya" (menu-popover) di ujung kapsul —
+   kapsul tidak pernah bergulir atau terpotong. Frame ini disembunyikan
+   <900px — pasangannya MobileFrame (Story 2.3). */
+
+.appbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: var(--spine-appbar-height);
+  padding: 0 var(--spine-appbar-x);
+  background: var(--app-spine-bg);
+}
+
+.logoLink {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--spine-radius-full);
+}
+
+.logoImg {
+  height: 40px;
+  width: auto;
+  display: block;
+}
+
+/* Kapsul nav — lebar mengikuti sisa bar; yang tidak muat pindah ke
+   "Lainnya" (Story 3.34), jadi isinya selalu ≤ lebar wrap. `position:
+   relative` untuk rel pengukur di bawah. */
+.capsuleWrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  margin: 0 12px;
+}
+
+.capsule {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 48px;
+  padding: 4px;
+  margin: 0;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  border: 1px solid var(--app-spine-line);
+  list-style: none;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.capsule > li {
+  flex: none;
+}
+
+/* Rel pengukur (Story 3.34): salinan semua item + pemicu, tidak dicat dan
+   tidak menempati ruang — hanya untuk mengukur lebar tiap item. */
+.capsuleMeasure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: none;
+  overflow: visible;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.capsuleLink,
+.capsuleOn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 10px;
+  border-radius: var(--spine-radius-full);
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--app-spine-nav-idle);
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.capsuleLink svg,
+.capsuleOn svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* Pemicu "Lainnya" = tombol berwujud item kapsul (reset tombol saja; warna
+   dan latar datang dari .capsuleLink / .capsuleOn seperti tautan lain).
+   Diletakkan SEBELUM :hover dan .capsuleOn supaya keduanya tetap menang. */
+.capsuleMore {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.capsuleLink:hover,
+.capsuleMore[aria-expanded="true"]:not(.capsuleOn) {
+  color: var(--app-spine-text);
+  background: var(--app-spine-surface-2);
+}
+
+/* Item aktif: pill kuning + teks ink; di tema terang diberi outline ink
+   supaya status aktif tidak disampaikan lewat warna saja (AC 2.2). */
+.capsuleOn {
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+}
+
+:global([data-theme="light"]) .capsuleOn {
+  outline: 1.5px solid var(--app-spine-ink);
+  outline-offset: -1.5px;
+}
+
+/* Titik emas 6px pada pipeline — aria-hidden di markup. */
+.goldDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--app-spine-gold);
+}
+
+.right {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Placeholder sesi belum termuat — ukuran tetap, aria-hidden di markup. */
+.capsulePlaceholder {
+  flex: 1 1 auto;
+  height: 48px;
+  max-width: 420px;
+  margin: 0 12px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  border: 1px solid var(--app-spine-line);
+  opacity: 0.55;
+}
+
+.accountWrap {
+  position: relative;
+}
+
+/* Avatar-pill dua baris nama/role (mock .avp). */
+.avp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px 0 4px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  border: 1px solid var(--app-spine-line);
+  color: var(--app-spine-text);
+  cursor: pointer;
+}
+
+.avpAvatar {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+  font-size: 12px;
+  font-weight: 900;
+  overflow: hidden;
+}
+
+.avpAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avpText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.avpText small {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--app-spine-meta);
+}
+
+/* Bawah 900px frame HP yang tampil (Story 2.3). */
+@media (max-width: 899.98px) {
+  .appbar {
+    display: none;
+  }
+}
+
+/* ============ Story 2.3: kerangka HP (<900px) ============ */
+
+/* app-header-mobile 48px — gutter 12px, logo 42px kiri, aksi kanan. */
+.headerMobile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spine-gutter-mobile);
+  height: var(--spine-appbar-height-mobile);
+  padding: 0 var(--spine-gutter-mobile);
+  background: var(--app-spine-bg);
+}
+
+.logoImgMobile {
+  height: 42px;
+  width: auto;
+  display: block;
+}
+
+.headerMobileRight {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--spine-label-gap);
+}
+
+/* bottom-bar — menempel penuh di tepi bawah (bukan kapsul mengambang). */
+/* Story 2.13: selama `bulk-bar` tampil, `bottom-bar` TIDAK dirender —
+   `bulk-bar` versi HP menggantikannya di posisi yang sama. */
+/* Story 3.17: selama sheet Diskusi project terbuka, `bottom-bar` juga
+   TIDAK dirender — sheet menutup layar penuh dan kolom tulisnya menempel
+   di tepi bawah / di atas keyboard. */
+:global(html[data-mam-bulkbar]) .bottomBar,
+:global(html[data-mam-chatsheet]) .bottomBar {
+  display: none;
+}
+
+.bottomBar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 95;
+  height: var(--spine-bottombar-height);
+  padding: 4px 8px env(safe-area-inset-bottom, 0px);
+  background: var(--app-spine-surface);
+  border-top: 1px solid var(--app-spine-line);
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+  gap: 2px;
+}
+
+/* Slot ≥48×48: ikon garis 24px dalam pill 56×32 + label 12px di bawah. */
+.slot {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--spine-radius-lg);
+  color: var(--app-spine-nav-idle);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.slotPill {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 32px;
+  border-radius: var(--spine-radius-full);
+}
+
+.slot svg {
+  width: 24px;
+  height: 24px;
+}
+
+.slotLabel {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Slot aktif: pill kuning di belakang ikon, ikon ink, label 800; tema
+   terang ditambah outline 1.5px ink (status bukan warna saja, AC 2.3). */
+/* HOTFIX isu #3: aturan `color: ink` di sini merambat ke .slotLabel yang
+   tidak punya latar — di tema gelap labelnya jadi 1,08 : 1 (tak terbaca).
+   .slotActive .slotPill sudah mengatur ink untuk ikonnya; label ikut warna
+   teks biasa. */
+.slotActive {
+  color: var(--app-spine-text);
+}
+
+.slotActive .slotPill {
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+}
+
+.slotActive .slotLabel {
+  font-weight: 800;
+}
+
+:global([data-theme="light"]) .slotActive .slotPill {
+  outline: 1.5px solid var(--app-spine-ink);
+  outline-offset: -1.5px;
+}
+
+/* Placeholder sesi belum termuat — 4 slot kosong aria-hidden (markup). */
+.slotPlaceholder {
+  flex: 1 1 0;
+  margin: 6px 4px;
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-surface-2);
+  opacity: 0.6;
+}
+
+/* Anchor kartu akun dari slot Profil (kartu membuka ke atas). */
+.sheetAccountAnchor {
+  position: fixed;
+  right: 12px;
+  bottom: calc(var(--spine-bottombar-height) + 8px);
+  z-index: 96;
+}
+
+/* more-sheet "Lainnya" — naik dari bawah, radius atas 28px, scrim-85. */
+.sheetRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: flex-end;
+}
+
+.sheetBackdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--app-spine-scrim-85);
+}
+
+.sheet {
+  position: relative;
+  width: 100%;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--app-spine-surface);
+  border-radius: var(--spine-radius-xl) var(--spine-radius-xl) 0 0;
+  padding: 8px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  animation: sheetUp 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes sheetUp {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    animation: none;
+  }
+}
+
+.sheetHandle {
+  flex: none;
+  width: 40px;
+  height: 5px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-line);
+  margin: 4px auto 8px;
+}
+
+.sheetHead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sheetTitle {
+  margin: 0;
+  color: var(--app-spine-text);
+  font-size: 1.0625rem;
+  font-weight: 900;
+}
+
+.sheetClose {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--app-spine-surface-2);
+  border: 1px solid var(--app-spine-line);
+  color: var(--app-spine-text-soft);
+  cursor: pointer;
+}
+
+.sheetClose svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sheetBody {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0 4px;
+}
+
+/* Baris sheet ≥48px — ikon garis 24px; baris aktif kuning/ink. */
+.sheetRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: var(--spine-radius-lg);
+  background: none;
+  color: var(--app-spine-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.sheetRow svg {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  color: var(--app-spine-nav-idle);
+}
+
+.sheetRow:hover {
+  background: var(--app-spine-surface-2);
+}
+
+.sheetRowActive {
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+}
+
+.sheetRowActive svg {
+  color: var(--app-spine-ink);
+}
+
+:global([data-theme="light"]) .sheetRowActive {
+  outline: 1.5px solid var(--app-spine-ink);
+  outline-offset: -1.5px;
+}
+
+/* ≥900px frame HP hilang — pasangannya app-bar desktop. */
+@media (min-width: 900px) {
+  .headerMobile,
+  .bottomBar,
+  .sheetRoot,
+  .sheetAccountAnchor {
+    display: none;
+  }
+}
+
+/* Di bawah 1440 px teks nama+role pada avatar-pill disembunyikan (avatar +
+   nama di kartu akun tetap) supaya kapsul nav mendapat ~110 px lebih. */
+@media (min-width: 900px) and (max-width: 1439.98px) {
+  .avpText {
+    display: none;
+  }
+  .avp {
+    padding-right: 4px;
+  }
+}

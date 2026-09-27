@@ -1,0 +1,397 @@
+/* ============================================================
+   Story 3.5 — `file-viewer` satu lapisan
+   ============================================================
+   Nilai dari DESIGN.md → file-viewer dan mock `key-file-viewer.html`
+   (desktop) + `key-viewer-mobile.html` (HP).
+
+   SELURUH lapisan ini INVARIAN GELAP di dua tema — satu-satunya bagian
+   yang ikut tema adalah `viewer-info-panel` (Story 3.6).
+   ------------------------------------------------------------ */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--spine-z-viewer);
+  display: flex;
+  flex-direction: column;
+  /* Tanpa blur latar (performa + mode kalem). */
+  background: var(--app-spine-scrim-95);
+  color: var(--app-spine-object-text);
+}
+
+@media (max-width: 899px) {
+  .overlay {
+    background: var(--app-spine-scrim);
+  }
+}
+
+/* ---------- bar atas 76px ---------- */
+.top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: var(--spine-appbar-height);
+  padding: 0 var(--spine-appbar-x);
+}
+
+.topLeft {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.topRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.title {
+  min-width: 0;
+}
+
+.titleName {
+  display: block;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.9375rem; /* 15 px */
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--app-spine-object-text);
+}
+
+.titleMeta {
+  display: block;
+  margin: 4px 0 0;
+  font-size: 0.78125rem; /* 12,5 px */
+  line-height: 1.2;
+  color: var(--app-spine-object-meta);
+}
+
+/* ---------- tombol bulat lapisan gelap (icon-button 48px) ---------- */
+.iconButton {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--app-spine-white-16);
+  border-radius: 50%;
+  background: var(--app-spine-label-pill);
+  color: var(--app-spine-object-text);
+  cursor: pointer;
+}
+
+.iconButton svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Keadaan aktif ⓘ: kuning/ink di dua tema (lapisan invarian). */
+.iconButton[aria-expanded="true"] {
+  background: var(--app-spine-yellow);
+  border-color: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+}
+
+/* Cincin fokus di lapisan gelap TETAP KUNING di dua tema. */
+.iconButton:focus-visible,
+.pill:focus-visible {
+  outline: 2px solid var(--app-spine-yellow);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px var(--app-spine-ink);
+}
+
+/* ---------- pill aksi bar atas ---------- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 20px;
+  border: 1px solid var(--app-spine-white-16);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill);
+  color: var(--app-spine-object-text);
+  font-size: 0.90625rem;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pillYellow {
+  border-color: var(--app-spine-yellow);
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+}
+
+.pill svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+/* ---------- tubuh ---------- */
+.body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  /* Baris TIDAK boleh tumbuh mengikuti isi: tinggi stage = sisa tinggi
+     lapisan, sehingga kotak media bisa dihitung PAS di dalamnya dan
+     media tinggi (potret) tidak mendorong baris petunjuk ke luar layar. */
+  grid-template-rows: minmax(0, 1fr);
+  gap: 28px;
+  padding: 8px var(--spine-appbar-x) 0;
+}
+
+.body[data-info="true"] {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+@media (max-width: 1099px) {
+  /* Di bawah 1100px panel 360px membuat media terlalu sempit — panel
+     tetap tersedia lewat ⓘ tetapi tidak memakan kolom sendiri. */
+  .body[data-info="true"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+}
+
+.media {
+  position: relative;
+  box-sizing: border-box;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  border: 2px solid var(--app-spine-white-16);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-rep-placeholder);
+  box-shadow: var(--spine-elevation-viewer);
+}
+
+.photo {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Cadangan sebelum stage terukur; ukuran sebenarnya diberi inline oleh
+   FileViewer (lebar = min(stage, tinggi × rasio, 1100), tinggi = lebar ÷
+   rasio) — mock key-file-viewer: media disusun dari tinggi, rasio ikut
+   berkas; potret berdiri tegak, lanskap tetap dibatasi 1100px. */
+.videoBox {
+  width: min(100%, 1100px);
+}
+
+/* Pemutar mengisi kotak yang sudah dihitung; rasio dari `--vp-ratio`
+   tidak dipakai di sini karena tingginya sudah eksplisit. */
+.videoBox .player {
+  height: 100%;
+  aspect-ratio: auto;
+}
+
+/* Prev/next di TEPI media, tengah vertikal. */
+.navPrev,
+.navNext {
+  position: absolute;
+  top: 50%;
+  margin-top: -24px;
+  z-index: 2;
+}
+
+.navPrev {
+  left: 12px;
+}
+
+.navNext {
+  right: 12px;
+}
+
+/* ---------- baris petunjuk kbd 56px ---------- */
+.hint {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 56px;
+  font-size: 0.78125rem;
+  color: var(--app-spine-object-meta);
+}
+
+.hint kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 24px;
+  padding: 0 7px;
+  margin: 0 2px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: 6px;
+  background: var(--app-spine-surface-2);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--app-spine-text-soft);
+}
+
+.hint i {
+  margin: 0 8px;
+  font-style: normal;
+  color: var(--app-spine-line);
+}
+
+/* ---------- keadaan memuat & gagal ---------- */
+.placeholder {
+  /* TANPA shimmer — aturan keras `skeleton` Epic 2 berlaku di sini juga. */
+  width: min(70vw, 520px);
+  max-height: 100%;
+  aspect-ratio: 3 / 4;
+  background: var(--app-spine-rep-placeholder);
+}
+
+.errorWrap {
+  width: min(90vw, 460px);
+}
+
+/* ---------- HP (< 900px) ---------- */
+@media (max-width: 899px) {
+  .top {
+    height: auto;
+    padding: 52px var(--spine-gutter-mobile) 0;
+  }
+
+  /* Di HP bar atas hanya: tutup · penghitung · ⓘ. Nama file pindah ke
+     baris `nav` di bawah media, persis seperti mock. */
+  .title {
+    display: none;
+  }
+
+  .body {
+    padding: 16px var(--spine-gutter-mobile) 0;
+    gap: 0;
+  }
+
+  .body[data-info="true"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .media {
+    width: 100%;
+  }
+
+  .videoBox {
+    width: 100%;
+  }
+
+  .hint {
+    height: auto;
+    padding: 14px 16px 24px;
+    text-align: center;
+    line-height: 1.4;
+  }
+
+  /* HP: prev/next hidup di baris `mobileNav` DI BAWAH media (mock
+     `.mnav`), bukan di tepi media — jangan ada dua pasang. */
+  .navPrev,
+  .navNext {
+    display: none;
+  }
+}
+
+/* Chip penghitung HP. */
+.counterChip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--app-spine-white-16);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill);
+  color: var(--app-spine-object-text);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+/* Baris nama + prev/next di HP (mock `.mnav`). */
+.mobileNav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px var(--spine-gutter-mobile) 0;
+}
+
+.mobileNavText {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.mobileNavText b {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--app-spine-object-text);
+}
+
+.mobileNavText span {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.78125rem;
+  line-height: 1.2;
+  color: var(--app-spine-object-meta);
+}
+
+/* Baris aksi HP (mock `.mact`): Download melebar, Share bulat 48px. */
+.mobileActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px var(--spine-gutter-mobile) 0;
+}
+
+.mobileActions .pill {
+  flex: 1;
+  min-height: 52px;
+}
+
+/* Kalimat bantuan di bawah aksi HP (Story 3.7: kalimat perisai Agen). */
+.actionNote {
+  margin: 12px var(--spine-gutter-mobile) 0;
+}
+
+.actionNote p {
+  margin: 0;
+  justify-content: center;
+}
+
+/* Desktop: kalimat bantuan "Versi aman (blur)" duduk tepat DI BAWAH
+   kelompok aksi bar atas, rata kanan — tanpa mengubah tinggi bar 76px. */
+.noteRow {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 var(--spine-appbar-x);
+}
+
+.noteRow p {
+  margin: 0;
+}

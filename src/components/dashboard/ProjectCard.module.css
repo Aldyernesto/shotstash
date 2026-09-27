@@ -1,0 +1,614 @@
+/* ============================================================
+   Story 2.6 — Kartu Project: objek berlapis + kipas `rep-card`
+   ============================================================
+   Lapisan dari belakang ke depan (AC 2.6):
+     panel belakang → kipas 1–5 rep-card → saku depan.
+   Teks (nama, tanggal, count-sticker) SELALU teks DOM di atas
+   lapisan itu — tidak pernah dipanggang ke tekstur/canvas.
+
+   Satuan: seluruh geometri ditulis dalam "piksel desain" pada objek
+   330 px lalu dikali `fan-scale` (= lebar objek ÷ 330) lewat satu
+   variabel panjang `--u`, dihitung dari satuan container query.
+   Tidak ada JavaScript, ResizeObserver, atau `transform: scale()`
+   (scale akan ikut mengecilkan teks DOM dan merusak kontras).
+
+   Kontrak satu tautan: `::after` tautan direntangkan seluas KARTU.
+   Karena containing block sebuah ::after absolut adalah leluhur
+   ber-position terdekat, seluruh rantai dari tautan sampai `.object`
+   dijaga tetap `position: static`; urutan tumpuk saku vs kipas diatur
+   dengan `z-index` pada flex item (boleh tanpa position) — bukan
+   dengan `position: relative` yang akan memotong ::after ke saku.
+   ------------------------------------------------------------ */
+
+.cell {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-height: 340px;
+  /* Stiker jumlah menggantung 6 px di luar objek; padding ini menjaganya
+     tetap di dalam sel, jadi tidak pernah ada gulir horizontal walau sel
+     selebar layar (pelajaran gelombang 1: jangan menjangkar ke tepi
+     panel yang lebarnya mengikuti layar). */
+  padding: 0 10px 22px;
+  border-radius: var(--spine-radius-xl);
+  background: radial-gradient(
+    70% 60% at 50% 42%,
+    var(--app-spine-object-cell-glow, #23221e),
+    transparent 75%
+  );
+}
+
+.object {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  /* Lebar kartu = lebar kolomnya (mock: 3 kolom di 1280 -> ~414px).
+     Batas keras 330px membuat kartu mengerut di layar lebar; 330px itu
+     ukuran objek di mock 1280, bukan plafon. */
+  width: 100%;
+  max-width: 460px;
+  aspect-ratio: 330 / 300;
+  container-type: inline-size;
+}
+
+/* `--u` = satu piksel desain. `display: contents` supaya pembawa
+   variabel ini tidak menjadi kotak (dan tidak menjadi containing
+   block). Fallback 1px dipakai bila container query tidak didukung:
+   objek tetap utuh, hanya berhenti menyusut. */
+.stage {
+  display: contents;
+  --u: 1px;
+}
+@supports (width: 1cqw) {
+  .stage {
+    --u: calc(100cqw / 330);
+  }
+}
+
+/* ---------- panel belakang ---------- */
+.back {
+  position: absolute;
+  z-index: 0;
+  left: calc(28 * var(--u));
+  right: calc(28 * var(--u));
+  bottom: calc(126 * var(--u));
+  height: calc(78 * var(--u));
+  border-radius: calc(22 * var(--u)) calc(22 * var(--u)) 0 0;
+  background: linear-gradient(
+    180deg,
+    var(--app-spine-object-back-top, #282826),
+    var(--app-spine-object-back-bottom, #1a1a18)
+  );
+  box-shadow: inset 0 1px 0 var(--app-spine-white-10, #ffffff1a);
+}
+
+/* ---------- kipas rep-card ---------- */
+.fan {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  bottom: calc(110 * var(--u));
+  width: 0;
+  height: 0;
+  /* `--uf` = satuan kipas. Sama dengan `--u`, KECUALI di bawah 600 px
+     tempat `fan-mobile` menjepitnya supaya kipas terbuka (lebar alami
+     485 px desain) tidak pernah melebihi lebar sel. */
+  --uf: var(--u);
+}
+@supports (width: 1cqw) {
+  @media (max-width: 599.98px) {
+    .fan {
+      --uf: min(var(--u), calc(100cqw / 485));
+    }
+  }
+}
+
+.repCard {
+  position: absolute;
+  left: calc(-54 * var(--uf));
+  bottom: 0;
+  width: calc(108 * var(--uf));
+  height: calc(146 * var(--uf));
+  border-radius: calc(16 * var(--uf));
+  border: calc(3 * var(--uf)) solid var(--app-spine-photo-frame, #eeeae2);
+  background: var(--app-spine-rep-placeholder, #222222);
+  box-shadow: 0 16px 28px -12px rgba(0, 0, 0, 0.85);
+  overflow: hidden;
+  transform-origin: 50% 100%;
+  /* fan-rest: kartu terselip rapat, rotate ±1°–±8° */
+  transform: translate(calc(var(--x) * var(--uf)), 0) rotate(var(--r));
+}
+
+.repThumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Thumbnail belum siap / gagal → placeholder tetap terlihat di
+     belakangnya; kartunya TIDAK hilang (AC 2.6). */
+  background: var(--app-spine-rep-placeholder, #222222);
+}
+
+/* penanda video di dalam kipas — pill label-pill + segitiga kuning */
+.repVideo {
+  position: absolute;
+  left: calc(6 * var(--uf));
+  bottom: calc(6 * var(--uf));
+  display: inline-flex;
+  align-items: center;
+  gap: calc(4 * var(--uf));
+  height: calc(18 * var(--uf));
+  padding: 0 calc(7 * var(--uf));
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill, #0b0b0a);
+  color: var(--app-spine-yellow, #efe749);
+  /* {typography.tag-mobile} dari kelas .spine-tag-mobile; hanya
+     ukurannya yang ikut fan-scale. */
+  font-size: calc(9 * var(--uf));
+}
+.repVideo svg {
+  width: calc(7 * var(--uf));
+  height: calc(8 * var(--uf));
+  fill: currentColor;
+}
+
+/* dokumen di dalam kipas → doc-card mini (tanpa ikon generik/emoji) */
+.repDoc {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    var(--app-spine-pocket-top, #2d2d2a) 0%,
+    var(--app-spine-pocket-mid, #1e1e1b) 50%,
+    var(--app-spine-pocket-bottom, #161614) 100%
+  );
+}
+.repDocSheet {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 48%;
+  aspect-ratio: 3 / 4;
+  transform: translate(-50%, -50%) rotate(-6deg);
+  border-radius: calc(5 * var(--uf));
+  background: linear-gradient(
+    225deg,
+    transparent 0 13%,
+    var(--app-spine-photo-frame, #eeeae2) 13%
+  );
+  box-shadow: 0 18px 30px -12px rgba(0, 0, 0, 0.9);
+}
+.repDocSheet::after {
+  content: "";
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  top: 30%;
+  height: 44%;
+  background: repeating-linear-gradient(180deg, #c4bfb2 0 2px, transparent 2px 6px);
+}
+.repDocExt {
+  position: absolute;
+  right: 10%;
+  top: 54%;
+  padding: calc(4 * var(--uf)) calc(6 * var(--uf));
+  border-radius: var(--spine-radius-sticker);
+  background: var(--app-spine-yellow, #efe749);
+  color: var(--app-spine-ink, #141310);
+  font-size: calc(9 * var(--uf));
+  transform: rotate(7deg);
+  box-shadow: 0 8px 18px -6px rgba(0, 0, 0, 0.7);
+}
+
+/* ---------- saku depan ----------
+   Flex item statis (bukan absolut) supaya tidak menjadi containing
+   block bagi ::after tautan; urutan tumpuknya diatur z-index. */
+.pocket {
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  margin: 0 calc(8 * var(--u));
+  height: calc(162 * var(--u));
+  padding-bottom: calc(22 * var(--u));
+  border-radius: var(--spine-radius-xl);
+  background: linear-gradient(
+    180deg,
+    var(--app-spine-pocket-top, #2d2d2a) 0%,
+    var(--app-spine-pocket-mid, #1e1e1b) 50%,
+    var(--app-spine-pocket-bottom, #161614) 100%
+  );
+  box-shadow: var(--spine-elevation-pocket);
+  transform-origin: 50% 100%;
+}
+
+/* pill nama project — teks DOM, maksimum 2 baris lalu "…" */
+.labelPill {
+  max-width: calc(284 * var(--u));
+  margin-bottom: calc(14 * var(--u));
+  padding: calc(11 * var(--u)) calc(20 * var(--u));
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill, #0b0b0a);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.9), 0 1px 0 var(--app-spine-white-10, #ffffff1a);
+}
+
+.link {
+  display: block;
+  color: var(--app-spine-yellow, #efe749);
+  text-decoration: none;
+  text-align: center;
+  /* {typography.display-label} dari kelas .spine-display-label. */
+  font-size: calc(14 * var(--u));
+  cursor: pointer;
+}
+
+/* Potong 2 baris di SPAN di dalam tautan, bukan di tautannya: `overflow:
+   hidden` pada tautan akan ikut memotong ::after yang direntangkan
+   seluas kartu (dan dengan itu seluruh area klik + cincin fokus). */
+.linkText {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* Satu tautan, area seluas kartu. Kontrol lain ("⋯", CTA) adalah
+   sibling DI ATAS tautan ini, bukan anaknya. */
+.link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--spine-radius-xl);
+}
+
+/* Satu penanda fokus saja: cincin `{components.focus-ring}` digambar di
+   ::after tautan (seluas kartu), memakai warna & geometri yang persis
+   sama dengan .spine-focus-ring. TIDAK ada border berwarna tambahan. */
+.link:focus-visible {
+  outline: none;
+}
+.link:focus-visible::after {
+  outline: 2px solid var(--spine-ring-color);
+  outline-offset: 3px;
+}
+
+/* tanggal — teks DOM KAPITAL */
+.date {
+  color: var(--app-spine-object-meta, #9a988f);
+  /* {typography.label} dari kelas .spine-label. */
+  font-size: calc(11.5 * var(--u));
+  text-transform: uppercase;
+}
+
+/* count-sticker — TOTAL file project (bukan jumlah kartu di kipas) */
+.countSticker {
+  position: absolute;
+  z-index: 3;
+  right: calc(-6 * var(--u));
+  bottom: calc(140 * var(--u));
+  display: inline-flex;
+  align-items: baseline;
+  gap: calc(3 * var(--u));
+  padding: calc(8 * var(--u)) calc(12 * var(--u));
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-yellow, #efe749);
+  color: var(--app-spine-ink, #141310);
+  /* {typography.display-sticker} dari kelas .spine-display-sticker. */
+  font-size: calc(13 * var(--u));
+  white-space: nowrap;
+  transform: rotate(7deg);
+  box-shadow: 0 8px 18px -6px rgba(0, 0, 0, 0.6);
+  /* dekoratif: klik selalu tembus ke tautan kartu */
+  pointer-events: none;
+}
+.countUnit {
+  /* {typography.sticker-unit} dari kelas .spine-sticker-unit. */
+  font-size: calc(12 * var(--u));
+}
+
+/* ------------------------------------------------------------
+   Tema terang — hanya bayangan saku yang berganti (token spine
+   `pocket-shadow-light` memakai {colors.pocket-shadow-warm}).
+   Objeknya sendiri memang gelap di dua tema: warnanya token
+   INVARIAN (object-back-*, pocket-*, photo-frame, label-pill).
+   ------------------------------------------------------------ */
+/* Tema terang: `object-cell-glow` (#23221e) adalah token INVARIAN dan
+   spine tidak memberinya varian terang — di atas kertas ia terbaca
+   sebagai noda abu-abu besar di belakang objek. Di tema terang glow
+   diganti bayangan hangat objek yang memang sudah dipakai spine untuk
+   benda ini (`pocket-shadow-warm`), jadi tetap token spine. */
+:global(html[data-theme="light"]) .cell {
+  background: radial-gradient(
+    62% 52% at 50% 48%,
+    var(--app-spine-pocket-shadow-warm, #3c32148c),
+    transparent 72%
+  );
+}
+
+:global(html[data-theme="light"]) .pocket {
+  box-shadow: inset 0 1.5px 0 var(--app-spine-white-12, #ffffff1f),
+    0 -16px 30px -14px rgba(0, 0, 0, 0.9),
+    0 30px 50px -24px var(--app-spine-pocket-shadow-warm, #3c32148c);
+}
+
+/* ============================================================
+   Story 2.7 — interaksi kipas: hover/fokus, mode kalem, sentuh
+   ============================================================
+   Aturan gerak dari `{motion.fan}` 650 ms + `{motion.fan-stagger}`
+   0/40/70/110/140 ms, `{motion.pocket-squish}` 700 ms, dan
+   `{motion.stack-swing}` 600 ms untuk stiker. Mode kalem TIDAK
+   ditangani di sini: kill-switch `html[data-motion="calm"]` di
+   globals.css sudah menjepit seluruh durasi/delay ke 0 ms, sehingga
+   keadaan tetap berganti tetapi instan dan tanpa overshoot. Kipas
+   otomatis HP dimatikan di JS karena rAF/IntersectionObserver tidak
+   tersentuh kill-switch CSS.
+   ------------------------------------------------------------ */
+
+.repCard {
+  transition: transform var(--spine-motion-fan) var(--d, 0ms);
+}
+
+.pocket {
+  /* dipakai keyframes squish; transform-origin sudah 50% 100% */
+  will-change: auto;
+}
+
+.countSticker {
+  transition: transform var(--spine-motion-stack-swing);
+}
+
+/* keadaan terbuka — dipakai tiga pemicu yang setara */
+@media (hover: hover) {
+  .object:hover .repCard {
+    transform: translate(calc(var(--hx) * var(--uf)), calc(var(--hy) * var(--uf)))
+      rotate(var(--hr));
+  }
+  .object:hover .pocket {
+    animation: squish var(--spine-motion-pocket-squish);
+  }
+  .object:hover .countSticker {
+    transform: rotate(-4deg) scale(1.1) translateY(calc(-6 * var(--u)));
+  }
+}
+
+.object:focus-within .repCard,
+.object[data-fan="open"] .repCard {
+  transform: translate(calc(var(--hx) * var(--uf)), calc(var(--hy) * var(--uf)))
+    rotate(var(--hr));
+}
+.object:focus-within .pocket,
+.object[data-fan="open"] .pocket {
+  animation: squish var(--spine-motion-pocket-squish);
+}
+.object:focus-within .countSticker,
+.object[data-fan="open"] .countSticker {
+  transform: rotate(-4deg) scale(1.1) translateY(calc(-6 * var(--u)));
+}
+
+/* Esc menutup kipas SEMENTARA FOKUS TETAP DI KARTU. Specificity-nya
+   sama dengan aturan buka di atas, jadi urutan sumber yang menentukan:
+   blok ini wajib tetap paling bawah. */
+.object[data-fan="closed"] .repCard {
+  transform: translate(calc(var(--x) * var(--uf)), 0) rotate(var(--r));
+}
+.object[data-fan="closed"] .pocket {
+  animation: none;
+}
+.object[data-fan="closed"] .countSticker {
+  transform: rotate(7deg);
+}
+
+@keyframes squish {
+  0% {
+    transform: none;
+  }
+  30% {
+    transform: scale(1.035, 0.955);
+  }
+  62% {
+    transform: scale(0.985, 1.02);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* ============================================================
+   Story 2.8 — `project-empty` dan `project-skeleton`
+   ============================================================
+   Keduanya DIAM: tidak ada transition, animation, atau shimmer —
+   juga di luar mode kalem.
+   ------------------------------------------------------------ */
+
+/* slot hantu menggantikan kipas saat Project punya 0 file */
+.ghostSlot {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  bottom: calc(110 * var(--u));
+  width: calc(108 * var(--u));
+  height: calc(118 * var(--u));
+  margin-left: calc(-54 * var(--u));
+  border: calc(2 * var(--u)) solid var(--app-spine-yellow-35, #efe74959);
+  border-bottom: 0;
+  border-radius: calc(16 * var(--u)) calc(16 * var(--u)) 0 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--app-spine-yellow-08, #efe74914) 0 10px,
+    transparent 10px 20px
+  );
+}
+/* tema terang: garis hantu memakai {colors.ink} */
+:global(html[data-theme="light"]) .ghostSlot {
+  border-color: var(--app-spine-ink, #141310);
+}
+
+/* CTA "Upload footage pertama" — SIBLING DI ATAS tautan kartu, jadi
+   menekannya tidak pernah ikut membuka Project di belakangnya. */
+.uploadCta {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  bottom: calc(56 * var(--u));
+  transform: translateX(-50%);
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 18px;
+  white-space: nowrap;
+}
+.uploadCta svg {
+  width: 15px;
+  height: 15px;
+}
+@media (min-width: 900px) {
+  /* area sentuh 48 px hanya wajib di HP; desktop memakai 40 px spine.
+     Kelas digandakan supaya menang atas `.pill` (min-height 48px) milik
+     keluarga tombol Epic 1 tanpa bergantung pada urutan berkas CSS. */
+  .uploadCta.uploadCta {
+    min-height: 40px;
+  }
+}
+
+/* kalimat "Masih kosong — seret file ke sini" di dalam saku */
+.emptyHint {
+  max-width: calc(250 * var(--u));
+  color: var(--app-spine-object-meta, #9a988f);
+  font-size: calc(11.5 * var(--u));
+  text-align: center;
+}
+
+/* Saat kartu kosong, saku menyediakan ruang untuk CTA yang mengambang
+   di atasnya (pill dinaikkan seperti di mock). */
+.pocketEmpty {
+  justify-content: flex-start;
+  padding-top: calc(18 * var(--u));
+  padding-bottom: calc(18 * var(--u));
+}
+.pocketEmpty .labelPill {
+  margin-bottom: auto;
+}
+
+/* ---------- project-skeleton ---------- */
+.skeletonBack,
+.skeletonPocket,
+.skeletonRep {
+  background: var(--app-spine-rep-placeholder, #222222);
+}
+.skeletonPocket {
+  background: linear-gradient(
+    180deg,
+    var(--app-spine-pocket-top, #2d2d2a) 0%,
+    var(--app-spine-pocket-mid, #1e1e1b) 50%,
+    var(--app-spine-pocket-bottom, #161614) 100%
+  );
+}
+.skeletonLabel {
+  width: calc(180 * var(--u));
+  height: calc(38 * var(--u));
+  margin-bottom: calc(14 * var(--u));
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill, #0b0b0a);
+}
+
+/* Skeleton benar-benar DIAM: aturan buka kipas (hover/fokus) tidak boleh
+   menyentuhnya, dan transisinya dimatikan. Blok ini wajib tetap berada
+   SETELAH aturan buka Story 2.7 — specificity-nya sama, urutan sumber
+   yang menentukan. */
+.object[data-skeleton] .repCard {
+  transition: none;
+  transform: translate(calc(var(--x) * var(--uf)), 0) rotate(var(--r));
+}
+.object[data-skeleton] .pocket {
+  animation: none;
+}
+
+/* ============================================================
+   Story 2.9 — lapisan objek 3D `folder-v2-shell.glb`
+   ============================================================
+   Objek 3D dirender SEKALI oleh renderer bersama menjadi dua gambar
+   lapisan yang dipakai semua kartu: panel belakang (di belakang kipas)
+   dan saku depan (di depan kipas, di belakang teks DOM). Saat lapisan
+   itu belum ada — belum dimuat, WebGL tidak tersedia, context hilang,
+   mode kalem, atau GLB gagal — kartu tetap memakai lapisan CSS Story
+   2.6 apa adanya. Tidak ada `<canvas>` di dalam kartu, jadi tidak ada
+   yang bisa difokus atau terbaca pembaca layar; teks kartu selalu DOM.
+
+   Yang TIDAK digambar 3D: pill nama. Mesh `label_pill` di GLB berlebar
+   tetap, sedangkan pill nama harus melebar mengikuti nama project, jadi
+   ia tetap elemen DOM (dan teksnya tidak pernah dipanggang ke tekstur).
+   ------------------------------------------------------------ */
+
+.shellBack,
+.shellFront {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+  pointer-events: none;
+}
+.shellBack {
+  z-index: 0;
+}
+.shellFront {
+  z-index: 2;
+  transform-origin: 50% 100%;
+}
+
+/* Saat objek 3D aktif, lapisan CSS yang digantikannya berhenti
+   menggambar — tetapi `.pocket` TETAP ADA sebagai kotak tata letak teks,
+   sehingga pergantian gambar diam <-> 3D tidak menggeser satu piksel pun
+   (min-height sel 340 px dan aspect-ratio 330/300 tetap dipegang). */
+.object[data-shell="3d"] .back {
+  display: none;
+}
+.object[data-shell="3d"] .pocket {
+  background: none;
+  box-shadow: none;
+}
+
+/* Squish saku ikut berlaku pada lapisan saku 3D, memakai pemicu dan
+   keyframes yang sama dengan Story 2.7. */
+@media (hover: hover) {
+  .object[data-shell="3d"]:hover .shellFront {
+    animation: squish var(--spine-motion-pocket-squish);
+  }
+}
+.object[data-shell="3d"]:focus-within .shellFront,
+.object[data-shell="3d"][data-fan="open"] .shellFront {
+  animation: squish var(--spine-motion-pocket-squish);
+}
+.object[data-shell="3d"][data-fan="closed"] .shellFront {
+  animation: none;
+}
+
+/* ---------- Story 2.12: tombol "⋯" (`more-button` wujud objek) ----------
+   Posisi mengikuti mockups/key-context-menu.html `.cell > .morec`
+   (kanan-atas sel, inset 16/10, 40 px, z di atas ::after tautan).
+   Desktop: tampil saat hover / :focus-within. HP: selalu tampil. */
+.moreButton {
+  position: absolute;
+  right: 16px;
+  top: 10px;
+  z-index: 8;
+  box-shadow: 0 8px 16px -6px #000;
+}
+@media (hover: hover) {
+  .moreButton {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .cell:hover .moreButton,
+  .cell:focus-within .moreButton,
+  /* Story 3.3: menu aksi terbuka → "⋯" tetap tampil walau fokus pindah
+     ke dalam popover (yang dirender di portal, di luar kartu ini). */
+  .cell[data-menu-open] .moreButton {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}

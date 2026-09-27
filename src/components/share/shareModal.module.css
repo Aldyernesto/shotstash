@@ -1,0 +1,424 @@
+/* ============================================================
+   Story 3.8 — `share-modal`
+   ============================================================
+   Nilai terukur dari mock `key-share-modal.html`. Kotak, judul, baris
+   identitas, dan `radio-card` datang dari lapisan bersama Story 3.1
+   (`overlay.module.css`); berkas ini HANYA menambahkan yang khas
+   share-modal: label grup, kalimat jam, kotak hasil, dan footer HP
+   dua kolom.
+   ------------------------------------------------------------ */
+
+/* ---------- grup field ---------- */
+
+.group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.group + .group {
+  margin-top: 20px;
+}
+
+/* `.lab-t` mock: 11,5px 700 tracking .1em KAPITAL {colors.muted},
+   margin 0 0 8px 4px. */
+.legend {
+  display: block;
+  margin: 0 0 8px 4px;
+  text-transform: uppercase;
+  color: var(--app-spine-muted);
+}
+
+@media (max-width: 899px) {
+  .group + .group {
+    margin-top: 16px;
+  }
+}
+
+/* ---------- kalimat jam absolut ---------- */
+
+.expiry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0 4px;
+  color: var(--app-spine-muted);
+}
+
+.expiryIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  color: var(--app-spine-gold);
+}
+
+:global(html[data-theme="light"]) .expiryIcon {
+  color: var(--app-spine-accent-light);
+}
+
+.expiryIcon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.expiryStrong {
+  font-weight: 700;
+  color: var(--app-spine-text);
+}
+
+.alert {
+  margin-top: 18px;
+}
+
+/* ---------- kotak hasil ---------- */
+
+.result {
+  display: block;
+}
+
+.okBox {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--app-ok-border);
+  border-radius: var(--spine-radius-md);
+  background: var(--app-ok-bg);
+}
+
+.okIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--app-ok-solid);
+  color: var(--app-spine-ink);
+}
+
+.okIcon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.okText {
+  min-width: 0;
+}
+
+.okTitle {
+  display: block;
+  margin: 0;
+  color: var(--app-spine-text);
+}
+
+.okSub {
+  display: block;
+  margin-top: 2px;
+  color: var(--app-spine-text-soft);
+}
+
+/* `copy-pill` 56px melebar penuh di dalam kotak hasil. */
+.copy {
+  margin-top: 14px;
+}
+
+.copy > button {
+  width: 100%;
+}
+
+.copyButton {
+  width: 100%;
+  margin-top: 12px;
+}
+
+/* inline-flex, bukan grid: di dalam `ButtonPrimary` ikon berada DI DALAM
+   <span> label, jadi kotak blok akan memutus barisnya. */
+.btnIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  vertical-align: -3px;
+}
+
+.copyButton .btnIcon {
+  margin-right: 8px;
+}
+
+.btnIcon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ============================================================
+   Story 4.6 — bagian "Link aktif" (mock `key-share-modal.html` 01–04)
+   ============================================================
+   .ex   margin-top 24, padding-top 20, border-top line
+   .exh  flex space-between, margin-bottom 10; .lab-t margin 0 0 0 4
+   .ct.s2 (count-chip) min-height 30, padding 0 12, surface-2 + line, 12/700
+   .exr  padding 10/10/12/12, radius 18, surface-2 + line; + .exr margin-top 8
+   .l1   flex space-between gap 8 (copy-pill 44 · button-danger 40)
+   .l2   wrap gap 6/10, margin-top 10, padding-left 4, 12.5px meta; b text-soft
+   .exr .ct  min-height 26, padding 0 10
+   .newt 22px pill hitam kuning display 11.5/900
+   .exr.conf danger-bg + danger-border; .ct-t gap 10, ikon 20 danger-text;
+         b.h 14.5/800 text; span.s 13px text-soft; .ca grid 2 kolom gap 8,
+         margin-top 12, pill 48
+   HP (.shs): slug 48 lebar penuh, pill 48; blok naik ke atas footer.
+   ------------------------------------------------------------ */
+
+.active {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--app-spine-line);
+}
+
+.activeHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  outline: none; /* fokus terprogram (setelah cabut) — bukan kontrol */
+}
+
+.activeLegend {
+  margin: 0 0 0 4px;
+}
+
+/* count-chip "{n} link" — `.ct.s2` mock. */
+.countChip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-text-soft);
+}
+
+.activeNote {
+  margin: 0 0 0 4px;
+  color: var(--app-spine-muted);
+}
+
+.activeRetry {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--app-spine-text);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.linkList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.linkRow {
+  padding: 10px 10px 12px 12px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-md);
+  background: var(--app-spine-surface-2);
+}
+
+.linkRow + .linkRow {
+  margin-top: 8px;
+}
+
+.linkTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.linkCopy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.linkCopy > button {
+  max-width: 100%;
+}
+
+/* "Cabut Akses" pemicu: 40px di baris desktop (mock `.exr .pill`), 48 HP. */
+.linkRevoke {
+  flex: none;
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 0.8125rem;
+}
+
+.newTag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill);
+  color: var(--app-spine-yellow);
+  letter-spacing: 0.02em;
+}
+
+.linkMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 10px;
+  padding-left: 4px;
+  color: var(--app-spine-meta);
+}
+
+.linkMeta b {
+  color: var(--app-spine-text-soft);
+  font-weight: 700;
+}
+
+/* status-chip di dalam baris: 26px (mock `.exr .ct`). */
+.linkChip {
+  height: 26px;
+  padding: 0 10px;
+}
+
+/* ---------- konfirmasi DI DALAM baris ---------- */
+
+.linkRowConfirm {
+  border-color: var(--app-spine-danger-border);
+  background: var(--app-spine-danger-bg);
+}
+
+.confirmHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.confirmIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  color: var(--app-spine-danger-text);
+}
+
+.confirmIcon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.confirmTitle {
+  display: block;
+  font-size: 0.90625rem; /* 14.5px */
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--app-spine-text);
+}
+
+.confirmText {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.8125rem; /* 13px */
+  line-height: 1.45;
+  color: var(--app-spine-text-soft);
+}
+
+.confirmText b {
+  color: var(--app-spine-text);
+  font-weight: 700;
+}
+
+.confirmActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.confirmBtn {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.confirmBtn .btnIcon {
+  margin-right: 8px;
+}
+
+@media (max-width: 899px) {
+  .active {
+    margin-top: 16px;
+    padding-top: 14px;
+  }
+
+  /* `.shs .exr .slug{height:48px;width:100%}` + `.shs .exr .pill{min-height:48px}` */
+  .linkTop {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .linkCopy > button {
+    width: 100%;
+  }
+
+  .linkRevoke {
+    min-height: 48px;
+  }
+}
+
+/* ---------- footer ----------
+   Desktop: rata kanan, gap 12px (mock `.shm .acts`, margin-top 22px yang
+   sudah diberi `.footer` bersama). HP: MENEMPEL di bawah, lebar penuh,
+   DUA tombol 52px membagi lebar — bukan bertumpuk (AC 3.8). */
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+@media (max-width: 899px) {
+  .footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    /* Full-bleed sampai tepi sheet + garis pemisah, seperti mock `.shs .foot`. */
+    /* -40px bawah = membatalkan padding bawah sheet supaya footer
+       benar-benar menempel di tepi; safe-area ditambahkan di sini. */
+    margin: 0 calc(-1 * var(--spine-panel-pad-mobile)) -40px;
+    padding: 12px var(--spine-panel-pad-mobile) calc(30px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--app-spine-line);
+    background: var(--app-spine-surface);
+  }
+
+  .footerOne {
+    grid-template-columns: 1fr;
+  }
+
+  .footer > button {
+    width: 100%;
+    min-height: 52px;
+    /* Dua tombol membagi lebar 320px: padding pill 20px terlalu boros dan
+       memecah "Buat Tautan" jadi dua baris. */
+    padding: 0 12px;
+    white-space: nowrap;
+  }
+}

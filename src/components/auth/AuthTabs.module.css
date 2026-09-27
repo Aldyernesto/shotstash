@@ -1,0 +1,83 @@
+/* Story 1.21: kapsul tab — surface-2 + border 1px line, padding 4px,
+   radius penuh, mengisi slot-tabs penuh. Selector .tabs .tab sengaja
+   (0,2,0) supaya menimpa utilitas spine (0,1,0) — mis. berat 700 di
+   atas 600 bawaan .spine-nav — di urutan stylesheet apa pun (pola
+   catatan review forgot-password.module.css). */
+
+.tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* tepat dua tab, lebar sama */
+  gap: 4px;
+  width: 100%;
+  padding: 4px;
+  background: var(--app-spine-surface-2);
+  border: 1px solid var(--app-spine-line);
+  border-radius: 999px;
+}
+
+.tabs .tab {
+  height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--app-spine-nav-idle);
+  font-weight: 700; /* typography.nav berat 700 (AC 1.21) */
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* Pil aktif adalah SATU penanda yang bergeser, bukan latar yang pindah
+   mendadak dari satu tombol ke tombol lain. Lebarnya persis satu kolom
+   grid (50% dikurangi padding 4px dan setengah gap 4px). */
+.tabs::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 6px);
+  border-radius: 999px;
+  background: var(--app-spine-yellow);
+  transition: transform var(--spine-dur-slide, 280ms) var(--spine-motion-spring);
+  pointer-events: none;
+}
+
+.tabs[data-tab='signup']::before {
+  transform: translateX(calc(100% + 4px));
+}
+
+.tabs .tab {
+  position: relative;
+  z-index: 1; /* label di atas penanda */
+}
+
+.tabs .tabActive {
+  color: var(--app-spine-ink);
+  font-weight: 800;
+}
+
+/* Penanda tambahan di tema terang (AC 1.21): outline ink di sekeliling
+   pill aktif — tab aktif tidak dibedakan warna saja. Gelap tidak perlu:
+   pill kuning/ink sudah kontras kuat. */
+html[data-theme='light'] .tabs::before {
+  outline: 1.5px solid var(--app-spine-ink);
+}
+
+/* (temuan review G2) Cincin fokus papan-tombol harus tetap TERBEDAKAN dari
+   outline statis tab aktif — aturan di atas (0,3,1) menimpa kontrak global
+   .spine-focus-ring:focus-visible (0,2,0) di tema terang, meninggalkan
+   indikator fokus yang nyaris sama dengan istirahat (WCAG 2.4.7). Aturan
+   (0,4,1) ini mengembalikan kontrak spine: 2px, warna ring, offset 3px. */
+html[data-theme='light'] .tabs .tab:focus-visible {
+  outline: 2px solid var(--spine-ring-color);
+  outline-offset: 3px;
+}
+
+/* HP (<900, OQ-X26): tab 48px — target sentuh kartu HP. */
+@media (max-width: 899px) {
+  .tabs .tab {
+    height: 48px;
+  }
+}

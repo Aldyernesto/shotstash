@@ -1,0 +1,896 @@
+/* ============================================================
+   Stories 3.9 / 3.10 / 3.11 — halaman publik `/s/[slug]`
+   ============================================================
+   SATU berkas untuk kedua lebar. Susunan HP (mock `key-share-page.html`)
+   adalah dasarnya; cabang ≥ 900 px (mock `key-share-desktop.html`)
+   hanya menambah kolom, ukuran, dan baris paging — tidak ada pohon
+   markup kedua dan tidak ada breakpoint di JavaScript.
+
+   Panggung memakai resep `hero-stage` dari DESIGN.md (gradien, glow,
+   fade tepi) dengan token INVARIAN: panggung selalu gelap di dua tema.
+   ------------------------------------------------------------ */
+
+.page {
+  min-height: 100dvh;
+  padding-bottom: var(--spine-gutter-desktop);
+  background: var(--app-spine-bg);
+}
+
+/* ---------- topbar: logo (tidak bisa diklik) + theme-toggle ---------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 50px;
+  margin: 24px var(--spine-gutter-desktop) 16px var(--spine-stage-inset);
+}
+
+@media (max-width: 899px) {
+  .topbar {
+    height: 44px;
+    margin: 12px var(--spine-gutter-mobile) 8px;
+  }
+}
+
+/* ---------- hero: panggung + kartu info ---------- */
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--spine-stage-inset);
+  align-items: center;
+  padding: 0 var(--spine-gutter-mobile);
+}
+
+@media (min-width: 900px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr) 376px;
+    padding: 0 var(--spine-gutter-desktop) 0 var(--spine-stage-inset);
+  }
+}
+
+/* ---------- share-stage ---------- */
+
+.stage {
+  position: relative;
+  min-height: 318px;
+  border-radius: var(--spine-radius-xl);
+  overflow: hidden;
+  isolation: isolate;
+  /* Panggung INVARIAN: token stage-* tidak berganti di tema terang. */
+  background: radial-gradient(
+    80% 60% at 50% 34%,
+    var(--app-spine-stage-1) 0%,
+    var(--app-spine-stage-mid) 52%,
+    var(--app-spine-stage-2) 100%
+  );
+  box-shadow: inset 0 1px 0 var(--app-spine-white-10);
+  color: var(--app-spine-stage-text);
+}
+
+@media (min-width: 900px) {
+  .stage {
+    min-height: 520px;
+    border-radius: var(--spine-radius-2xl);
+  }
+}
+
+/* Glow kuning panggung (cahaya kuning #1 dari aturan Elevation). */
+.stage::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 26%;
+  width: 340px;
+  height: 200px;
+  margin: -100px 0 0 -170px;
+  border-radius: 50%;
+  background: var(--spine-elevation-stage);
+  filter: blur(10px);
+  pointer-events: none;
+}
+
+@media (min-width: 900px) {
+  .stage::before {
+    width: 520px;
+    height: 300px;
+    margin: -150px 0 0 -260px;
+  }
+}
+
+.fade {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    var(--app-spine-stage-2-75),
+    transparent 12%,
+    transparent 88%,
+    var(--app-spine-stage-2-75)
+  );
+}
+
+/* z-index 6 — DI ATAS `.fade`. Vignet tepi panggung adalah hiasan; di
+   layar lebar headline panjang sampai ke tepi dan ikut meredup, yang
+   melanggar kontras teks NFR10. Mock memakai z-index 4 karena panggung
+   mock-nya 820 px dan headline-nya tidak pernah sepanjang itu. */
+.copy {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 30px;
+  z-index: 6;
+  text-align: center;
+}
+
+@media (min-width: 900px) {
+  .copy {
+    left: 48px;
+    right: 48px;
+    top: 60px;
+  }
+}
+
+/* `number-sticker` — kuning/ink, radius 10px, miring −6°. */
+.sticker {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 7px 10px;
+  border-radius: var(--spine-radius-sticker);
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+  transform: rotate(-6deg);
+  box-shadow: 0 6px 14px -4px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
+
+.sticker small {
+  letter-spacing: 0.04em;
+}
+
+.tagrow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (min-width: 900px) {
+  .tagrow {
+    flex-direction: row;
+    justify-content: center;
+    gap: 12px;
+  }
+}
+
+.headline {
+  margin: 14px 0 0;
+  text-transform: uppercase;
+  /* Ukuran CAIR: 38px di HP → 64px di 1280 (angka kedua mock). */
+  font-size: clamp(2.375rem, 5vw, 4rem);
+  color: var(--app-spine-stage-text);
+  text-shadow: 0 6px 30px rgba(0, 0, 0, 0.45);
+  overflow-wrap: anywhere;
+}
+
+/* Varian file tunggal: nama berkas, bukan KAPITAL, boleh putus di mana
+   saja ({typography.display-title} 38px di mock). */
+.headlineFile {
+  text-transform: none;
+  font-size: clamp(1.75rem, 3.4vw, 2.375rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+/* Tumpukan Kartu perwakilan — DEKORATIF, aria-hidden.
+   Menjorok ke bawah tepi panggung persis seperti mock (HP −54px,
+   desktop −40px); panggung `overflow:hidden` yang memotongnya. */
+.stack {
+  position: absolute;
+  left: 50%;
+  bottom: -54px;
+  z-index: 3;
+  width: 0;
+  height: 140px;
+}
+
+@media (min-width: 900px) {
+  .stack {
+    bottom: -40px;
+    height: 228px;
+  }
+}
+
+.stackCard {
+  position: absolute;
+  bottom: 0;
+  left: -54px;
+  width: 108px;
+  height: 140px;
+  border-radius: var(--spine-radius-stack-mobile);
+  border: 2px solid var(--app-spine-white-14);
+  background: var(--app-spine-rep-placeholder) center / cover no-repeat;
+  box-shadow: 0 16px 30px -10px rgba(0, 0, 0, 0.8);
+  transform-origin: 50% 100%;
+  transform: translateX(var(--x)) rotate(var(--r));
+}
+
+@media (min-width: 900px) {
+  .stackCard {
+    left: -88px;
+    width: 176px;
+    height: 228px;
+    border-radius: var(--spine-radius-lg);
+    border-color: var(--app-spine-white-16);
+    box-shadow: 0 26px 44px -14px rgba(0, 0, 0, 0.85);
+    transform: translateX(calc(var(--x) * 2.85)) rotate(var(--r));
+  }
+}
+
+/* ---------- share-info-card ---------- */
+
+.card {
+  width: 100%;
+  max-width: 376px;
+  margin: 0 auto;
+  padding: var(--spine-panel-pad-mobile);
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-xl);
+  background: var(--app-spine-surface);
+  box-shadow: var(--spine-elevation-card);
+}
+
+@media (min-width: 900px) {
+  .card {
+    width: 376px;
+    max-width: none;
+    padding: 32px 32px 28px;
+  }
+}
+
+.kick {
+  margin: 0;
+  text-transform: uppercase;
+  color: var(--app-spine-muted);
+}
+
+.kick b {
+  color: var(--app-spine-text-soft);
+}
+
+.cardTitle {
+  margin: 12px 0 0;
+  color: var(--app-spine-text);
+}
+
+.cardText {
+  margin: 12px 0 0;
+  color: var(--app-spine-muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 16px;
+}
+
+@media (min-width: 900px) {
+  .chips {
+    margin: 16px 0 20px;
+  }
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  color: var(--app-spine-text-soft);
+}
+
+.chip svg {
+  width: 13px;
+  height: 13px;
+  color: var(--app-spine-gold);
+}
+
+:global(html[data-theme="light"]) .chip svg {
+  color: var(--app-spine-accent-light);
+}
+
+.breakdown {
+  margin: 0 0 20px;
+  color: var(--app-spine-muted);
+}
+
+.zipButton {
+  width: 100%;
+}
+
+.expiry {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 14px 2px 0;
+  color: var(--app-spine-muted);
+}
+
+.expiry svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  color: var(--app-spine-gold);
+}
+
+:global(html[data-theme="light"]) .expiry svg {
+  color: var(--app-spine-accent-light);
+}
+
+.expiry b {
+  font-weight: 700;
+  color: var(--app-spine-text-soft);
+}
+
+.cardError {
+  margin-top: 14px;
+}
+
+/* ---------- kepala daftar + sort-pills ---------- */
+
+.lhead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 28px var(--spine-gutter-mobile) 0;
+}
+
+@media (min-width: 900px) {
+  .lhead {
+    padding: 40px var(--spine-gutter-desktop) 0 var(--spine-stage-inset);
+  }
+}
+
+.lt {
+  margin: 0;
+  text-transform: uppercase;
+  color: var(--app-spine-muted);
+}
+
+.lt b {
+  color: var(--app-spine-text);
+}
+
+.sortPills {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.sortPill {
+  padding: 9px 14px;
+  border: 0;
+  border-radius: var(--spine-radius-full);
+  background: transparent;
+  color: var(--app-spine-meta);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+@media (max-width: 899px) {
+  .sortPill {
+    min-height: 48px;
+  }
+}
+
+.sortPillOn {
+  background: var(--app-spine-text);
+  color: var(--app-spine-bg);
+}
+
+/* ---------- grid ---------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spine-grid-gap-files-mobile);
+  padding: 16px var(--spine-gutter-mobile) 0;
+}
+
+@media (min-width: 600px) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--spine-grid-gap-files);
+    padding: 20px var(--spine-gutter-desktop) 0 var(--spine-stage-inset);
+  }
+}
+
+@media (min-width: 1280px) {
+  .grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* Grid Kartu Section (varian Project) — 5 kolom di 1280 seperti mock. */
+.gridSections {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: var(--spine-grid-gap-sections);
+}
+
+@media (min-width: 600px) {
+  .gridSections {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .gridSections {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .gridSections {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+/* ---------- file-card publik ----------
+   Bukan `file-card` dashboard: tanpa `select-check`, tanpa "⋯", tanpa
+   tombol Share. Kartunya TAUTAN (area ::after), tombol unduh adalah
+   kontrol SIBLING di atasnya. */
+
+.fileCell {
+  position: relative;
+  min-width: 0;
+}
+
+.photo {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--spine-radius-md);
+  border: 3px solid var(--app-spine-photo-frame);
+  background: var(--app-spine-rep-placeholder) center / cover no-repeat;
+  box-shadow: 0 16px 28px -12px rgba(0, 0, 0, 0.85);
+  overflow: hidden;
+  transition: transform var(--spine-motion-file-lift), box-shadow var(--spine-motion-file-lift);
+}
+
+.photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@media (hover: hover) {
+  .fileCell:hover .photo,
+  .fileCell:focus-within .photo {
+    transform: translateY(-8px) rotate(-1.5deg);
+    box-shadow: 0 30px 40px -18px rgba(0, 0, 0, 0.95);
+  }
+}
+
+.videoMarker {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 10px 0 9px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill);
+  color: var(--app-spine-yellow);
+}
+
+.videoMarker svg {
+  width: 9px;
+  height: 10px;
+  fill: currentColor;
+}
+
+.caption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-left: 2px;
+}
+
+.captionText {
+  min-width: 0;
+  flex: 1;
+}
+
+.fileName {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  color: var(--app-spine-text-soft);
+}
+
+.fileSize {
+  display: block;
+  margin-top: 2px;
+  color: var(--app-spine-meta);
+}
+
+/* Tautan kartu: SATU kontrol pembuka, direntangkan seluas foto + nama. */
+.openLink {
+  position: static;
+}
+
+.openLink::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* Tombol unduh adalah sibling DI ATAS lapisan ini. */
+  z-index: 1;
+}
+
+.downloadButton {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: 50%;
+  background: var(--app-spine-surface);
+  color: var(--app-spine-text-soft);
+  cursor: pointer;
+}
+
+.downloadButton svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* ---------- section-card publik (varian Project) ---------- */
+
+.sectionCell {
+  position: relative;
+  min-height: 290px;
+}
+
+.sectionBack {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 20px;
+  height: 196px;
+  border-radius: var(--spine-radius-lg);
+  border: 2px solid var(--app-spine-white-10);
+  background: var(--app-spine-rep-placeholder) center / cover no-repeat;
+  filter: brightness(0.5) saturate(0.8);
+}
+
+.sectionBack1 {
+  transform: rotate(-9deg) translate(-14px, -6px);
+}
+
+.sectionBack2 {
+  transform: rotate(8deg) translate(16px, -10px);
+}
+
+.sectionFront {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 22px;
+  height: 206px;
+  border-radius: var(--spine-radius-lg);
+  border: 2px solid var(--app-spine-white-16);
+  background: var(--app-spine-rep-placeholder) center / cover no-repeat;
+  box-shadow: 0 24px 40px -18px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+}
+
+.sectionFront::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    0deg,
+    var(--app-spine-scrim-92) 0%,
+    var(--app-spine-scrim-85) 40%,
+    transparent 75%
+  );
+}
+
+.sectionTitle {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  z-index: 2;
+  margin: 0;
+  color: var(--app-spine-object-text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.sectionSticker {
+  position: absolute;
+  left: -6px;
+  top: 6px;
+  z-index: 4;
+}
+
+/* Ringkasan + tombol ZIP duduk DI ATAS area tautan kartu (z-index 2). */
+.sectionFoot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 24px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.sectionFoot > * {
+  pointer-events: auto;
+}
+
+/* ---------- baris paging ---------- */
+
+.moreRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 24px var(--spine-gutter-mobile) 0;
+}
+
+@media (min-width: 900px) {
+  .moreRow {
+    padding: 24px var(--spine-gutter-desktop) 0 var(--spine-stage-inset);
+  }
+}
+
+.moreCount {
+  margin: 0;
+  color: var(--app-spine-muted);
+}
+
+.moreError {
+  width: 100%;
+}
+
+/* ---------- viewer inline (varian file tunggal) ---------- */
+
+.inline {
+  padding: 28px var(--spine-gutter-mobile) 0;
+}
+
+@media (min-width: 900px) {
+  .inline {
+    padding: 36px var(--spine-gutter-desktop) 0 var(--spine-stage-inset);
+  }
+}
+
+.inlineMedia {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  border-radius: var(--spine-radius-lg);
+  border: 2px solid var(--app-spine-white-16);
+  box-shadow: var(--spine-elevation-viewer);
+  overflow: hidden;
+  background: var(--app-spine-scrim);
+}
+
+.inlineMedia img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.inlineCaption {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  width: 100%;
+  max-width: 960px;
+  margin: 14px auto 0;
+  font-weight: 700;
+  color: var(--app-spine-text-soft);
+}
+
+.inlineCaption span {
+  font-weight: 400;
+  color: var(--app-spine-meta);
+}
+
+/* ---------- back-pill drill-in ---------- */
+
+.backRow {
+  padding: 20px var(--spine-gutter-mobile) 0;
+}
+
+@media (min-width: 900px) {
+  .backRow {
+    padding: 20px var(--spine-gutter-desktop) 0 var(--spine-stage-inset);
+  }
+}
+
+.backPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  color: var(--app-spine-text-soft);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* ---------- footer ---------- */
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 36px var(--spine-stage-inset) 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--app-spine-line);
+  color: var(--app-spine-muted);
+}
+
+/* ---------- keadaan tidak berlaku (Story 3.11) ---------- */
+
+/* Objek `project-empty` TANPA label — isi tidak pernah dibocorkan. */
+.emptyObject {
+  position: absolute;
+  left: 50%;
+  bottom: 34px;
+  z-index: 3;
+  width: 260px;
+  height: 200px;
+  margin-left: -130px;
+}
+
+@media (min-width: 900px) {
+  .emptyObject {
+    bottom: 44px;
+    width: 330px;
+    height: 250px;
+    margin-left: -165px;
+  }
+}
+
+.emptyBack {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  bottom: 96px;
+  height: 62px;
+  border-radius: var(--spine-radius-lg) var(--spine-radius-lg) 0 0;
+  background: linear-gradient(
+    180deg,
+    var(--app-spine-object-back-top),
+    var(--app-spine-object-back-bottom)
+  );
+  box-shadow: inset 0 1px 0 var(--app-spine-white-10);
+}
+
+.emptyGhost {
+  position: absolute;
+  left: 50%;
+  bottom: 84px;
+  width: 92px;
+  height: 100px;
+  margin-left: -46px;
+  border-radius: var(--spine-radius-md) var(--spine-radius-md) 0 0;
+  border: 2px solid var(--app-spine-yellow-35);
+  border-bottom: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--app-spine-yellow-08) 0 10px,
+    transparent 10px 20px
+  );
+}
+
+.emptyPocket {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 120px;
+  border-radius: var(--spine-radius-xl);
+  background: linear-gradient(
+    180deg,
+    var(--app-spine-pocket-top),
+    var(--app-spine-pocket-mid) 50%,
+    var(--app-spine-pocket-bottom)
+  );
+  box-shadow: var(--spine-elevation-pocket);
+}
+
+.emptyLabel {
+  position: absolute;
+  left: 50%;
+  top: 40px;
+  width: 120px;
+  height: 40px;
+  margin-left: -60px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill);
+}
+
+@media (min-width: 900px) {
+  .emptyBack {
+    left: 28px;
+    right: 28px;
+    bottom: 118px;
+    height: 70px;
+  }
+
+  .emptyGhost {
+    bottom: 104px;
+    width: 108px;
+    height: 118px;
+    margin-left: -54px;
+  }
+
+  .emptyPocket {
+    height: 150px;
+  }
+
+  .emptyLabel {
+    top: 48px;
+    width: 150px;
+    height: 44px;
+    margin-left: -75px;
+  }
+}
+
+/* `tag-pill` yang DIREDUPKAN pada keadaan tidak berlaku. */
+.tagDim > span {
+  background: var(--app-spine-pocket-top);
+  color: var(--app-spine-nav-idle);
+}

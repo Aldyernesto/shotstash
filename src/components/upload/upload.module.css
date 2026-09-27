@@ -1,0 +1,652 @@
+/* ============================================================
+   Stories 3.12-3.15 — `upload-panel`, `upload-row`, `batch-progress`,
+   `heic-question`, `upload-dock`, dan pemilih Section tujuan.
+   ============================================================
+   Nilai terukur dari mock `key-upload.html` (01 / 02b / 02c / 03 / 04).
+   Kotak panel, sudut, dan jebakan fokus datang dari `Dialog` Story 3.1
+   (varian `size="lg"` 520 px, padding 28/28/24); berkas ini hanya
+   menambahkan isi panel.
+   ------------------------------------------------------------ */
+
+/* ---------- baris tujuan: "ke {sticker} {Section}" ---------- */
+
+.target {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0 0;
+  font-weight: 600;
+  color: var(--app-spine-muted);
+}
+
+.target b {
+  color: var(--app-spine-text);
+}
+
+/* `number-sticker` — kuning/ink, radius 10, miring −6°. */
+.sticker {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 7px 10px;
+  border-radius: var(--spine-radius-sticker);
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+  transform: rotate(-6deg);
+  box-shadow: 0 6px 14px -4px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
+
+.sticker small {
+  letter-spacing: 0.04em;
+}
+
+.help {
+  margin: 16px 0 12px;
+  color: var(--app-spine-muted);
+}
+
+/* ---------- dropzone ---------- */
+
+.dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 0 16px;
+  border: 2px dashed var(--app-spine-input-border);
+  border-radius: var(--spine-radius-md);
+  background: transparent;
+  color: var(--app-spine-text-soft);
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+}
+
+.dropzone svg {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  color: var(--app-spine-gold);
+}
+
+:global(html[data-theme="light"]) .dropzone svg {
+  color: var(--app-spine-accent-light);
+}
+
+.dropzoneOver {
+  border-color: var(--app-spine-yellow);
+  background: var(--app-spine-yellow-08);
+}
+
+:global(html[data-theme="light"]) .dropzoneOver {
+  border-color: var(--app-spine-ink);
+}
+
+/* Nonaktif saat batch berjalan — opasitas 45 %. */
+.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---------- batch-progress ---------- */
+
+.batch {
+  margin: 16px 0 12px;
+}
+
+.batchTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 600;
+  color: var(--app-spine-muted);
+}
+
+.batchFigure {
+  margin-right: 4px;
+  font-size: 1.25rem; /* 20px */
+  color: var(--app-spine-text);
+}
+
+.batchBad {
+  font-weight: 700;
+  color: var(--app-danger);
+}
+
+.track {
+  position: relative;
+  display: flex;
+  height: 6px;
+  margin-top: 10px;
+  border-radius: 6px;
+  background: var(--app-spine-white-14);
+  overflow: hidden;
+}
+
+:global(html[data-theme="light"]) .track {
+  background: var(--app-spine-line);
+}
+
+.track i {
+  display: block;
+  height: 100%;
+  background: var(--app-spine-yellow);
+}
+
+.track i.bad {
+  background: var(--app-danger-solid);
+}
+
+/* ---------- slot antrean ---------- */
+
+.queue {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--app-spine-line);
+  overflow-y: auto;
+  max-height: 452px;
+}
+
+@media (max-width: 899px) {
+  .queue {
+    max-height: 318px;
+  }
+}
+
+/* Bayangan 36 px di tepi bawah: pertanda masih ada baris di bawah. */
+.queueFade {
+  position: sticky;
+  bottom: 0;
+  height: 36px;
+  margin-top: -36px;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, var(--app-spine-surface));
+}
+
+/* ---------- upload-row ---------- */
+
+.row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 64px;
+  padding: 10px 6px;
+  border-bottom: 1px solid var(--app-spine-line);
+}
+
+@media (max-width: 899px) {
+  .row {
+    min-height: 60px;
+  }
+}
+
+.rowTile {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--spine-radius-xs);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-gold);
+}
+
+:global(html[data-theme="light"]) .rowTile {
+  color: var(--app-spine-accent-light);
+}
+
+.rowTile svg {
+  width: 20px;
+  height: 20px;
+}
+
+.rowBody {
+  min-width: 0;
+}
+
+.rowName {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  color: var(--app-spine-text);
+}
+
+.rowMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 3px;
+  color: var(--app-spine-meta);
+}
+
+.rowMetaErr {
+  font-weight: 600;
+  color: var(--app-danger);
+}
+
+.rowMetaErr svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+/* Garis progres per baris. */
+.rowBar {
+  display: flex;
+  height: 4px;
+  margin-top: 8px;
+  border-radius: 4px;
+  background: var(--app-spine-white-14);
+  overflow: hidden;
+}
+
+:global(html[data-theme="light"]) .rowBar {
+  background: var(--app-spine-line);
+}
+
+.rowBar i {
+  height: 100%;
+  background: var(--app-spine-yellow);
+}
+
+/* Slot aksi kanan BERUKURAN TETAP: Epic 4 menyisipkan pill "Coba lagi"
+   di sini tanpa menggeser tata letak (AC 3.13). */
+.rowAction {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 44px;
+  min-height: 36px;
+}
+
+.rowRemove {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--app-spine-muted);
+  cursor: pointer;
+}
+
+.rowRemove svg {
+  width: 15px;
+  height: 15px;
+}
+
+.rowPercent {
+  color: var(--app-spine-text);
+}
+
+.rowDone {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+}
+
+.rowDone svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Baris gagal — tint danger, radius 14 px, garis bawah dilepas. */
+.rowFailed {
+  margin: 4px 0;
+  border-bottom-color: transparent;
+  border-radius: var(--spine-radius-input-mobile);
+  background: var(--app-danger-bg);
+}
+
+/* Chip sub-Section. */
+.subChip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface-2);
+  font-weight: 700;
+  color: var(--app-spine-text-soft);
+}
+
+/* ---------- footer panel ---------- */
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  width: 100%;
+}
+
+.summary {
+  margin-right: auto;
+  font-weight: 600;
+  color: var(--app-spine-muted);
+}
+
+@media (max-width: 899px) {
+  .footer {
+    flex-wrap: wrap;
+  }
+
+  .summary {
+    width: 100%;
+    margin: 0 0 8px;
+  }
+
+  .footer > button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 52px;
+    padding: 0 12px;
+    white-space: nowrap;
+  }
+}
+
+.alert {
+  margin-top: 16px;
+}
+
+/* ---------- heic-question ---------- */
+
+.heic {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 20px;
+}
+
+.heicChip {
+  padding: 8px 12px;
+  border-radius: var(--spine-radius-sticker);
+  box-shadow: 0 8px 18px -6px rgba(0, 0, 0, 0.7);
+  font-size: 1rem; /* 16px */
+}
+
+.heicFrom {
+  border: 1px solid var(--app-spine-input-border);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-text);
+  transform: rotate(-6deg);
+}
+
+.heicTo {
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+  transform: rotate(7deg);
+  box-shadow: 0 0.08em 0 var(--app-spine-yellow-edge), 0 8px 18px -6px rgba(0, 0, 0, 0.7);
+}
+
+.heicArrow {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  color: var(--app-spine-gold);
+}
+
+:global(html[data-theme="light"]) .heicArrow {
+  color: var(--app-spine-accent-light);
+}
+
+.heicNote {
+  margin: 12px 0 0;
+  color: var(--app-spine-meta);
+}
+
+/* Dua tombol BERTUMPUK lebar penuh. */
+.heicActions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  width: 100%;
+}
+
+.heicActions > button {
+  width: 100%;
+  min-height: 48px;
+}
+
+@media (max-width: 899px) {
+  .heicActions > button {
+    min-height: 52px;
+  }
+}
+
+/* ---------- pemilih Section tujuan ---------- */
+
+.pickEmpty {
+  margin: 0 4px 16px;
+  color: var(--app-spine-muted);
+}
+
+.pickList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--app-spine-line);
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.pickRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-input-mobile);
+  background: transparent;
+  color: var(--app-spine-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickSticker {
+  flex: none;
+  min-width: 58px;
+  justify-content: center;
+}
+
+.pickName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pickCount {
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--app-spine-meta);
+}
+
+.pickRow > svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--app-spine-muted);
+}
+
+.pickFooter {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: 100%;
+}
+
+.pickFooter > button {
+  width: 100%;
+}
+
+@media (max-width: 899px) {
+  .pickFooter > button {
+    min-height: 52px;
+    padding: 0 12px;
+    white-space: nowrap;
+  }
+}
+
+/* Tombol "Kecilkan" di kepala panel — seukuran tombol tutup (40px). */
+.headerButton {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  color: var(--app-spine-text-soft);
+  cursor: pointer;
+}
+
+.headerButton svg {
+  width: 18px;
+  height: 18px;
+}
+
+@media (max-width: 899px) {
+  .headerButton {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+/* ---------- upload-dock ---------- */
+
+.dock {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: var(--spine-z-popover);
+  width: 400px;
+  max-width: calc(100vw - 48px);
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-surface);
+  box-shadow: 0 30px 60px -18px #000, 0 0 0 1px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.dockHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 12px 14px 14px;
+}
+
+.dockIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+}
+
+.dockIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.dockText {
+  flex: 1;
+  min-width: 0;
+}
+
+.dockTitle {
+  display: block;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  color: var(--app-spine-text);
+}
+
+.dockSub {
+  display: block;
+  margin-top: 2px;
+  color: var(--app-spine-meta);
+}
+
+.dockButtons {
+  flex: none;
+  display: flex;
+  gap: 8px;
+}
+
+.dockButton {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: 50%;
+  background: var(--app-spine-surface);
+  color: var(--app-spine-text-soft);
+  cursor: pointer;
+}
+
+.dockButton svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Garis progres menempel di tepi bawah panel, tanpa radius. */
+.dockTrack {
+  margin: 0;
+  height: 4px;
+  border-radius: 0;
+}
+
+/* HP: lebar penuh, TEPAT DI ATAS lapisan bawah yang sedang tampil
+   (`bottom-bar`, atau `bulk-bar` saat mode pilih aktif). Tinggi lapisan
+   itu diukur Story 2.13 ke --mam-bulkbar-height. */
+@media (max-width: 899px) {
+  .dock {
+    left: var(--spine-gutter-mobile);
+    right: var(--spine-gutter-mobile);
+    width: auto;
+    max-width: none;
+    bottom: calc(
+      var(--mam-bulkbar-height, 0px) + var(--spine-bottombar-height) + var(--spine-gutter-mobile)
+    );
+  }
+
+  .dockButton {
+    width: 44px;
+    height: 44px;
+  }
+
+  .dockTitle {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+}

@@ -1,0 +1,169 @@
+/* Story 1.14: keluarga tombol — lihat buttons.tsx (termasuk aturan
+   pemakaian button-danger di komentar atas berkas). */
+
+.btnPrimary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 56px; /* 52px di HP */
+  padding: 0 28px;
+  border: 0;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+  text-transform: uppercase; /* KAPITAL via text-transform */
+  cursor: pointer;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.btnPrimary:hover {
+  transform: scale(1.03);
+  box-shadow: 0 16px 36px -12px var(--app-spine-yellow-55);
+  animation: spine-button-bounce var(--spine-motion-button-bounce);
+}
+
+.btnPrimary[data-busy] {
+  cursor: progress;
+}
+
+.arrow {
+  line-height: 1;
+  transition: transform 150ms ease;
+}
+
+.btnPrimary:hover .arrow {
+  transform: translateX(5px);
+}
+
+/* Pantulan pegas hover (kurva spring dari token gerak Story 1.5). */
+@keyframes spine-button-bounce {
+  from {
+    transform: scale(1);
+  }
+
+  60% {
+    transform: scale(1.05);
+  }
+
+  to {
+    transform: scale(1.03);
+  }
+}
+
+/* Spinner kirim: satu-satunya gerak yang dikecualikan dari kill-switch
+   mode kalem (via .spine-motion-keep) — umpan balik proses, bukan hiasan. */
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--app-spine-ink);
+  border-right-color: transparent;
+  border-radius: 999px;
+  animation: spine-spin 800ms linear infinite;
+  --spine-motion-keep-duration: 800ms;
+  --spine-motion-keep-iterations: infinite;
+}
+
+@keyframes spine-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 599px) {
+  .btnPrimary {
+    min-height: 52px;
+    padding: 0 24px;
+  }
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 20px;
+  border: 1px solid transparent;
+  border-radius: var(--spine-radius-full);
+  cursor: pointer;
+}
+
+.pillYellow {
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+}
+
+.pillPaper {
+  background: var(--app-spine-paper);
+  color: var(--app-spine-ink);
+  border-color: var(--app-spine-line);
+}
+
+.pillSurface {
+  background: var(--app-spine-surface);
+  color: var(--app-spine-text);
+  border-color: var(--app-spine-line);
+}
+
+/* Danger outline: konfirmasi kontekstual (lihat aturan di buttons.tsx). */
+.dangerOutline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px; /* 52px di dalam sheet (HP) */
+  padding: 0 20px;
+  border: 1px solid var(--app-spine-danger-border);
+  border-radius: var(--spine-radius-full);
+  background: transparent;
+  color: var(--app-spine-danger-text);
+  cursor: pointer;
+}
+
+:global([data-theme='light']) .dangerOutline {
+  border-color: var(--app-spine-danger-border-light);
+  color: var(--app-spine-danger-text-light);
+}
+
+/* Danger solid: HANYA konfirmasi permanen (lihat aturan di buttons.tsx). */
+.dangerSolid {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-danger-solid);
+  /* Teks ink, bukan putih: ink di atas danger #e5484d = 4,75 : 1 (lolos AA),
+     putih hanya 3,91 : 1 (gagal). DESIGN.md memang menulis {colors.ink};
+     'paper' masuk lewat koreksi keliru pada spec Story 1.14, 21 Sep 2026. */
+  color: var(--app-spine-ink);
+  cursor: pointer;
+}
+
+@media (max-width: 599px) {
+  .dangerOutline,
+  .dangerSolid {
+    min-height: 52px;
+  }
+}
+
+.textLink {
+  color: var(--app-spine-text);
+  text-decoration-line: underline;
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--app-spine-yellow);
+  text-underline-offset: 4px;
+}
+
+:global([data-theme='light']) .textLink {
+  color: var(--app-spine-accent-light);
+  text-decoration-color: var(--app-spine-accent-light);
+}
+
+/* Story 3.8/3.12: pill yang sedang memproses — aria-busy + spinner ink
+   (aturan yang sama dengan .btnPrimary, tanpa atribut `disabled`). */
+.pill[data-busy] {
+  cursor: progress;
+  opacity: 0.92;
+}

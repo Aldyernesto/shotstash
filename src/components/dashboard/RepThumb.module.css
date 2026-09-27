@@ -1,0 +1,293 @@
+/* ============================================================
+   Story 2.14 — `rep-thumb`: cuplikan isi mini untuk baris daftar
+   ============================================================
+   Geometri diukur dari mockups/key-list-view.html (`.th` dan turunannya):
+   kotak 64 × 72 px (HP 56 × 64 px) berisi kartu mini 46 × 62 px.
+
+   Tiga varian mengikuti tingkatnya — saku mini (Project), tumpukan tiga
+   (Section), satu kartu (file) — jadi mode daftar tetap "collage",
+   bukan tabel berikon generik.
+   ------------------------------------------------------------ */
+
+.box {
+  position: relative;
+  flex: none;
+  display: block;
+  width: 64px;
+  height: 72px;
+}
+.small {
+  width: 56px;
+  height: 64px;
+}
+/* Spine: `rep-thumb` di HP selalu 56 x 64 px — baris daftar versi HP
+   (Story 2.16) memakai DOM yang sama dengan desktop, jadi ukurannya
+   diturunkan di sini, bukan lewat prop terpisah. */
+@media (max-width: 899.98px) {
+  .box {
+    width: 56px;
+    height: 64px;
+  }
+  .box .card {
+    width: 40px;
+    height: 54px;
+    margin: -27px 0 0 -20px;
+    border-radius: 9px;
+  }
+  .box.project .card {
+    width: 26px;
+    height: 35px;
+    margin: -27px 0 0 -13px;
+    border-radius: 6px;
+  }
+  .box .backPanel {
+    top: 12px;
+    height: 30px;
+  }
+  .box .pocket {
+    height: 32px;
+  }
+  .box .pocketLine {
+    top: 11px;
+    height: 9px;
+  }
+}
+
+/* ---------- kartu mini ---------- */
+.card {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46px;
+  height: 62px;
+  margin: -31px 0 0 -23px;
+  overflow: hidden;
+  border-radius: var(--spine-radius-sticker);
+  border: 2px solid var(--app-spine-photo-frame, #eeeae2);
+  background: var(--app-spine-rep-placeholder, #222222) center / cover no-repeat;
+  box-shadow: 0 10px 18px -8px rgba(0, 0, 0, 0.85);
+  transition: transform var(--spine-motion-stack-swing);
+}
+.small .card {
+  width: 40px;
+  height: 54px;
+  margin: -27px 0 0 -20px;
+  border-radius: 9px;
+}
+.img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ---------- varian Section: tumpukan tiga ---------- */
+.back1,
+.back2 {
+  filter: brightness(0.5) saturate(0.8);
+  border-color: var(--app-spine-white-10, #ffffff1a);
+}
+.back1 {
+  transform: rotate(-12deg) translate(-10px, -1px);
+}
+.back2 {
+  transform: rotate(11deg) translate(10px, -2px);
+}
+.section .front {
+  transform: translateY(3px) scale(0.96);
+}
+/* Story 3.22/3.23 — target tautan/baris Trash yang sumbernya SUDAH DIHAPUS.
+   Mock `key-shared.html` `.th.gone .c`: satu kartu putus-putus abu tanpa
+   bayangan dan tanpa arsir kuning (arsir kuning = slot HANTU "belum ada
+   isi", arti yang berbeda). Dipakai lewat prop `gone`, bukan kelas lokal
+   per halaman. */
+.goneCard {
+  border: 2px dashed var(--app-spine-line, #33322d);
+  background: var(--app-spine-rep-placeholder, #222222);
+  box-shadow: none;
+}
+:global(html[data-theme="light"]) .goneCard {
+  border-color: var(--app-spine-input-border, #8a877c);
+}
+
+.sectionGhost {
+  border: 2px dashed var(--app-spine-yellow-35, #efe74959);
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--app-spine-yellow-08, #efe74914) 0 6px,
+    transparent 6px 12px
+  );
+  box-shadow: none;
+}
+:global(html[data-theme="light"]) .sectionGhost {
+  border-color: var(--app-spine-input-border, #8a877c);
+}
+
+/* ---------- varian Project: saku mini ---------- */
+.backPanel {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 14px;
+  height: 34px;
+  border-radius: 10px 10px 0 0;
+  background: linear-gradient(
+    180deg,
+    var(--app-spine-object-back-top, #282826),
+    var(--app-spine-object-back-bottom, #1a1a18)
+  );
+}
+.small .backPanel {
+  top: 12px;
+  height: 30px;
+}
+.project .card {
+  width: 30px;
+  height: 40px;
+  margin: -30px 0 0 -15px;
+  border-radius: 7px;
+}
+.small.project .card {
+  width: 26px;
+  height: 35px;
+  margin: -27px 0 0 -13px;
+  border-radius: 6px;
+}
+.fan1 {
+  transform: translateX(-13px) rotate(-12deg);
+}
+.fan2 {
+  transform: translateY(-4px);
+}
+.fan3 {
+  transform: translateX(13px) rotate(12deg);
+}
+.pocket {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  height: 36px;
+  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    var(--app-spine-pocket-top, #2d2d2a) 0%,
+    var(--app-spine-pocket-mid, #1e1e1b) 50%,
+    var(--app-spine-pocket-bottom, #161614) 100%
+  );
+  box-shadow: inset 0 1.5px 0 var(--app-spine-white-12, #ffffff1f),
+    0 -8px 14px -8px rgba(0, 0, 0, 0.9), 0 12px 18px -10px #000;
+}
+.small .pocket {
+  height: 32px;
+}
+.pocketLine {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 13px;
+  height: 10px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill, #0b0b0a);
+}
+.small .pocketLine {
+  top: 11px;
+  height: 9px;
+}
+.projectGhost {
+  position: absolute;
+  left: 50%;
+  top: 10px;
+  width: 30px;
+  height: 32px;
+  margin-left: -15px;
+  border-radius: 7px 7px 0 0;
+  border: 2px dashed var(--app-spine-yellow-35, #efe74959);
+  border-bottom: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--app-spine-yellow-08, #efe74914) 0 5px,
+    transparent 5px 10px
+  );
+}
+:global(html[data-theme="light"]) .projectGhost {
+  border-color: var(--app-spine-input-border, #8a877c);
+}
+
+/* ---------- varian file ---------- */
+.videoMark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  margin: 6px 0 0 -20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--app-spine-label-pill, #0b0b0a);
+  color: var(--app-spine-yellow, #efe749);
+  box-shadow: 0 4px 10px -4px rgba(0, 0, 0, 0.8);
+}
+.videoMark svg {
+  width: 8px;
+  height: 9px;
+  margin-left: 1px;
+}
+
+.docCard {
+  background: linear-gradient(
+    180deg,
+    var(--app-spine-pocket-top, #2d2d2a) 0%,
+    var(--app-spine-pocket-mid, #1e1e1b) 50%,
+    var(--app-spine-pocket-bottom, #161614) 100%
+  );
+}
+.docCard::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 54%;
+  height: 52%;
+  transform: translate(-50%, -50%) rotate(-6deg);
+  border-radius: 4px;
+  background: linear-gradient(225deg, transparent 0 14%, var(--app-spine-photo-frame, #eeeae2) 14%);
+  box-shadow: 0 6px 10px -4px rgba(0, 0, 0, 0.9);
+}
+.docExt {
+  position: absolute;
+  right: -4px;
+  bottom: 4px;
+  z-index: 2;
+  padding: 4px 6px;
+  border-radius: var(--spine-radius-sm);
+  background: var(--app-spine-yellow, #efe749);
+  color: var(--app-spine-ink, #141310);
+  font-size: 0.75rem; /* 12px */
+  transform: rotate(7deg);
+  box-shadow: 0 0.08em 0 var(--app-spine-yellow-edge, #b9b22c),
+    0 6px 12px -6px rgba(0, 0, 0, 0.8);
+}
+
+/* ---------- angkat 4–9 px saat barisnya di-hover / difokus ----------
+   TANPA kipas besar: mode daftar hanya mengintip, tidak membuka kipas. */
+:global([data-list-row]:hover) .section .front,
+:global([data-list-row]:focus-within) .section .front,
+:global([data-list-row]:hover) .single .front,
+:global([data-list-row]:focus-within) .single .front {
+  transform: translateY(-4px) rotate(-3deg);
+}
+:global([data-list-row]:hover) .project .fan1,
+:global([data-list-row]:focus-within) .project .fan1 {
+  transform: translateX(-17px) translateY(-4px) rotate(-16deg);
+}
+:global([data-list-row]:hover) .project .fan2,
+:global([data-list-row]:focus-within) .project .fan2 {
+  transform: translateY(-9px);
+}
+:global([data-list-row]:hover) .project .fan3,
+:global([data-list-row]:focus-within) .project .fan3 {
+  transform: translateX(17px) translateY(-4px) rotate(16deg);
+}

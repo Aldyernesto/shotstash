@@ -1,0 +1,37 @@
+/* ============================================================
+   Story 2.12 — tombol "⋯" (`more-button`) dua wujud
+   ============================================================ */
+
+.button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+/* ---------- wujud objek: Kartu Project & Kartu Section ---------- */
+.object {
+  width: 40px;
+  height: 40px;
+  background: var(--app-spine-label-pill, #0b0b0a);
+  color: var(--app-spine-object-text, #fafaf5);
+}
+.object svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ---------- wujud in-caption: file-card & baris daftar ---------- */
+.inCaption {
+  width: 32px;
+  height: 32px;
+  background: none;
+  color: var(--app-spine-muted, #a3a197);
+}
+.inCaption svg {
+  width: 18px;
+  height: 18px;
+}

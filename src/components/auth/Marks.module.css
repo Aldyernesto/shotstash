@@ -1,0 +1,56 @@
+/* Story 1.27: petak bersama success-mark & status-mark (AC epics.md 1.27;
+   mock key-forgot-password.html .done-mark). 72px, radius lg 22px, miring
+   −6° (kemiringan bentuk tercatat di globals.css radius section). TANPA
+   animasi — AC melarang gerak apa pun di marks. Ikon status (jam pasir,
+   larangan, gembok) 34px semuanya; centang success 36px. */
+
+.mark {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: var(--spine-radius-lg);
+  transform: rotate(-6deg);
+}
+
+.mark svg {
+  width: 34px;
+  height: 34px;
+}
+
+/* Centang success 36px, sedikit lebih besar dari ikon status. */
+.success svg {
+  width: 36px;
+  height: 36px;
+}
+
+/* Bayangan kuning #4 yang diizinkan DESIGN.md — satu token elevation di
+   globals.css supaya ledger & implementasi tidak saling lepas. Dipakai
+   success DAN status menunggu: satu-satunya glow mark. */
+.success,
+.waiting {
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+  box-shadow: var(--spine-elevation-success-mark);
+}
+
+/* Varian ditolak: pasangan danger SEMANTIK (--app-danger-*) — berganti
+   tema otomatis di globals.css, bukan literal gelap --app-spine-danger-*. */
+.rejected {
+  background: var(--app-danger-bg);
+  border: 1px solid var(--app-danger-border);
+  color: var(--app-danger);
+}
+
+.locked {
+  background: var(--app-spine-surface-2);
+  border: 1px solid var(--app-spine-line);
+  color: var(--app-spine-gold);
+}
+
+/* Gembok gold kontrak brand tak terbaca di terang (#d4a83c di atas
+   surface-2 terang ≈1,9:1) — mengikuti preseden PairingSlot .bar i:
+   literal gelap serumpun brand ("bukan kuning", key-login-auth.html). */
+:global([data-theme='light']) .locked {
+  color: #8a6508;
+}

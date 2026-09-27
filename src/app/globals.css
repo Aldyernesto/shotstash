@@ -1,0 +1,1026 @@
+/* ============================================================
+   THEME TOKENS (semantic layer) — dipakai halaman auth & UI baru.
+   Default = DARK. Light aktif via <html data-theme="light">.
+   Token lama (--color-*) tetap dipertahankan di bawah.
+   ============================================================ */
+/* Shim Story 1.2: var lama menunjuk token spine (DESIGN.md → "Pemetaan var
+   --app-* sekarang ke token spine"). Nilai cadangan = nilai spine literal,
+   supaya blok spine yang kelak dipindah tidak membuat var gagal diam-diam. */
+:root,
+html[data-theme="dark"] {
+  --app-bg: var(--app-spine-bg, #0f0f0d);
+  --app-surface: var(--app-spine-surface, #1b1b18);
+  --app-surface-2: var(--app-spine-surface-2, #252521);
+  /* elevated (menu, popover): gelap = surface-2, terang = surface */
+  --app-elevated: var(--app-spine-surface-2, #252521);
+  --app-border: var(--app-spine-line, #33322d);
+  --app-border-strong: var(--app-spine-input-border, #6b695f);
+  --app-text: var(--app-spine-text, #fafaf5);
+  --app-text-dim: var(--app-spine-text-soft, #dcdad2);
+  --app-text-muted: var(--app-spine-muted, #a3a197);
+  --app-text-faint: var(--app-spine-meta, #9a988f); /* #6b6357 / #9a917f lama gagal kontras teks — dibuang */
+  --app-accent: var(--app-spine-gold, #d4a83c);
+  --app-accent-2: var(--app-spine-yellow, #efe749);
+  /* accent-grad → kuning datar, seperti button-primary (bukan gradien lagi).
+     Catatan transisi: di tema terang isian kuning di atas permukaan terang
+     < 3:1 — outline ink menyusul dari story pemilik komponennya
+     (mis. tab aktif = Story 1.21), bukan di shim ini. */
+  --app-accent-grad: var(--app-spine-yellow, #efe749);
+  --app-accent-on: var(--app-spine-ink, #141310);
+  --app-danger: var(--app-spine-danger-text, #f07a7e); /* teks, bukan isi — isi = --app-danger-solid */
+  --app-danger-bg: var(--app-spine-danger-bg, #e5484d1a);
+  --app-danger-border: var(--app-spine-danger-border, #e5484d59);
+  --app-ok: var(--app-spine-ok-text, #3fb68b);
+  --app-ok-bg: var(--app-spine-ok-bg, #3fb68b1a);
+  --app-ok-border: var(--app-spine-ok-border, #3fb68b59);
+  --app-shadow: 0 16px 48px rgba(0, 0, 0, .4);
+  /* Story 1.7: glow lama (kuning 35%) diganti nilai cincin fokus SOLID —
+     sama dengan .spine-focus-ring. Glow alpha tidak bertahan di forced
+     colors; outline di .spine-focus-ring-lah yang jadi cincin utama. */
+  --app-ring: var(--app-spine-yellow, #efe749);
+  /* glow dekoratif → yellow-14 (gelap); tema terang memakai nilai sekarang. */
+  --app-glow-1: var(--app-spine-yellow-14, #efe74924);
+  --app-glow-2: var(--app-spine-yellow-14, #efe74924);
+  /* Dashboard-specific theme-aware tokens (dark defaults) */
+  --dash-navbar: rgba(20, 19, 16, 0.85);
+  --dash-navbar-solid: rgba(20, 19, 16, 0.95);
+  --dash-drawer: rgba(20, 19, 16, 0.98);
+  --dash-hairline: rgba(255, 255, 255, 0.06);
+  --dash-hairline-soft: rgba(255, 255, 255, 0.05);
+  --dash-hover: rgba(255, 255, 255, 0.06);
+  --dash-chip: rgba(255, 255, 255, 0.04);
+  --dash-chip-border: rgba(255, 255, 255, 0.08);
+  /* Catatan: iframe lintas-origin berskema terang (mis. tombol/One Tap Google) diberi latar opak putih
+     oleh browser bila skemanya beda dengan elemen iframe → lihat aturan `.gsi-host` di bawah. */
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  --app-bg: var(--app-spine-bg, #f5f4ee);
+  --app-surface: var(--app-spine-surface, #ffffff);
+  --app-surface-2: var(--app-spine-surface-2, #f0eee6);
+  --app-elevated: var(--app-spine-surface, #ffffff);
+  --app-border: var(--app-spine-line, #e2dfd5);
+  --app-border-strong: var(--app-spine-input-border, #8a877c);
+  --app-text: var(--app-spine-text, #141310);
+  --app-text-dim: var(--app-spine-text-soft, #4a4438);
+  --app-text-muted: var(--app-spine-muted, #6d6a60);
+  --app-text-faint: var(--app-spine-meta, #6d6a60);
+  /* accent terang = accent-light (#8a6508) menggantikan #b8860b yang gagal AA
+     teks kecil; JANGAN kuning/emas polos di tema terang. */
+  --app-accent: var(--app-spine-accent-light, #8a6508);
+  --app-accent-2: var(--app-spine-gold, #d4a83c);
+  /* accent-grad tidak dideklarasikan ulang di sini — kuning datar yang sama
+     dengan blok gelap (nilai identik, :root mewarisi). */
+  --app-accent-on: var(--app-spine-ink, #141310);
+  --app-danger: var(--app-spine-danger-text-light, #b8292f);
+  --app-danger-bg: var(--app-spine-danger-bg-light, #e5484d12);
+  --app-danger-border: var(--app-spine-danger-border-light, #e5484d66);
+  --app-ok: var(--app-spine-ok-text-light, #1b6f52);
+  --app-ok-bg: var(--app-spine-ok-bg-light, #3fb68b12);
+  --app-ok-border: var(--app-spine-ok-border-light, #3fb68b66);
+  --app-shadow: 0 12px 40px rgba(60, 50, 30, .12);
+  /* Story 1.7: cincin terang = ink — kuning/emas tidak pernah menjadi
+     penanda fokus di tema terang (sama dengan .spine-focus-ring). */
+  --app-ring: var(--app-spine-ink, #141310);
+  /* glow terang: nilai sekarang dipertahankan (dekoratif — baris pemetaan). */
+  --app-glow-1: rgba(212, 168, 60, .10);
+  --app-glow-2: rgba(231, 198, 90, .12);
+  color-scheme: light;
+}
+
+/* ============================================================
+   SPINE COLOR TOKENS — palet redesign "collage" (Story 1.1).
+   Sumber nilai: DESIGN.md → Colors
+   (docs/design/DESIGN.md).
+   Konvensi nama: --app-spine-<nama DESIGN.md>. Prefix --app- = gaya rumah,
+   segmen -spine- memisahkan lapisan baru dari var --app-* lama yang masih
+   dipakai layar sekarang.
+   Aturan tema: nama dasar = tema GELAP (bawaan). SATU custom property yang
+   sama berganti nilai di html[data-theme="light"] — tidak ada var kembar
+   bersufiks -light untuk chrome, dan tidak perlu selektor per komponen.
+   Membaca spec: rujukan {colors.X-light} di DESIGN.md/epics.md berarti
+   "pakai --app-spine-X" — nilainya berganti sendiri di tema terang.
+   Lingkup: sejak Story 1.2, var lama --app-* dan --color-* di dua scope
+   tema terang menunjuk ke sini (fallback literal) — layar lama ikut memakai
+   palet spine tanpa mengubah aturan CSS satu pun.
+   ============================================================ */
+
+/* -- Chrome halaman (ikut tema) ------------------------------------------ */
+:root,
+html[data-theme="dark"] {
+  --app-spine-bg: #0f0f0d;
+  --app-spine-surface: #1b1b18;
+  --app-spine-surface-2: #252521;
+  --app-spine-line: #33322d;
+  --app-spine-input-border: #6b695f;
+  --app-spine-text: #fafaf5;
+  --app-spine-text-soft: #dcdad2;
+  --app-spine-muted: #a3a197;
+  --app-spine-nav-idle: #bdbbb2;
+  --app-spine-meta: #9a988f;
+  --app-spine-placeholder: #8d8b83;
+}
+
+html[data-theme="light"] {
+  --app-spine-bg: #f5f4ee;
+  --app-spine-surface: #ffffff;
+  --app-spine-surface-2: #f0eee6;
+  --app-spine-line: #e2dfd5;
+  --app-spine-input-border: #8a877c;
+  --app-spine-text: #141310;
+  --app-spine-text-soft: #4a4438;
+  --app-spine-muted: #6d6a60;
+  --app-spine-nav-idle: #4a4438;
+  --app-spine-meta: #6d6a60;
+  --app-spine-placeholder: #6d6a60;
+}
+
+:root {
+  /* accent-light (keputusan OQ-D19) menggantikan #b8860b. DESIGN.md hanya
+     menetapkan nilai tema TERANG; tema gelap memakai teks biasa + garis bawah
+     kuning, jadi tidak ada nilai gelap untuk dipasangkan. Satu property, satu
+     nilai — bukan pasangan var.
+     JANGAN dipakai di tema gelap: #8a6508 di atas --app-spine-bg hanya 3,61 : 1.
+     Tautan/aksen teks tema gelap memakai --app-spine-yellow (atau --app-accent,
+     yang sejak Story 1.2 dipetakan ke gold di tema gelap). */
+  --app-spine-accent-light: #8a6508;
+}
+
+/* -- Brand (sama di dua tema, WAJIB dipertahankan) ------------------------ */
+/* Satu kuning: #efe749. Teks di atas kuning selalu ink (14,33 : 1).
+   Emas bukan warna blok besar dan bukan warna teks; di tema terang kuning
+   maupun emas tidak boleh jadi teks atau cincin fokus (pakai ink).
+   Varian alfa yellow-08 s.d. yellow-55 hanya untuk glow, bayangan, slot kosong. */
+:root {
+  --app-spine-yellow: #efe749;
+  --app-spine-yellow-edge: #b9b22c;
+  --app-spine-gold: #d4a83c;
+  --app-spine-ink: #141310;
+  --app-spine-paper: #ffffff;
+  --app-spine-yellow-08: #efe74914;
+  --app-spine-yellow-14: #efe74924;
+  --app-spine-yellow-20: #efe74933; /* dipakai brand & grup invarian */
+  --app-spine-yellow-35: #efe74959;
+  --app-spine-yellow-45: #efe74973;
+  --app-spine-yellow-55: #efe7498c;
+}
+
+/* -- INVARIAN (tidak pernah berganti tema) -------------------------------- */
+/* Panggung hero, objek Kartu (render Blender v2), scrim, dan lapis putih.
+   Benda ini tetap gelap di tema terang, jadi teks di atasnya WAJIB memakai
+   token invarian (stage-text, stage-sub, object-text, object-meta), tidak
+   pernah token chrome yang ikut tema. Tidak ada pasangan -light satu pun.
+   yellow-20 termasuk grup ini dan sudah dideklarasikan di blok Brand di atas. */
+:root {
+  /* panggung hero (selalu gelap) */
+  --app-spine-stage-1: #34322d;
+  --app-spine-stage-mid: #26251f;
+  --app-spine-stage-2: #1a1a17;
+  --app-spine-stage-2-75: #1a1a17bf;
+  --app-spine-stage-text: #fafaf5;
+  --app-spine-stage-sub: #dedcd3;
+  /* objek Kartu Project/Section + teks di atasnya */
+  --app-spine-object-back-top: #282826;
+  --app-spine-object-back-bottom: #1a1a18;
+  --app-spine-pocket-top: #2d2d2a;
+  --app-spine-pocket-mid: #1e1e1b;
+  --app-spine-pocket-bottom: #161614;
+  --app-spine-object-cell-glow: #23221e;
+  --app-spine-photo-frame: #eeeae2;
+  --app-spine-label-pill: #0b0b0a;
+  --app-spine-rep-placeholder: #222222;
+  --app-spine-object-text: #fafaf5;
+  --app-spine-object-meta: #9a988f;
+  /* scrim foto */
+  --app-spine-scrim: #0a0a09;
+  --app-spine-scrim-60: #0a0a0999;
+  --app-spine-scrim-85: #0a0a09d9;
+  --app-spine-scrim-92: #0a0a09eb;
+  --app-spine-scrim-95: #0a0a09f2;
+  /* bayangan jatuh saku (satu-satunya penyesuaian tema terang objek) */
+  --app-spine-pocket-shadow-warm: #3c32148c;
+  /* lapis putih */
+  --app-spine-white-10: #ffffff1a;
+  --app-spine-white-12: #ffffff1f;
+  --app-spine-white-14: #ffffff24;
+  --app-spine-white-16: #ffffff29;
+  --app-spine-white-25: #ffffff40;
+}
+
+/* -- Status (keputusan OQ-D7) --------------------------------------------- */
+/* PENTING: nilai isi (danger #e5484d, ok #3fb68b, warning #d4a83c) adalah isi,
+   titik, ikon, garis error, dan tombol danger solid — nilainya SAMA di dua tema
+   dan TIDAK PERNAH dipakai sebagai teks kecil (#e5484d hanya 4,41 : 1 di
+   surface, 3,93 : 1 di surface-2). Teks status selalu memakai *-text (gelap)
+   atau *-text-light (terang). -bg / -border = tint panel & chip.
+   Warna status selalu disertai teks dan/atau ikon, tidak pernah warna saja. */
+:root {
+  --app-spine-danger: #e5484d;
+  --app-spine-danger-text: #f07a7e;
+  --app-spine-danger-text-light: #b8292f;
+  --app-spine-danger-bg: #e5484d1a;
+  --app-spine-danger-bg-light: #e5484d12;
+  --app-spine-danger-border: #e5484d59;
+  --app-spine-danger-border-light: #e5484d66;
+  --app-spine-ok: #3fb68b;
+  --app-spine-ok-text: #3fb68b;
+  --app-spine-ok-text-light: #1b6f52;
+  --app-spine-ok-bg: #3fb68b1a;
+  --app-spine-ok-bg-light: #3fb68b12;
+  --app-spine-ok-border: #3fb68b59;
+  --app-spine-ok-border-light: #3fb68b66;
+  --app-spine-warning: #d4a83c;
+  --app-spine-warning-text: #d4a83c;
+  --app-spine-warning-text-light: #7a5905;
+  --app-spine-warning-bg: #d4a83c1a;
+  --app-spine-warning-bg-light: #d4a83c14;
+  --app-spine-warning-border: #d4a83c59;
+  --app-spine-warning-border-light: #d4a83c66;
+  /* Var isi bernama (DESIGN.md → Pemetaan var --app-*). --app-danger dan
+     --app-ok lama adalah warna TEKS, jadi isinya butuh nama sendiri; warning
+     belum pernah ada. Nama baru, belum dirujuk aturan mana pun. */
+  --app-danger-solid: var(--app-spine-danger, #e5484d);
+  --app-ok-solid: var(--app-spine-ok, #3fb68b);
+  /* PERHATIAN: --app-danger & --app-ok lama adalah warna TEKS, tetapi
+     --app-warning adalah warna ISI. Untuk teks kecil pakai
+     --app-spine-warning-text (gelap) / --app-spine-warning-text-light (terang). */
+  --app-warning: var(--app-spine-warning, #d4a83c);
+  --app-warning-solid: var(--app-spine-warning, #d4a83c);
+}
+
+/* Keluarga --app-warning-* baru (DESIGN.md → Pemetaan var --app-*): ikut tema,
+   sejajar dengan --app-danger-* / --app-ok-* lama. */
+:root,
+html[data-theme="dark"] {
+  --app-warning-bg: var(--app-spine-warning-bg, #d4a83c1a);
+  --app-warning-border: var(--app-spine-warning-border, #d4a83c59);
+}
+
+html[data-theme="light"] {
+  --app-warning-bg: var(--app-spine-warning-bg-light, #d4a83c14);
+  --app-warning-border: var(--app-spine-warning-border-light, #d4a83c66);
+}
+
+/* ============================================================
+   SPINE TOKENS STRUKTURAL — Stories 1.3-1.6 ("collage")
+   Sumber nilai: DESIGN.md frontmatter typography/rounded/spacing/
+   motion + bagian Elevation & Depth. Prefix-nya --spine-* (BUKAN
+   --app-spine-*, yang teregistrasi check:tokens khusus warna).
+   ============================================================ */
+
+/* ---------- Story 1.3 — Tipografi ----------
+   Display = Poppins Black (900, + 900 italic untuk tag), di-host
+   sendiri lewat next/font/local di src/app/layout.tsx (var
+   --font-poppins); body = Inter dari next/font (var --font-inter).
+   Ukuran ditulis rem (px ÷ 16) agar ikut setelan huruf pengguna.
+   Lantai ukuran token spine: tidak ada teks .spine-* di bawah 11,5 px
+   (blok lama yang belum direstyle tidak terikat lantai ini);
+   teks miring, italic, atau diputar (tag, tag-mobile, sticker-unit)
+   minimal 12 px. Wadah teks memakai min-height + padding (bukan
+   tinggi tetap) supaya teks 200% dan skala huruf Android terbesar
+   tidak terpotong. */
+
+.spine-display-hero,
+.spine-display-hero-mobile,
+.spine-display-page,
+.spine-display-title,
+.spine-display-panel,
+.spine-display-panel-mobile,
+.spine-display-button,
+.spine-display-card,
+.spine-display-label,
+.spine-display-sticker,
+.spine-display-stat,
+.spine-display-figure,
+.spine-display-code,
+.spine-display-secret,
+.spine-tag,
+.spine-tag-mobile {
+  font-family: var(--font-poppins), "Arial Black", "Segoe UI Black", "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Catatan perangkat: selama jendela swap di Android (tanpa Arial),
+   rantai jatuh ke sans-serif bawaan sebelum Poppins tiba — dua berkas
+   @8 KB dengan font-display: swap membatasi jendela itu. */
+
+.spine-body,
+.spine-body-lead,
+.spine-body-sub,
+.spine-body-sm,
+.spine-footnote,
+.spine-label,
+.spine-micro,
+.spine-sticker-unit,
+.spine-nav,
+.spine-nav-active,
+.spine-button,
+.spine-link,
+.spine-chip,
+.spine-sort,
+.spine-heading-sm,
+.spine-row-title,
+.spine-question {
+  font-family: var(--font-inter), Inter, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+.spine-display-hero { font-size: clamp(2.75rem, 5vw, 4rem); font-weight: 900; line-height: 0.98; letter-spacing: -0.03em; }
+.spine-display-hero-mobile { font-size: clamp(1.75rem, 9vw, 2.375rem); font-weight: 900; line-height: 0.98; letter-spacing: -0.03em; }
+.spine-display-page { font-size: clamp(2.25rem, 7vw, 3.5rem); font-weight: 900; line-height: 1; letter-spacing: -0.03em; }
+.spine-display-title { font-size: clamp(1.75rem, 5.5vw, 2.625rem); font-weight: 900; line-height: 1; letter-spacing: -0.03em; }
+.spine-display-panel { font-size: 1.6875rem; font-weight: 900; line-height: 1; letter-spacing: -0.02em; }
+.spine-display-panel-mobile { font-size: 1.4375rem; font-weight: 900; line-height: 1; letter-spacing: -0.02em; }
+.spine-display-button { font-size: 1.0625rem; font-weight: 900; line-height: 1; letter-spacing: 0.04em; }
+.spine-display-card { font-size: 0.9375rem; font-weight: 900; line-height: 1.12; letter-spacing: -0.01em; }
+.spine-display-label { font-size: 0.875rem; font-weight: 900; line-height: 1.1; letter-spacing: -0.01em; }
+.spine-display-sticker { font-size: 0.8125rem; font-weight: 900; line-height: 1; }
+.spine-display-stat { font-size: clamp(1.625rem, 4vw, 2.625rem); /* puncak 42px — mock processing & system-health; admin memakai 34px lewat override lokal */ font-weight: 900; line-height: 1; letter-spacing: -0.03em; }
+.spine-display-figure { font-size: 1.75rem; font-weight: 900; line-height: 1; letter-spacing: -0.02em; }
+.spine-display-code { font-size: 1.375rem; font-weight: 900; line-height: 1; }
+.spine-display-secret { font-size: 1.5rem; font-weight: 900; line-height: 1; letter-spacing: 0.14em; }
+.spine-tag { font-size: 0.78125rem; font-weight: 900; line-height: 1; letter-spacing: 0.02em; font-style: italic; } /* italic 900 dari berkas Poppins italic; skewX(-6deg) milik tag-pill (Story 1.16), bukan token */
+.spine-tag-mobile { font-size: 0.75rem; font-weight: 900; line-height: 1; letter-spacing: 0.02em; } /* tegak, tanpa italic */
+
+.spine-body { font-size: 0.875rem; font-weight: 400; line-height: 1.55; }
+.spine-body-lead { font-size: 1rem; font-weight: 400; line-height: 1.55; }
+.spine-body-sub { font-size: 0.9375rem; font-weight: 400; line-height: 1.55; }
+.spine-body-sm { font-size: 0.84375rem; font-weight: 400; line-height: 1.5; }
+.spine-footnote { font-size: 0.78125rem; font-weight: 400; line-height: 1.55; }
+.spine-label { font-size: 0.71875rem; font-weight: 700; line-height: 1.2; letter-spacing: 0.1em; }
+.spine-micro { font-size: 0.75rem; font-weight: 700; line-height: 1; letter-spacing: 0.18em; }
+.spine-sticker-unit { font-size: 0.75rem; font-weight: 800; line-height: 1; letter-spacing: 0.06em; }
+.spine-nav { font-size: 0.8125rem; font-weight: 600; line-height: 1; }
+.spine-nav-active { font-size: 0.8125rem; font-weight: 800; line-height: 1; }
+.spine-button { font-size: 0.90625rem; font-weight: 800; line-height: 1; }
+.spine-link { font-size: 0.8125rem; font-weight: 600; line-height: 1.55; }
+.spine-chip { font-size: 0.75rem; font-weight: 700; line-height: 1; }
+.spine-sort { font-size: 0.78125rem; font-weight: 700; line-height: 1; }
+.spine-heading-sm { font-size: 1.125rem; font-weight: 800; line-height: 1.3; }
+.spine-row-title { font-size: 0.9375rem; font-weight: 800; line-height: 1.3; }
+.spine-question { font-size: 0.875rem; font-weight: 700; line-height: 1.4; }
+
+.spine-mono {
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+  font-size: 0.8125rem; font-weight: 400; line-height: 1.7;
+}
+/* mono HANYA untuk konten teknis: log, editor SRT, path output, dan
+   hasil alat — bukan untuk teks antarmuka biasa. */
+
+/* ---------- Story 1.4 — Bentuk: radius ----------
+   13 token radius. Stiker kata di headline memakai radius relatif
+   0.2em (bukan px) supaya ikut ukuran huruf. Kemiringan adalah bagian
+   dari bentuk — dipakai story komponen, dicatat di sini: stiker
+   -2.5deg, tag skewX(-6deg), stiker jumlah 7deg, stiker nomor -6deg,
+   badge notifikasi 8deg, pita -7deg, lembar doc-card -6deg, stiker
+   ekstensi 7deg, success-mark/status-mark/h-mark -6deg, hover
+   file-card -1.5deg. */
+:root {
+  --spine-radius-full: 9999px;            /* semua tombol, nav capsule, bottom-bar pill, search, chip, toast */
+  --spine-radius-2xl: 2rem;               /* 32px — panggung hero desktop */
+  --spine-radius-xl: 1.75rem;             /* 28px — kartu login, saku Project, sheet, dialog, panel besar */
+  --spine-radius-lg: 1.375rem;            /* 22px — kartu ±200px: Section, pita, viewer, chat-bubble */
+  --spine-radius-tile: 1.25rem;           /* 20px — tile melayang hero */
+  --spine-radius-stack-mobile: 1.125rem;  /* 18px — kartu tumpuk hero HP */
+  --spine-radius-card-sm: 1.125rem;       /* 18px — kartu kecil di dalam panel (session-item, tool-card) */
+  --spine-radius-md: 1rem;                /* 16px — input desktop, file-card, form-alert, kontrol 52px */
+  --spine-radius-input-mobile: 0.875rem;  /* 14px — input HP, code-input, baris dropdown, kontrol 48px */
+  --spine-radius-xs: 0.75rem;             /* 12px — tile ikon jenis file 40px, output-path, h-mark */
+  --spine-radius-sticker: 0.625rem;       /* 10px — stiker nomor Section, stiker ekstensi, rep-thumb */
+  --spine-radius-sm: 0.5rem;              /* 8px — tag pill miring, handle-chip, lembar doc-card */
+  --spine-radius-icon-plate: 22%;         /* pelat app-icon (apple-touch 22.37%) */
+}
+
+/* ---------- Story 1.4 — Spasi, breakpoint, grid ----------
+   Semua kelipatan 4 px, ditulis rem (px ÷ 16). Breakpoint = lebar
+   viewport MINIMUM; custom property tidak bisa dipakai di dalam
+   media query, jadi query utilitas di bawah menulis literal yang
+   sama (360/600/900/1280). */
+:root {
+  --spine-gutter-desktop: 2.25rem;          /* 36px */
+  --spine-gutter-mobile: 0.75rem;           /* 12px */
+  --spine-appbar-x: 1.75rem;                /* 28px */
+  --spine-stage-inset: 1.5rem;              /* 24px */
+  --spine-stage-pad-mobile: 0.75rem;        /* 12px */
+  --spine-mobile-top: 1.5rem;               /* 24px */
+  --spine-grid-gap-projects: 1.25rem;       /* 20px */
+  --spine-grid-gap-sections: 1.5rem;        /* 24px */
+  --spine-grid-gap-files: 1.25rem;          /* 20px */
+  --spine-grid-gap-files-mobile: 0.75rem;   /* 12px */
+  --spine-list-gap: 0.75rem;                /* 12px */
+  --spine-panel-pad-top: 2rem;              /* 32px */
+  --spine-panel-pad-x: 2rem;                /* 32px */
+  --spine-panel-pad-bottom: 1.75rem;        /* 28px */
+  --spine-panel-pad-mobile: 1.25rem;        /* 20px */
+  --spine-field-gap: 1rem;                  /* 16px */
+  --spine-label-gap: 0.5rem;                /* 8px */
+  --spine-cluster: 0.75rem;                 /* 12px */
+
+  --spine-breakpoint-sm: 360px;
+  --spine-breakpoint-md: 600px;
+  --spine-breakpoint-lg: 900px;
+  --spine-breakpoint-xl: 1280px;
+
+  --spine-appbar-height: 4.75rem;           /* 76px — app bar desktop (≥ breakpoint-lg) */
+  --spine-appbar-height-mobile: 3rem;       /* 48px — app-header-mobile (< breakpoint-lg) */
+  --spine-bottombar-height: calc(4rem + env(safe-area-inset-bottom, 0px)); /* 64px + safe-area HP */
+}
+
+html {
+  scroll-padding-top: var(--spine-appbar-height);
+  /* Lapisan bawah yang sedang tampil menaikkan ini. Story 2.13:
+     `bulk-bar` mengukur tingginya sendiri ke --mam-bulkbar-height. */
+  /* Story 3.15: `upload-dock` ikut menaikkan ini (tumpukan lapisan bawah
+     HP: bottom-bar / bulk-bar → upload-dock → toast), supaya fokus
+     keyboard tidak pernah tertutup dock. */
+  scroll-padding-bottom: calc(
+    var(--mam-bulkbar-height, 0px) + var(--mam-dock-height, 0px) + var(--spine-bottombar-height)
+  );
+}
+
+@media (max-width: 899px) {
+  html { scroll-padding-top: var(--spine-appbar-height-mobile); }
+}
+
+/* Utilitas grid kolom per breakpoint (tabel Layout & Spacing DESIGN.md):
+   Projects 1/2/3/4+, Section 1/2/3/4+, file 2/3/4/6 — dipakai Epic 2,
+   jangan diulang per halaman. minmax(0, 1fr) mencegah gulir horizontal
+   hingga 320px pada kombinasi gutter + kolom mana pun. */
+.spine-grid-projects { display: grid; grid-template-columns: repeat(1, minmax(0, 1fr)); gap: var(--spine-grid-gap-projects); }
+.spine-grid-sections { display: grid; grid-template-columns: repeat(1, minmax(0, 1fr)); gap: var(--spine-grid-gap-sections); }
+.spine-grid-files { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--spine-grid-gap-files-mobile); }
+
+@media (min-width: 600px) {
+  .spine-grid-projects { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .spine-grid-sections { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .spine-grid-files { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (min-width: 900px) {
+  .spine-grid-projects { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .spine-grid-sections { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .spine-grid-files { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--spine-grid-gap-files); }
+}
+
+@media (min-width: 1280px) {
+  .spine-grid-projects { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); } /* 4+ di 1280 */
+  .spine-grid-sections { grid-template-columns: repeat(auto-fill, minmax(216px, 1fr)); } /* 4+ (5 di 1280) */
+  .spine-grid-files { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+
+/* ---------- Story 1.5 — Gerak ----------
+   Kurva pegas tunggal untuk seluruh app. Gerak ambien (pita, tile,
+   tumpukan) berhenti sendiri setelah 40s (1 putaran pita). */
+:root {
+  --spine-motion-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --spine-motion-band-drift: 40s linear 1;                              /* 1 iterasi lalu berhenti */
+  --spine-motion-tile-float: 7s ease-in-out infinite alternate;         /* 7-10s per tile, diacak; berhenti bersama pita */
+  --spine-motion-stack-wobble-mobile: 6s ease-in-out infinite alternate; /* berhenti bersama pita */
+  --spine-motion-ambient-autostop: 40s;
+  --spine-motion-sticker-pop: 800ms var(--spine-motion-spring) 250ms both; /* delay 250ms; fill both agar tidak flash saat delay */
+  --spine-motion-fan: 650ms var(--spine-motion-spring);
+  --spine-motion-fan-stagger: 0ms, 40ms, 70ms, 110ms, 140ms;
+  --spine-motion-pocket-squish: 700ms var(--spine-motion-spring);
+  --spine-motion-stack-swing: 600ms var(--spine-motion-spring);
+  --spine-motion-button-bounce: 450ms var(--spine-motion-spring);
+  --spine-motion-file-lift: var(--spine-motion-stack-swing);
+  --spine-motion-overlay: var(--spine-motion-stack-swing);              /* buka/tutup viewer, dialog, sheet */
+  --spine-motion-calm: 0ms linear;                                      /* mode kalem: durasi 0ms, tanpa overshoot, tanpa gerak ambien */
+}
+
+/* ---------- Story 1.6 — Elevation & satu lapisan modal ----------
+   Tujuh tingkat kedalaman. Bayangan selalu HITAM dengan spread negatif
+   (jatuh jauh, tepi lembut) dan TANPA glow — kecuali varian terang
+   card/pocket di bawah, nilai hangat yang disetujui DESIGN.md.
+
+   CAHAYA KUNING hanya boleh di empat tempat (aturan DESIGN.md bagian
+   Elevation & Depth; focus ring adalah outline, bukan glow):
+   1. glow panggung, termasuk panggung mini: radial-gradient(closest-side, var(--app-spine-yellow-14), transparent)
+   2. hover button-primary: 0 16px 36px -12px var(--app-spine-yellow-55)
+   3. bayangan stiker: 0 .08em 0 var(--app-spine-yellow-edge), 0 .3em .6em -.2em var(--app-spine-yellow-45)
+   4. bayangan success-mark/status-mark menunggu: 0 5px 0 var(--app-spine-yellow-edge), 0 18px 36px -12px var(--app-spine-yellow-45) */
+:root {
+  --spine-elevation-stage: radial-gradient(closest-side, var(--app-spine-yellow-14, #efe74924), transparent);
+  --spine-elevation-tile: 0 30px 50px -20px rgba(0, 0, 0, .85);
+  --spine-elevation-pocket: inset 0 1.5px 0 var(--app-spine-white-12, #ffffff1f), 0 -16px 30px -14px rgba(0, 0, 0, .9), 0 30px 50px -24px #000;
+  --spine-elevation-card: 0 40px 80px -30px #000;
+  --spine-elevation-popover: 0 24px 44px -16px #000; /* bulk-bar & upload-dock: 0 30px 60px -18px #000, 0 0 0 1px rgba(0,0,0,.4) */
+  --spine-elevation-sheet: 0 -30px 60px -20px #000;
+  --spine-elevation-viewer: 0 40px 80px -30px #000;
+  /* Cahaya kuning #4 (aturan di atas): bayangan success-mark & status-mark
+     menunggu (Story 1.27) — dipakai bersama dua komponen itu saja. */
+  --spine-elevation-success-mark: 0 5px 0 var(--app-spine-yellow-edge), 0 18px 36px -12px var(--app-spine-yellow-45);
+}
+
+html[data-theme="light"] {
+  --spine-elevation-pocket: inset 0 1.5px 0 var(--app-spine-white-12, #ffffff1f), 0 -16px 30px -14px rgba(0, 0, 0, .9), 0 30px 50px -24px var(--app-spine-pocket-shadow-warm, #3c32148c);
+  --spine-elevation-card: 0 12px 40px rgba(60, 50, 30, .12);
+}
+
+/* ATURAN SATU LAPISAN MODAL: hanya satu lapisan modal yang boleh
+   terbuka (dialog, sheet, viewer, atau laci); viewer adalah lapisan
+   teratas dan tidak ada dialog di atasnya. Kelas di bawah adalah
+   wadah bersama semua lapisan modal supaya z-index datang dari satu
+   skala token; penegakan buka-tutupnya (tidak membuka lapisan kedua)
+   milik story komponen yang memakainya. */
+:root {
+  --spine-z-nav: 100;
+  --spine-z-popover: 300;
+  --spine-z-modal: 1000;
+  --spine-z-viewer: 1100;
+}
+
+/* Layar lama masih menulis z-index hardcoded (100/300/1000, satu 9999);
+   nilainya pindah ke skala ini saat layar masing-masing di-restyle.
+   Sampai itu terjadi, kelas di bawah hanya untuk lapisan modal BARU. */
+.spine-modal-layer { position: fixed; z-index: var(--spine-z-modal); }
+.spine-modal-layer--viewer { z-index: var(--spine-z-viewer); }
+
+/* ------------------------------------------------------------
+   Story 1.7 — Focus-ring tunggal & utilitas hit-area
+   ------------------------------------------------------------
+   Satu pasangan cincin fokus untuk seluruh app ({components.focus-ring}):
+   outline 2px solid via :focus-visible (BUKAN box-shadow — outline
+   bertahan di forced colors / Windows high contrast), offset 3px.
+   Gelap = kuning spine, terang = ink (kuning/emas tidak pernah jadi
+   penanda fokus di tema terang). Fokus keyboard = keadaan hover PLUS
+   cincin — keduanya menyala, bukan saling menggantikan.
+   Varian: --on-photo (di atas foto: kuning offset 2px + cincin ink
+   2px — salah satu selalu ≥3:1 di foto terang maupun gelap),
+   --inset (item menu & opsi listbox: offset -2px agar tak terpotong
+   tepi), --double (video-controls: cincin ganda kuning+ink offset
+   3px di luar "tebal kertas"). */
+:root {
+  --spine-ring-color: var(--app-spine-yellow, #efe749);
+}
+html[data-theme="light"] {
+  --spine-ring-color: var(--app-spine-ink, #141310);
+}
+
+.spine-focus-ring:focus-visible {
+  outline: 2px solid var(--spine-ring-color);
+  outline-offset: 3px;
+}
+.spine-focus-ring--on-photo:focus-visible {
+  outline: 2px solid var(--app-spine-yellow, #efe749);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--app-spine-ink, #141310);
+}
+.spine-focus-ring--inset:focus-visible {
+  outline: 2px solid var(--spine-ring-color);
+  outline-offset: -2px;
+}
+.spine-focus-ring--double:focus-visible {
+  outline: 2px solid var(--app-spine-yellow, #efe749);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px var(--app-spine-ink, #141310);
+}
+
+/* Utilitas hit-area: perbesar target sentuh TANPA mengubah ukuran
+   visual — ::before transparan menempel pada elemen (klik tembus ke
+   elemen asalnya). HP ≥ 48×48 px, desktop (≥ breakpoint-lg) ≥ 24×24 px.
+   Pengecualian satu-satunya yang tercatat: tombol GSI 40px (tinggi
+   diatur Google). Konsumen hari ini: ThemeToggle, tombol mata
+   PasswordInput, .iconBtn UploadOverlay. */
+.spine-hit-area { position: relative; }
+.spine-hit-area::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  width: 100%;
+  height: 100%;
+  min-width: 48px;
+  min-height: 48px;
+}
+@media (min-width: 900px) {
+  .spine-hit-area::before { min-width: 24px; min-height: 24px; }
+}
+
+/* ------------------------------------------------------------
+   Story 1.8 — Mode kalem tunggal
+   ------------------------------------------------------------
+   Satu sumber kebenaran: atribut data-motion di <html>, diset skrip
+   anti-FOUC di layout.tsx SEBELUM paint pertama — prefers-reduced-
+   motion ATAU Save-Data ATAU navigator.deviceMemory ≤ 2 → 'calm',
+   selain itu 'full'. Perubahan prefers-reduced-motion saat halaman
+   terbuka langsung mengubah atribut, tanpa muat ulang.
+   Kill-switch: di mode kalem SELURUH durasi animasi/transisi = 0 ms —
+   keadaan tetap berganti, hanya instan tanpa overshoot; gerak ambien
+   (band/tile/stack/fan) ikut mati karena durasinya 0. Komponen yang
+   menonaktifkan dirinya (sticker tanpa pop, tanpa kipas, 3D diganti
+   gambar diam, busur buffering diam, garis hitung mundur QR
+   disembunyikan, motion-pause tidak dirender) membaca atribut ini
+   di story komponen masing-masing (Stories 1.16-1.19). */
+html[data-motion="calm"] *,
+html[data-motion="calm"] *::before,
+html[data-motion="calm"] *::after {
+  animation-duration: 0ms !important;
+  animation-delay: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0ms !important;
+  transition-delay: 0ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Pengecualian yang diizinkan mode kalem (E:690): spinner tombol yang
+   sedang mengirim. Kelas ini membatalkan kill-switch untuk elemennya
+   saja; durasi/iterasi diatur ulang lewat var --spine-motion-keep-
+   duration / -iterations oleh story pemilik spinner. Dua catatan
+   batas kill-switch: (1) gerak non-CSS (requestAnimationFrame, Web
+   Animations API, SMIL) TIDAK tersentuh — pemakainya (kandidat: 3D,
+   busur buffering) wajib membaca atribut data-motion sebelum
+   menjadwalkan frame; (2) animasi ber-fill forwards/both mendarat di
+   keyframe AKHIR saat durasi 0 — token ambien Story 1.5 sengaja tanpa
+   fill supaya elemen kembali ke posisi istirahat. */
+html[data-motion="calm"] .spine-motion-keep,
+html[data-motion="calm"] .spine-motion-keep::before,
+html[data-motion="calm"] .spine-motion-keep::after {
+  animation-duration: var(--spine-motion-keep-duration, 800ms) !important;
+  animation-iteration-count: var(--spine-motion-keep-iterations, infinite) !important;
+}
+
+/* Jaring pengaman bila skrip anti-FOUC tidak jalan (JS diblokir/diegol):
+   reduced-motion murni CSS tetap mematikan gerak. Query ini selalu
+   SUBSET dari kondisi atribut (atribut menambah Save-Data dan
+   deviceMemory), jadi ia tidak pernah kontradiktif dengan atribut;
+   data-motion tetap satu sumber kebenaran untuk JS. */
+@media (prefers-reduced-motion: reduce) {
+  html *,
+  html *::before,
+  html *::after {
+    animation-duration: 0ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Pemetaan kurva interaksi (melengkapi token Gerak Story 1.5):
+   gerak interaktif (kipas kartu, ayunan tumpukan, squish saku, lift
+   kartu file, bounce tombol, pop stiker) = var(--spine-motion-spring);
+   buka/tutup viewer, dialog, sheet = var(--spine-motion-overlay);
+   gerak ambien = ease-in-out atau linear (band-drift, tile-float,
+   stack-wobble-mobile) — TIDAK pernah pegas. Story komponen wajib
+   memakai token bernama ini, bukan menulis kurva sendiri. */
+
+/* Landing/login memakai token --color-* lewat page.module.css.
+   Shim Story 1.2: token itu diarahkan ke token spine (nilai tema terang),
+   HANYA di dalam .authThemeScope. Pasangan penemuan lokal (tanpa baris
+   pemetaan eksplisit): primary=ink, outline=input-border, outline-variant=line,
+   on-surface-variant=muted, surface-dim=bg, tiga surface-container terendah
+   melipat ke surface-2 (spine tak punya tangga lebih halus).
+   --glass-bg, --glass-border, dan --shadow-glow bukan warna palet
+   (tidak ada baris pemetaan) — apa adanya. */
+html[data-theme="light"] .authThemeScope {
+  --color-background: var(--app-spine-bg, #f5f4ee);
+  --color-on-background: var(--app-spine-text, #141310);
+  --color-primary: var(--app-spine-ink, #141310);
+  --color-surface: var(--app-spine-surface, #ffffff);
+  --color-surface-dim: var(--app-spine-bg, #f5f4ee);
+  --color-surface-container-lowest: var(--app-spine-surface-2, #f0eee6);
+  --color-surface-container-low: var(--app-spine-surface-2, #f0eee6);
+  --color-surface-container: var(--app-spine-surface-2, #f0eee6);
+  --color-on-surface: var(--app-spine-text, #141310);
+  --color-on-surface-variant: var(--app-spine-muted, #6d6a60);
+  --color-outline: var(--app-spine-input-border, #8a877c);
+  --color-outline-variant: var(--app-spine-line, #e2dfd5);
+  --color-error: var(--app-spine-danger-text-light, #b8292f);
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: 1px solid rgba(60, 50, 30, 0.10);
+  --shadow-glow: 0 0 20px rgba(184, 134, 11, 0.10);
+}
+
+/* Dashboard light mode: shim --color-* ke token spine di dalam .dashThemeScope.
+   Diterapkan HANYA saat data-theme=light supaya dark tetap identik.
+   --dash-* struktural (bukan palet) tidak disentuh. Container high/highest
+   melipat ke surface-2/line — spine tidak punya tangga container lebih halus.
+   Pasangan penemuan lokal: primary=accent-light (#b8860b lama gagal AA teks
+   kecil), on-primary-container=ink. primary-container bertahan gold karena
+   perannya ganda — sebagai teks di permukaan terang 2,2:1 (gagal) lawan
+   sebagai isian berteks ink 8,4:1 (lolos); pemecahan peran per-situs
+   menyusul saat layar-layar ini di-restyle. */
+html[data-theme="light"] .dashThemeScope {
+  --color-background: var(--app-spine-bg, #f5f4ee);
+  --color-on-background: var(--app-spine-text, #141310);
+  --color-primary: var(--app-spine-accent-light, #8a6508); /* #b8860b gagal AA teks kecil */
+  --color-primary-container: var(--app-spine-gold, #d4a83c);
+  --color-on-primary-container: var(--app-spine-ink, #141310);
+  --color-surface: var(--app-spine-surface, #ffffff);
+  --color-surface-dim: var(--app-spine-surface-2, #f0eee6);
+  --color-surface-bright: var(--app-spine-surface, #ffffff);
+  --color-surface-container-lowest: var(--app-spine-surface, #ffffff);
+  --color-surface-container-low: var(--app-spine-surface-2, #f0eee6);
+  --color-surface-container: var(--app-spine-surface-2, #f0eee6);
+  --color-surface-container-high: var(--app-spine-surface-2, #f0eee6);
+  --color-surface-container-highest: var(--app-spine-line, #e2dfd5);
+  --color-on-surface: var(--app-spine-text, #141310);
+  --color-on-surface-variant: var(--app-spine-muted, #6d6a60);
+  --color-outline: var(--app-spine-input-border, #8a877c);
+  --color-outline-variant: var(--app-spine-line, #e2dfd5);
+  --color-error: var(--app-spine-danger-text-light, #b8292f);
+  /* dashboard structural tokens -> light */
+  --dash-navbar: rgba(255, 255, 255, 0.85);
+  --dash-navbar-solid: rgba(255, 255, 255, 0.95);
+  --dash-drawer: rgba(255, 255, 255, 0.98);
+  --dash-hairline: rgba(30, 25, 15, 0.10);
+  --dash-hairline-soft: rgba(30, 25, 15, 0.07);
+  --dash-hover: rgba(30, 25, 15, 0.05);
+  --dash-chip: rgba(30, 25, 15, 0.04);
+  --dash-chip-border: rgba(30, 25, 15, 0.10);
+}
+
+:root {
+  /* Cinematic Asset Intelligence - Design System */
+
+  /* Surface / Background (Charcoal to Navy depth) */
+  --color-surface: #141310;
+  --color-surface-dim: #141310;
+  --color-surface-bright: #3b3934;
+  --color-surface-container-lowest: #0f0e0b;
+  --color-surface-container-low: #1d1c18;
+  --color-surface-container: #21201b;
+  --color-surface-container-high: #2b2a26;
+  --color-surface-container-highest: #363530;
+  --color-on-surface: #e6e2db;
+  --color-on-surface-variant: #cbc7ae;
+  --color-inverse-surface: #e6e2db;
+  --color-inverse-on-surface: #32302c;
+  
+  --color-outline: #94917a;
+  --color-outline-variant: #494734;
+
+  /* Primary (Actionable, White & Gold) */
+  --color-primary: #ffffff;
+  --color-on-primary: #343200;
+  --color-primary-container: #efe749; /* Gold */
+  --color-on-primary-container: #6b6700;
+  --color-inverse-primary: #656100;
+  
+  --color-primary-fixed: #efe749;
+  --color-primary-fixed-dim: #d3cb2c;
+  --color-on-primary-fixed: #1e1c00;
+  --color-on-primary-fixed-variant: #4c4900;
+
+  /* Secondary (Cyan highlights) */
+  --color-secondary: #59d5f9;
+  --color-on-secondary: #003642;
+  --color-secondary-container: #00a6c8;
+  --color-on-secondary-container: #003643;
+
+  --color-secondary-fixed: #b3ebff;
+  --color-secondary-fixed-dim: #59d5f9;
+  --color-on-secondary-fixed: #001f27;
+  --color-on-secondary-fixed-variant: #004e5f;
+
+  /* Tertiary */
+  --color-tertiary: #ffffff;
+  --color-on-tertiary: #1f2b67;
+  --color-tertiary-container: #dee0ff;
+  --color-on-tertiary-container: #55609f;
+
+  /* Error */
+  --color-error: #ffb4ab;
+  --color-on-error: #690005;
+  --color-error-container: #93000a;
+  --color-on-error-container: #ffdad6;
+
+  /* Background */
+  --color-background: #141310;
+  --color-on-background: #e6e2db;
+
+  /* Typography Scales */
+  --font-inter: 'Inter', sans-serif;
+  --text-display-lg: 700 48px/1.1 var(--font-inter);
+  --text-headline-lg: 600 32px/1.2 var(--font-inter);
+  --text-headline-md: 600 24px/1.3 var(--font-inter);
+  --text-body-lg: 400 18px/1.6 var(--font-inter);
+  --text-body-md: 400 16px/1.6 var(--font-inter);
+  --text-label-md: 600 14px/1.4 var(--font-inter);
+  --text-label-sm: 500 12px/1.4 var(--font-inter);
+
+  /* Spacing */
+  --spacing-unit: 8px;
+  /* Diarahkan ke token spine (36px). Nilai lama 40px membuat SELURUH isi
+     dashboard 8px lebih sempit dari mock — selisih yang terbawa ke setiap
+     pengukuran lebar baris dan kartu. */
+  --spacing-container-margin: var(--spine-gutter-desktop, 2.25rem);
+  --spacing-gutter: 24px;
+  --spacing-card-gap: 24px;
+  --spacing-section-padding: 64px;
+
+  /* Radii */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;   /* DEFAULT */
+  --radius-lg: 1rem;     /* 16px signature radius */
+  --radius-xl: 1.5rem;
+  --radius-full: 9999px;
+  
+  /* Elevtion & Depth */
+  --shadow-glow: 0 0 20px rgba(89, 213, 249, 0.1);
+  --glass-bg: rgba(21, 33, 93, 0.2);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  background-color: var(--app-bg);
+  color: var(--app-text);
+  font-family: var(--font-inter);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color .25s ease, color .25s ease;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Base Utility Classes */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: var(--glass-border);
+  border-radius: var(--radius-lg);
+}
+
+.btn-primary {
+  background: var(--color-primary-container);
+  color: #000;
+  border: none;
+  border-radius: var(--radius-lg);
+  padding: 12px 24px;
+  font: var(--text-label-md);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(239, 231, 73, 0.3);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--color-secondary);
+  border: 1px solid var(--color-secondary);
+  border-radius: var(--radius-lg);
+  padding: 12px 24px;
+  font: var(--text-label-md);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+  background: rgba(89, 213, 249, 0.1);
+}
+
+.input-field {
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  color: var(--color-on-surface);
+  font: var(--text-body-md);
+  width: 100%;
+  transition: all 0.2s ease;
+}
+
+.input-field:focus {
+  border-color: var(--color-primary-container);
+}
+
+/* Story 1.7: cincin fokus spine menggantikan outline: none (satu ring
+   di semua kontrol — lihat .spine-focus-ring di atas). */
+.input-field:focus-visible {
+  outline: 2px solid var(--spine-ring-color, #efe749);
+  outline-offset: 3px;
+}
+
+/* Google Sign-In (tombol renderButton & popup One Tap) berskema terang. Samakan skema elemen iframe-nya,
+   kalau tidak, di tema gelap (:root color-scheme: dark) iframe tampil sebagai kotak putih bersudut. */
+.gsi-host,
+iframe[src^="https://accounts.google.com/gsi/"],
+#credential_picker_container {
+  color-scheme: light;
+}
+
+/* PasswordInput punya tombol mata sendiri — sembunyikan tombol reveal bawaan Edge. */
+.password-input::-ms-reveal,
+.password-input::-ms-clear {
+  display: none;
+}
+
+/* Mobile (≤768px) — global token + base overrides.
+   Desktop/tablet styles above remain untouched. */
+@media (max-width: 768px) {
+  :root {
+    --text-display-lg: 700 32px/1.15 var(--font-inter);
+    --text-headline-lg: 600 22px/1.25 var(--font-inter);
+    --text-headline-md: 600 18px/1.3 var(--font-inter);
+    --text-body-lg: 400 16px/1.55 var(--font-inter);
+    --text-body-md: 400 14px/1.55 var(--font-inter);
+    --text-label-md: 600 13px/1.4 var(--font-inter);
+    --text-label-sm: 500 11px/1.35 var(--font-inter);
+
+    --spacing-container-margin: 16px;
+    --spacing-gutter: 16px;
+    --spacing-card-gap: 14px;
+    --spacing-section-padding: 32px;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    padding: 12px 18px;
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .input-field {
+    padding: 14px;
+    font-size: 16px; /* iOS won't zoom-on-focus when ≥16px */
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --spacing-container-margin: 12px;
+  }
+}
+
+/* Story 3.24: aturan `.chatMonitor` / `.chatMonitorMain` /
+   `.chatMonitorSide` DIBUANG — ketiganya hanya melayani Chat Monitor
+   versi inline-style lama, yang kini memakai `page.module.css`-nya
+   sendiri. Grep seluruh src/ sebelum dibuang: tidak ada konsumen lain. */
+@media (max-width: 768px) {
+  /* Notification dropdown — full-width sheet on mobile */
+  .notifDropdown {
+    position: fixed !important;
+    top: 64px !important;
+    left: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+    max-height: 70vh !important;
+  }
+}
+
+/* Story 2.1: skip-link "Lewati ke konten" — fokus pertama di body untuk
+   /dashboard/*. Tersembunyi sampai :focus-visible, lalu pill kuning/ink
+   di kiri-atas (di atas semua modal dashboard, z 1200). Target fokusnya
+   <main id> di dashboard/layout.tsx; cincin fokus dari .spine-focus-ring
+   yang dipasang di markup. */
+.spine-skip-link {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 1300;
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 10px 22px;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-yellow);
+  color: var(--app-spine-ink);
+  font-weight: 800;
+  font-size: 0.875rem;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+
+.spine-skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* Story 2.5: teks tersembunyi-visual — dibaca pembaca layar, tidak
+   memakan ruang dan tidak pernah menggeser tata letak. Dipakai untuk
+   pendamping glyph ▲/▼ sort-pills ("urut naik" / "urut turun") dan
+   kalimat ringkasan isi kartu (Story 2.4). Bukan display:none: yang
+   itu justru dibuang dari accessibility tree. */
+.spine-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

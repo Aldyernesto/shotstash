@@ -1,0 +1,81 @@
+{
+  "name": "shotstash",
+  "version": "0.1.0",
+  "description": "Self-hosted media cloud for creators. Your footage, your hardware, your cloud.",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aldyernesto/shotstash.git"
+  },
+  "homepage": "https://github.com/Aldyernesto/shotstash#readme",
+  "bugs": {
+    "url": "https://github.com/Aldyernesto/shotstash/issues"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "tsx server.ts",
+    "dev:db": "pglite-server --db=./.devdb/pgdata --port=55433 --max-connections=10",
+    "dev:seed": "prisma db push && tsx prisma/seed.ts",
+    "dev:db:reset": "node -e \"require('fs').rmSync('.devdb/pgdata',{recursive:true,force:true})\"",
+    "build": "node scripts/check-folder-shell.mjs && next build",
+    "build:folder-shell": "node scripts/build-folder-shell-geometry.mjs",
+    "check:folder-shell": "node scripts/check-folder-shell.mjs",
+    "start": "NODE_ENV=production tsx server.ts",
+    "lint": "eslint",
+    "check:tokens": "node scripts/check-design-tokens.mjs"
+  },
+  "dependencies": {
+    "@apollo/client": "^3.14.1",
+    "@apollo/server": "^5.5.0",
+    "@as-integrations/next": "^4.1.0",
+    "@elastic/elasticsearch": "^9.3.4",
+    "@graphql-tools/schema": "^10.0.33",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "@react-email/components": "^1.0.12",
+    "@types/pg": "^8.20.0",
+    "archiver": "^7.0.1",
+    "bcryptjs": "^3.0.3",
+    "cookie": "^1.1.1",
+    "dotenv": "^17.4.2",
+    "google-auth-library": "^10.6.2",
+    "graphql": "^16.13.2",
+    "graphql-redis-subscriptions": "^2.7.0",
+    "graphql-subscriptions": "^3.0.0",
+    "graphql-tag": "^2.12.6",
+    "graphql-ws": "^6.0.8",
+    "heic-convert": "^2.1.0",
+    "image-size": "^2.0.2",
+    "ioredis": "^5.10.1",
+    "nanoid": "^5.1.11",
+    "next": "16.2.4",
+    "pg": "^8.20.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "rxjs": "^7.8.2",
+    "sharp": "^0.34.5",
+    "uuid": "^14.0.0",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.4.1",
+    "@electric-sql/pglite-socket": "^0.1.1",
+    "@types/archiver": "^7.0.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cookie": "^0.6.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.18.1",
+    "draco3d": "^1.5.7",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.4",
+    "prisma": "^7.8.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5"
+  }
+}
