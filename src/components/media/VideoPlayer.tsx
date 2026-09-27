@@ -39,6 +39,8 @@ export type VideoPlayerHandle = {
   /** true bila permintaan keluar layar penuh benar-benar dilakukan. */
   exitFullscreenIfAny: () => boolean;
   isFullscreen: () => boolean;
+  /** The underlying element (Story 2.3: re-signed share URLs resume from here). */
+  element: () => HTMLVideoElement | null;
 };
 
 /** Ukuran tampil video (SUDAH dikoreksi rotasi oleh browser) + durasi
@@ -62,6 +64,8 @@ export type VideoPlayerProps = {
   onNextFile?: () => void;
   /** Dipanggil begitu lebar × tinggi tampil diketahui (lihat VideoMetadata). */
   onMetadata?: (meta: VideoMetadata) => void;
+  /** The source failed to load (for example an expired signed URL). */
+  onSourceError?: () => void;
 };
 
 const PlayIcon = (
@@ -99,7 +103,7 @@ const ExitFullscreenIcon = (
 );
 
 const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function VideoPlayer(
-  { src, poster, label, playSize = "lg", autoPlay = false, className, onPrevFile, onNextFile, onMetadata },
+  { src, poster, label, playSize = "lg", autoPlay = false, className, onPrevFile, onNextFile, onMetadata, onSourceError },
   ref,
 ) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -126,6 +130,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
 
   useImperativeHandle(ref, () => ({
     isFullscreen: () => !!document.fullscreenElement,
+    element: () => videoRef.current,
     exitFullscreenIfAny: () => {
       if (!document.fullscreenElement) return false;
       void document.exitFullscreen().catch(() => undefined);
@@ -385,6 +390,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
         playsInline
         aria-label={label}
         onClick={togglePlay}
+        onError={onSourceError}
       />
 
       <div className={styles.layer}>

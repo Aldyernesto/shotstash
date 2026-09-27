@@ -1,18 +1,10 @@
+// Chunk upload (Story 2.1 / 2.4): Bearer session, `can(upload)` and
+// ownership of the upload session are required before any byte is written.
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadChunk } from '@/services/upload.service';
 import prisma from '@/lib/prisma';
-
-async function getUserFromHeader(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
-  const token = authHeader.split(' ')[1];
-  const session = await prisma.session.findUnique({
-    where: { token },
-    include: { user: true }
-  });
-  if (!session || session.expiresAt < new Date()) return null;
-  return session.user;
-}
+import { defineRoute, jsonError } from '@/lib/defineRoute';
+import { can } from '@/modules/auth';
 
 // Manual multipart parser — handles chunked transfer encoding from nginx
 // proxy_request_buffering off causes req.formData() to fail
@@ -57,31 +49,38 @@ async function parseMultipart(req: NextRequest): Promise<{
   return { sessionId, chunkIndex, chunkData };
 }
 
-export async function POST(req: NextRequest) {
-  const startMs = Date.now();
-  console.log(`[chunk] REQ content-type=${req.headers.get('content-type')} content-length=${req.headers.get('content-length')} cf-ray=${req.headers.get('cf-ray')} cf-ipcountry=${req.headers.get('cf-ipcountry')}`);
-  try {
-    const user = await getUserFromHeader(req);
-    console.log(`[chunk] user=${user?.id || 'null'} email=${user?.email || 'null'}`);
+export const POST = defineRoute({
+  auth: 'session',
+  action: 'upload',
+  handler: async ({ req, actor }) => {
+    const startMs = Date.now();
+    if (!can(actor, 'upload')) return jsonError(403, 'FORBIDDEN', 'Forbidden: upload');
 
     const parsed = await parseMultipart(req);
-    if (!parsed) {
-      console.log(`[chunk] PARSE FAILED after ${Date.now() - startMs}ms`);
-      return NextResponse.json({ error: 'Invalid multipart data' }, { status: 400 });
+    if (!parsed) return jsonError(400, 'BAD_REQUEST', 'Invalid multipart data');
+
+    const session = await prisma.uploadSession.findUnique({
+      where: { id: parsed.sessionId },
+      select: { uploadedById: true },
+    });
+    if (!session) return jsonError(404, 'NOT_FOUND', 'Upload session not found');
+    if (!can(actor, 'upload', { ownerId: session.uploadedById })) {
+      return jsonError(403, 'FORBIDDEN', 'Upload session belongs to another user');
+    }
+    if (!Number.isInteger(parsed.chunkIndex) || parsed.chunkIndex < 0) {
+      return jsonError(400, 'BAD_REQUEST', 'Invalid chunk index');
     }
 
-    console.log(`[chunk] PARSED sessionId=${parsed.sessionId} chunkIndex=${parsed.chunkIndex} dataSize=${parsed.chunkData.length}`);
-
-    await uploadChunk({
-      sessionId: parsed.sessionId,
-      chunkIndex: parsed.chunkIndex,
-      chunkData: parsed.chunkData,
-    });
-
-    console.log(`[chunk] DONE sessionId=${parsed.sessionId} chunkIndex=${parsed.chunkIndex} elapsed=${Date.now() - startMs}ms`);
+    try {
+      await uploadChunk({
+        sessionId: parsed.sessionId,
+        chunkIndex: parsed.chunkIndex,
+        chunkData: parsed.chunkData,
+      });
+    } catch (error) {
+      console.error(`[chunk] failed after ${Date.now() - startMs}ms:`, (error as Error)?.message);
+      return jsonError(409, 'UPLOAD_FAILED', 'Chunk could not be stored');
+    }
     return NextResponse.json({ success: true, chunkIndex: parsed.chunkIndex });
-  } catch (error: any) {
-    console.error(`[chunk] ERROR after ${Date.now() - startMs}ms:`, error.message || error);
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
-  }
-}
+  },
+});

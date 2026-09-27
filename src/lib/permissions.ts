@@ -1,40 +1,26 @@
 /**
- * Story 2.18 — SATU sumber kebenaran gerbang role untuk ruang kerja berkas.
+ * UI gates (Stories 2.18 / 2.4).
  *
- * ============================================================
- * TABEL KEPUTUSAN (ditulis sekali, di sini, dan tidak di tempat lain)
- * ============================================================
- *   Lihat / Preview / Share ................ semua role
- *   New Project ............................ SUPER_ADMIN, ADMIN, FIELD_CREW
- *   New Section ............................ SUPER_ADMIN, ADMIN, FIELD_CREW
- *   Upload Files / Upload to {Section} ..... SUPER_ADMIN, ADMIN, FIELD_CREW
- *   Seret file dari komputer (drop) ........ SUPER_ADMIN, ADMIN, FIELD_CREW
- *   Rename ................................. SUPER_ADMIN, ADMIN
- *   Move to… / Copy to… / seret-pindah ..... SUPER_ADMIN, ADMIN
- *   Delete Project ......................... SUPER_ADMIN, ADMIN
- *   Move to Trash (satuan & massal) ........ SUPER_ADMIN, ADMIN
- *   Trash management (halaman Trash) ....... SUPER_ADMIN, ADMIN
- *   Admin tools ............................ SUPER_ADMIN, ADMIN
- *   Admin Panel ............................ SUPER_ADMIN
+ * The rules live on the server in `src/modules/auth/permissions.ts`
+ * (`can()`); the UI reads `me.permissions` (cached on the AuthContext user)
+ * and never re-implements role rules. Every gate below answers "is this
+ * action in the user's permission list".
  *
- * VIEWER: `canUpload` bernilai salah; hanya lihat, preview, unduh, dan share.
+ *   New Project / New Section ............... section.create
+ *   Upload (button, drop, "Upload to") ...... upload
+ *   Rename, Move, Copy, drag-move ........... item.move
+ *   Move to Trash, Restore .................. item.trash
+ *   Trash page .............................. trash.view
+ *   Delete Forever (purge) .................. trash.purge
+ *   Share ................................... share.manage
+ *   Admin tools and Admin Panel ............. users.manage
  *
- * ============================================================
- * KONTRAK
- * ============================================================
- * 1. Satu fungsi murni per gerbang, `user.role` sebagai SATU-SATUNYA
- *    masukan. Tidak ada state, tidak ada fetch, tidak ada React.
- * 2. Aksi yang tidak boleh **tidak dirender sama sekali**. Modul ini
- *    sengaja TIDAK menyediakan jalur "render tetapi nonaktif" — tidak ada
- *    `disabled`, `aria-disabled`, atau tombol redup yang menolak setelah
- *    ditekan. Karena elemennya tidak ada di DOM, tidak ada perhentian Tab
- *    tersembunyi dan urutan Tab tetap mengikuti urutan baca.
- * 3. Ini LAPISAN TAMPILAN, bukan pengganti otorisasi server. Resolver,
- *    `typeDefs`, dan `prisma/schema.prisma` tidak diubah oleh story ini;
- *    membuka tujuan yang tidak berhak lewat URL langsung tetap dialihkan
- *    ke `/dashboard` seperti sekarang.
- * 4. Tidak ada aturan hak akses BARU dan tidak ada yang dilonggarkan
- *    dibanding perilaku sebelum story ini.
+ * Contract kept from Story 2.18: a denied action is NOT rendered (no
+ * disabled twin, no hidden Tab stop). This is a display layer; the server
+ * enforces the same rules on every write.
+ *
+ * Role label helpers at the end stay role-based: they name a role, they do
+ * not grant anything.
  */
 
 export type MamRole = "SUPER_ADMIN" | "ADMIN" | "FIELD_CREW" | "EDITOR" | "VIEWER";
@@ -49,63 +35,67 @@ function roleOf(subject: RoleLike): string | null {
 }
 
 /* ------------------------------------------------------------------ */
-/* Gerbang identitas role                                              */
+/* Role identity (labels and target display only, never a gate)        */
 /* ------------------------------------------------------------------ */
 
 export function isSuperAdmin(subject: RoleLike): boolean {
   return roleOf(subject) === "SUPER_ADMIN";
 }
 
-/** SUPER_ADMIN ATAU ADMIN — pasangan "admin-like" yang dipakai tabel di atas. */
-export function isAdmin(subject: RoleLike): boolean {
-  const role = roleOf(subject);
-  return role === "SUPER_ADMIN" || role === "ADMIN";
-}
-
-export function isCrew(subject: RoleLike): boolean {
-  return roleOf(subject) === "FIELD_CREW";
-}
-
-export function isEditor(subject: RoleLike): boolean {
-  return roleOf(subject) === "EDITOR";
-}
-
-export function isViewer(subject: RoleLike): boolean {
-  return roleOf(subject) === "VIEWER";
-}
-
 /* ------------------------------------------------------------------ */
-/* Gerbang aksi                                                        */
+/* Permission gates                                                    */
 /* ------------------------------------------------------------------ */
 
-/** "+ New Project" dan "+ New Folder" (New Section). */
-export function canCreateProject(subject: RoleLike): boolean {
-  return isAdmin(subject) || isCrew(subject);
+/** A user object carrying `permissions` from `me`. */
+export type PermissionSubject = { permissions?: readonly string[] | null } | null | undefined;
+
+export function hasPermission(subject: PermissionSubject, action: string): boolean {
+  return !!subject?.permissions?.includes(action);
 }
 
-/** "Upload Files", "Upload to {Section}", dan seret file dari komputer. */
-export function canUpload(subject: RoleLike): boolean {
-  return isAdmin(subject) || isCrew(subject);
+/** "+ New Project" and "+ New Folder" (New Section). */
+export function canCreateProject(subject: PermissionSubject): boolean {
+  return hasPermission(subject, "section.create");
 }
 
-/** Rename, "Move to…", "Copy to…", seret-untuk-memindahkan, Delete Project. */
-export function canMove(subject: RoleLike): boolean {
-  return isAdmin(subject);
+/** "Upload Files", "Upload to {Section}", and dropping files from the computer. */
+export function canUpload(subject: PermissionSubject): boolean {
+  return hasPermission(subject, "upload");
 }
 
-/** "Move to Trash" satuan maupun massal, dan halaman Trash. */
-export function canManageTrash(subject: RoleLike): boolean {
-  return isAdmin(subject);
+/** Rename, "Move to...", "Copy to...", drag-to-move. */
+export function canMove(subject: PermissionSubject): boolean {
+  return hasPermission(subject, "item.move");
 }
 
-/** Admin tools. */
-export function canSeeAdminTools(subject: RoleLike): boolean {
-  return isAdmin(subject);
+/** "Move to Trash" (single and bulk) and Restore. */
+export function canManageTrash(subject: PermissionSubject): boolean {
+  return hasPermission(subject, "item.trash");
 }
 
-/** Admin Panel. */
-export function canOpenAdminPanel(subject: RoleLike): boolean {
-  return isSuperAdmin(subject);
+/** The Trash page. */
+export function canViewTrash(subject: PermissionSubject): boolean {
+  return hasPermission(subject, "trash.view");
+}
+
+/** "Delete Forever" in the Trash, and deleting a whole Project. */
+export function canPurgeTrash(subject: PermissionSubject): boolean {
+  return hasPermission(subject, "trash.purge");
+}
+
+/** Create and revoke share links. */
+export function canShare(subject: PermissionSubject): boolean {
+  return hasPermission(subject, "share.manage");
+}
+
+/** Admin tools in the nav. */
+export function canSeeAdminTools(subject: PermissionSubject): boolean {
+  return hasPermission(subject, "users.manage");
+}
+
+/** Admin Panel (user management). */
+export function canOpenAdminPanel(subject: PermissionSubject): boolean {
+  return hasPermission(subject, "users.manage");
 }
 
 /* ------------------------------------------------------------------ */

@@ -16,6 +16,7 @@ import fieldStyles from '@/components/form/TextField.module.css';
 import { FormAlert } from '@/components/form/FormAlert';
 import { ButtonPrimary, TextLink } from '@/components/form/buttons';
 import { GOOGLE_ONLY_MARKER } from '@/lib/authMessages';
+import { issueMediaCookie } from '@/lib/authClient';
 // Story 1.31: email hasil reset dibawa lewat sessionStorage (bukan query param).
 import { LOGIN_PREFILL_KEY } from '@/app/forgot-password/shared';
 
@@ -258,6 +259,7 @@ const LOGIN_MUTATION = gql`
         avatarUrl
         accountStatus
         onboardedAt
+        permissions
       }
     }
   }
@@ -371,10 +373,12 @@ export default function LandingPage() {
           holdBusy = true;
           setPendingNotice(true);
           try { localStorage.setItem('shotstash_token', data.login.token); } catch {}
+          await issueMediaCookie(data.login.token);
           window.location.href = lu.onboardedAt ? '/pending' : '/onboarding';
           return;
         }
         console.warn('[Login] Success! Calling authLogin...');
+        await issueMediaCookie(data.login.token);
         authLogin(lu, data.login.token);
         return;
       }
@@ -411,6 +415,7 @@ export default function LandingPage() {
       if (data?.register?.success && data?.register?.token && data?.register?.user) {
         // simpan token lalu arahkan ke onboarding (JANGAN langsung dashboard)
         try { localStorage.setItem('shotstash_token', data.register.token); } catch {}
+        await issueMediaCookie(data.register.token);
         window.location.href = '/onboarding';
         return;
       }
@@ -592,12 +597,13 @@ export default function LandingPage() {
                 try {
                   const res = await fetch('/api/graphql', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: 'mutation GoogleAuth($idToken:String!){googleAuth(idToken:$idToken){token user{id name email role avatarUrl accountStatus onboardedAt}}}', variables: { idToken: token } }),
+                    body: JSON.stringify({ query: 'mutation GoogleAuth($idToken:String!){googleAuth(idToken:$idToken){token user{id name email role avatarUrl accountStatus onboardedAt permissions}}}', variables: { idToken: token } }),
                   });
                   const json = await res.json();
                   if (json.data?.googleAuth?.token) {
                     const gu = json.data.googleAuth.user;
                     try { localStorage.setItem('shotstash_token', json.data.googleAuth.token); } catch {}
+                    await issueMediaCookie(json.data.googleAuth.token);
                     // User Google baru berstatus PENDING -> arahkan ke onboarding.
                     if (gu?.accountStatus && gu.accountStatus !== 'ACTIVE') {
                       // Story 1.23: baris status yang sama (bukan pesan error)

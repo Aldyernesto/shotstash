@@ -4,18 +4,13 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useApolloClient } from "@apollo/client";
+import { issueMediaCookie, serverLogout } from "@/lib/authClient";
 
 if (typeof window !== "undefined") {
   console.warn("[BUILD-MARKER] AuthContext module loaded at", new Date().toISOString());
 }
 
 export type UserRole = "SUPER_ADMIN" | "ADMIN" | "FIELD_CREW" | "EDITOR" | "VIEWER";
-
-export const CAN_UPLOAD: UserRole[] = ["SUPER_ADMIN", "ADMIN", "FIELD_CREW"];
-export const CAN_DOWNLOAD: UserRole[] = ["SUPER_ADMIN", "ADMIN", "EDITOR", "FIELD_CREW", "VIEWER"];
-export const CAN_MANAGE_USERS: UserRole[] = ["SUPER_ADMIN"];
-export const CAN_CREATE_PROJECT: UserRole[] = ["SUPER_ADMIN", "ADMIN", "FIELD_CREW"];
-export const CAN_SHARE: UserRole[] = ["SUPER_ADMIN", "ADMIN", "FIELD_CREW", "EDITOR"];
 
 export interface User {
   id: string;
@@ -24,6 +19,8 @@ export interface User {
   name?: string;
   avatarUrl?: string | null;
   accountStatus?: string; // ACTIVE | PENDING | REJECTED
+  /** Story 2.4: actions from `me.permissions`; the UI gates controls on this only. */
+  permissions?: string[];
 }
 
 interface AuthContextType {
@@ -53,11 +50,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const res = await fetch('/api/graphql', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ['Authori'+'zation']: 'Bearer ' + storedToken },
-            body: JSON.stringify({ query: '{ me { id email role name avatarUrl accountStatus } }' }),
+            body: JSON.stringify({ query: '{ me { id email role name avatarUrl accountStatus permissions } }' }),
           });
           const data = await res.json();
           if (data?.data?.me) {
             const me = data.data.me;
+            // Media cookie for thumbnails, covers and the viewer (also renews it).
+            await issueMediaCookie(storedToken);
             setUser(me);
             localStorage.setItem("shotstash_user", JSON.stringify(me));
             // Gerbang approval: akun belum ACTIVE tidak boleh masuk studio.
@@ -93,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.warn('[AuthContext] login called:', userData.email, userData.role);
     localStorage.setItem("shotstash_user", JSON.stringify(userData));
     localStorage.setItem("shotstash_token", token);
+    void issueMediaCookie(token);
     // flushSync ensures React commits the state update synchronously
     // BEFORE we navigate — prevents race condition where dashboard
     // sees isAuthenticated=false and redirects back to login
@@ -105,6 +105,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     console.warn('[AuthContext] logout called');
+    // Revoke the session on the server and clear the media cookie.
+    void serverLogout(localStorage.getItem("shotstash_token"));
     setUser(null);
     localStorage.removeItem("shotstash_user");
     localStorage.removeItem("shotstash_token");

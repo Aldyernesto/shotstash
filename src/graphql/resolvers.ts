@@ -14,12 +14,40 @@ import * as PasswordReset from '../services/password-reset.service';
 import prisma from '../lib/prisma';
 import { esClient } from '../lib/elasticsearch';
 import { pubsub } from '../lib/pubsub';
+import { isRenderableImageUrl, mediaUrl } from '../lib/mediaUrls';
+import {
+  assertCan,
+  assertCanWriteSelf,
+  can,
+  canManageUser,
+  forbidden,
+  isAdminRole,
+  permissionsFor,
+  type Actor,
+  type UserChange,
+} from '@/modules/auth';
+import { applyAuthMap } from './withAuth';
+import { loginLimit } from '../lib/rateLimit';
+import { GraphQLError } from 'graphql';
+
+// Same throttle as REST login (10 per 15 min per IP, plus per email for passwords).
+async function assertLoginRate(context: GraphQLContext, email?: string | null) {
+  const retryAfter = await loginLimit(context.ip, email);
+  if (retryAfter !== null) {
+    throw new GraphQLError('Too many attempts', { extensions: { code: 'RATE_LIMITED', retryAfter } });
+  }
+}
 
 export interface GraphQLContext {
   req: Request;
   res?: Response;
+  /** Id of the active signed-in user (same as actor.id). */
   userId?: string;
   sessionId?: string;
+  /** Bearer token of this request, used by logout. */
+  sessionToken?: string;
+  /** Resolved from the Bearer session; null or undefined when signed out or inactive. */
+  actor?: Actor | null;
   // IP klien (Cloudflare/nginx header) — dipakai limit per IP reset password.
   ip?: string;
 }
@@ -32,9 +60,47 @@ const DOC_EXTS = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'cs
 type MamRole = 'SUPER_ADMIN' | 'ADMIN' | 'FIELD_CREW' | 'EDITOR' | 'VIEWER';
 const PUBLIC_SIGNUP_ROLES: MamRole[] = ['EDITOR', 'FIELD_CREW', 'VIEWER'];
 const TEAM_CREATE_ROLES: MamRole[] = ['ADMIN', 'FIELD_CREW', 'EDITOR', 'VIEWER'];
-function isSuperAdmin(user?: { role?: string } | null) { return user?.role === 'SUPER_ADMIN'; }
-function isAdminLike(user?: { role?: string } | null) { return user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN'; }
-function canCreateProject(user?: { role?: string } | null) { return isAdminLike(user) || user?.role === 'FIELD_CREW'; }
+
+// Story 2.4: `applyAuthMap` guarantees an active actor on `session` fields.
+function actorOf(context: GraphQLContext): Actor {
+  if (!context.actor) throw forbidden();
+  return context.actor;
+}
+
+async function superAdminCount(): Promise<number> {
+  return prisma.user.count({ where: { role: 'SUPER_ADMIN', active: true } });
+}
+
+// User-management target guard (Story 2.4): throws FORBIDDEN when the change is not allowed.
+async function assertManageUser(context: GraphQLContext, targetId: string, change: UserChange) {
+  const actor = actorOf(context);
+  const target = await prisma.user.findUnique({ where: { id: targetId }, select: { id: true, role: true } });
+  if (!target) throw new Error('User tidak ditemukan.');
+  if (!canManageUser(actor, target, change, await superAdminCount())) {
+    throw forbidden(`Forbidden: users.manage (${change.kind})`);
+  }
+  return target;
+}
+
+// Every folder id in a subtree, trashed or not (hard deletes revoke links first).
+async function allSubtreeFolderIds(rootId: string): Promise<string[]> {
+  const ids = [rootId];
+  let frontier = [rootId];
+  let guard = 0;
+  while (frontier.length && guard++ < 64) {
+    const children = await prisma.folder.findMany({ where: { parentId: { in: frontier } }, select: { id: true } });
+    frontier = children.map((c) => c.id);
+    ids.push(...frontier);
+  }
+  return ids;
+}
+
+async function assertUploadOwner(context: GraphQLContext, sessionId: string) {
+  const actor = actorOf(context);
+  const session = await prisma.uploadSession.findUnique({ where: { id: sessionId }, select: { uploadedById: true } });
+  if (!session) throw new Error('Upload session tidak ditemukan');
+  assertCan(actor, 'upload', { ownerId: session.uploadedById });
+}
 // Aksi admin berisiko (reset password / hapus akun): target tidak boleh diri sendiri.
 // Target SUPER_ADMIN & user tidak ditemukan ditolak di AuthService (AdminActionError).
 function adminTargetError(callerId: string, targetId: string): string | null {
@@ -187,8 +253,8 @@ function summarizeCounts(rows: { mimeType: string; _count: { _all: number } }[])
 // Batas sampel dijepit di server (AC 2.4): Project maks 5, Folder maks 3.
 const REPFILE_MAX = { project: 5, folder: 3 } as const;
 
-// Bentuk RepFile dari baris mediaFile: sumber thumbnail = thumbnailPath yang
-// sudah dipakai klien (/api/thumbnail/{id}, TANPA route/parameter baru);
+// Bentuk RepFile dari baris mediaFile: sumber thumbnail = /media/t/{id}
+// (cookie session, Story 2.2);
 // thumbnail belum dibuat → null (file tetap di sampel). Tidak ada kolom
 // duration di DB → selalu null; extension hanya untuk dokumen ("PDF", …).
 function toRepFile(file: {
@@ -202,7 +268,7 @@ function toRepFile(file: {
   return {
     id: file.id,
     kind,
-    thumbnailUrl: file.thumbnailPath ? `/api/thumbnail/${file.id}` : null,
+    thumbnailUrl: file.thumbnailPath ? mediaUrl.thumbnail(file.id) : null,
     duration: null as number | null,
     extension: ext || null,
   };
@@ -284,12 +350,10 @@ function decorateShareLink<
   };
 }
 
-export const resolvers = {
+const rawResolvers = {
   Query: {
     pendingUsers: async (_: any, __: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
-      const admin = await prisma.user.findUnique({ where: { id: context.userId } });
-      if (!isAdminLike(admin)) throw new Error('Forbidden: admin only');
+      assertCan(context.actor, 'users.manage');
       return prisma.user.findMany({
         where: { accountStatus: 'PENDING' },
         orderBy: { createdAt: 'desc' },
@@ -298,36 +362,32 @@ export const resolvers = {
     passwordResetAvailable: () => PasswordReset.isPasswordResetAvailable(),
 
     me: async (_: any, __: any, context: GraphQLContext) => {
-      if (!context.userId) return null;
-      const user = await prisma.user.findUnique({ where: { id: context.userId } });
+      if (!context.actor) return null;
+      const user = await prisma.user.findUnique({ where: { id: context.actor.id } });
       if (!user || !user.active) return null;
       return user;
     },
 
     users: async (_: any, __: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
-      const currentUser = await prisma.user.findUnique({ where: { id: context.userId } });
-      if (!isSuperAdmin(currentUser)) {
-        throw new Error('Forbidden: SUPER_ADMIN only');
-      }
+      assertCan(context.actor, 'users.manage');
       return AuthService.getUsers();
     },
 
     projects: async (_: any, __: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCan(context.actor, 'project.view');
       const projects = await prisma.project.findMany({
         orderBy: { createdAt: 'desc' },
         include: { files: true, folders: true, chats: { include: { sender: true }, orderBy: { createdAt: 'asc' } } },
       });
-      // Strip local file paths from coverImage (set from mobile, lost on reinstall)
+      // Keep only covers the browser can load: absolute http(s) or our /media/ path.
       return projects.map((p) => ({
         ...p,
-        coverImage: p.coverImage?.startsWith('http') ? p.coverImage : null,
+        coverImage: isRenderableImageUrl(p.coverImage) ? p.coverImage : null,
       }));
     },
 
     project: async (_: any, { id }: { id: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCan(context.actor, 'project.view');
       return prisma.project.findUnique({
         where: { id },
         include: {
@@ -338,7 +398,7 @@ export const resolvers = {
     },
 
     folder: async (_: any, { id }: { id: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCan(context.actor, 'project.view');
       return prisma.folder.findUnique({
         where: { id },
         include: {
@@ -350,7 +410,7 @@ export const resolvers = {
     },
 
     searchFolders: async (_: any, { query, projectId }: { query: string; projectId?: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCan(context.actor, 'project.view');
       return prisma.folder.findMany({
         where: {
           name: { contains: query, mode: 'insensitive' },
@@ -363,7 +423,7 @@ export const resolvers = {
     },
 
     searchFiles: async (_: any, { query, projectId }: { query: string; projectId?: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCan(context.actor, 'project.view');
       // Try ES first, fall back to DB if ES fails or returns empty
       let hits: any[] = [];
       try {
@@ -399,13 +459,13 @@ export const resolvers = {
     },
 
     shareLinks: async (_: any, __: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      const actor = actorOf(context);
+      assertCan(actor, 'share.manage');
 
-      const user = await prisma.user.findUnique({ where: { id: context.userId } });
-      if (!user) throw new Error('Unauthorized');
-
-      // Admin sees all, Editor sees only their own
-      const where = isAdminLike(user) ? {} : { createdById: context.userId };
+      // Admin sees all live links, other roles only their own (same rule as revoke).
+      const where = isAdminRole(actor.role)
+        ? { revokedAt: null }
+        : { createdById: actor.id, revokedAt: null };
 
       const links = await prisma.shareLink.findMany({
         where,
@@ -427,10 +487,8 @@ export const resolvers = {
       { fileId, folderId, projectId }: { fileId?: string | null; folderId?: string | null; projectId?: string | null },
       context: GraphQLContext,
     ) => {
-      if (!context.userId) throw new Error('Unauthorized');
-
-      const user = await prisma.user.findUnique({ where: { id: context.userId } });
-      if (!user) throw new Error('Unauthorized');
+      const actor = actorOf(context);
+      assertCan(actor, 'share.manage');
 
       const targets = [
         fileId ? { fileId } : null,
@@ -444,7 +502,8 @@ export const resolvers = {
       const links = await prisma.shareLink.findMany({
         where: {
           ...targets[0],
-          ...(isAdminLike(user) ? {} : { createdById: context.userId }),
+          revokedAt: null,
+          ...(isAdminRole(actor.role) ? {} : { createdById: actor.id }),
         },
         // createdBy ikut dimuat di sini supaya baris "dibuat {nama}" tidak
         // menembakkan satu query per link (database dev berkolam satu koneksi).
@@ -456,11 +515,7 @@ export const resolvers = {
     },
 
     storageStats: async (_: any, __: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
-      const currentUser = await prisma.user.findUnique({ where: { id: context.userId } });
-      if (!isSuperAdmin(currentUser)) {
-        throw new Error('Forbidden: SUPER_ADMIN only');
-      }
+      assertCan(context.actor, 'instance.configure');
       const totalFiles = await prisma.mediaFile.count();
       const totalProjects = await prisma.project.count();
       const sizeResult = await prisma.mediaFile.aggregate({ _sum: { size: true } });
@@ -499,7 +554,7 @@ export const resolvers = {
     },
 
     allTrashedFiles: async (_: any, __: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCan(context.actor, 'trash.view');
       return prisma.mediaFile.findMany({
         where: { trashedAt: { not: null } },
         include: { folder: { include: { project: true } } },
@@ -508,7 +563,7 @@ export const resolvers = {
     },
 
     allTrashedFolders: async (_: any, __: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCan(context.actor, 'trash.view');
       return prisma.folder.findMany({
         where: { trashedAt: { not: null } },
         include: { project: true },
@@ -518,10 +573,15 @@ export const resolvers = {
   },
 
   Mutation: {
-    login: async (_: any, { email, password, userAgent, ipAddress }: any, context: GraphQLContext) => {
+    login: async (_: any, { email, password }: { email: string; password: string }, context: GraphQLContext) => {
+      await assertLoginRate(context, email);
       try {
         const user = await AuthService.loginUser(email, password);
-        const session = await AuthService.createSession(user.id, { ip: ipAddress, userAgent });
+        // IP and user agent come from the request, never from the client.
+        const session = await AuthService.createSession(user.id, {
+          ip: context.ip,
+          userAgent: context.req?.headers?.get('user-agent') ?? undefined,
+        });
         return {
           success: true,
           token: session.token,
@@ -568,26 +628,26 @@ export const resolvers = {
     },
 
     logout: async (_: any, __: any, context: GraphQLContext) => {
-      if (!context.sessionId) return false;
-      await AuthService.destroySession(context.sessionId);
-      return true;
+      if (!context.sessionToken) return false;
+      return AuthService.destroySession(context.sessionToken);
     },
 
     register: async (_: any, { input }: any, context: GraphQLContext) => {
+      if (!context.actor) await assertLoginRate(context);
       const requestedRole = (input.role || null) as MamRole | null;
       const answers = parseSignupAnswers(input.signupAnswers);
+      const adminCreate = !!context.actor;
       // Signup publik: role yang diminta hanya boleh dari PUBLIC_SIGNUP_ROLES (kalau diisi).
-      if (!context.userId && requestedRole && !PUBLIC_SIGNUP_ROLES.includes(requestedRole)) {
+      if (!adminCreate && requestedRole && !PUBLIC_SIGNUP_ROLES.includes(requestedRole)) {
         return { success: false, message: 'Role yang diminta tidak valid untuk pendaftaran publik' };
       }
 
-      // Admin-authenticated: admin creating user for team
-      if (context.userId) {
-        const currentUser = await prisma.user.findUnique({ where: { id: context.userId } });
-        if (!isSuperAdmin(currentUser)) {
-          return { success: false, message: 'Forbidden: SUPER_ADMIN only' };
+      // Signed in: an admin creating a team account (users.manage).
+      if (adminCreate) {
+        if (!requestedRole || !canManageUser(context.actor, null, { kind: 'create', role: requestedRole }, 0)) {
+          throw forbidden('Forbidden: users.manage');
         }
-        if (!requestedRole || !TEAM_CREATE_ROLES.includes(requestedRole)) {
+        if (!TEAM_CREATE_ROLES.includes(requestedRole)) {
           return { success: false, message: 'Super Admin hanya boleh membuat Admin, Editor, Field Crew, atau Viewer dari panel ini' };
         }
       }
@@ -600,10 +660,10 @@ export const resolvers = {
           password: input.password,
           role: requestedRole || undefined,
           signupAnswers: answers,
-          approved: !!context.userId, // admin-created -> langsung aktif; publik -> PENDING
+          approved: adminCreate, // admin-created -> langsung aktif; publik -> PENDING
         });
         // For public sign-up, auto-create session
-        if (!context.userId) {
+        if (!adminCreate) {
           const session = await AuthService.createSession(user.id);
           return { success: true, user, token: session.token };
         }
@@ -614,21 +674,18 @@ export const resolvers = {
     },
 
     createProject: async (_: any, { input }: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
-      const currentUser = await prisma.user.findUnique({ where: { id: context.userId } });
-      if (!canCreateProject(currentUser)) {
-        throw new Error('Forbidden: ADMIN or FIELD_CREW only');
-      }
-      return ProjectService.createProject(input.title, input.description, input.coverImage);
+      assertCan(context.actor, 'section.create');
+      const cover = isRenderableImageUrl(input.coverImage) ? input.coverImage : undefined;
+      return ProjectService.createProject(input.title, input.description, cover);
     },
 
     createFolder: async (_: any, { projectId, name, parentId }: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCan(context.actor, 'section.create');
       return FolderService.createFolder(projectId, name, parentId);
     },
 
     renameFolder: async (_: any, { folderId, name }: { folderId: string; name: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCan(context.actor, 'item.move');
       const folder = await prisma.folder.findUnique({ where: { id: folderId } });
       if (!folder) throw new Error('Folder not found');
       return prisma.folder.update({
@@ -639,11 +696,8 @@ export const resolvers = {
     },
 
     initiateUpload: async (_: any, { input }: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
-      const currentUser = await prisma.user.findUnique({ where: { id: context.userId } });
-      if (!canCreateProject(currentUser)) {
-        throw new Error('Forbidden: ADMIN or FIELD_CREW only');
-      }
+      const actor = actorOf(context);
+      assertCan(actor, 'upload');
 
       // Validate file type — check inherited folder rules from root default folders
       if (input.folderId) {
@@ -657,7 +711,7 @@ export const resolvers = {
 
       const countryCode = context.req.headers.get('cf-ipcountry') || undefined;
       const result = await UploadService.initiateUpload({
-        uploadedById: context.userId,
+        uploadedById: actor.id,
         projectId: input.projectId,
         filename: input.filename,
         totalSize: BigInt(input.totalSize),
@@ -680,14 +734,15 @@ export const resolvers = {
     },
 
     completeUpload: async (_: any, { sessionId, r2Key, convertHeic }: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      await assertUploadOwner(context, sessionId);
       return UploadService.completeUpload(sessionId, r2Key, convertHeic);
     },
 
     createShareLink: async (_: any, { input }: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      const actor = actorOf(context);
+      assertCan(actor, 'share.manage');
       return ShareService.createShareLink({
-        createdById: context.userId,
+        createdById: actor.id,
         mode: input.mode,
         fileId: input.fileId,
         folderId: input.folderId,
@@ -697,22 +752,29 @@ export const resolvers = {
     },
 
     revokeShareLink: async (_: any, { id }: { id: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
-      return ShareService.revokeShareLink(id, context.userId);
+      const actor = actorOf(context);
+      // Same rule as the Shared page: admins revoke any link, others only their own.
+      // "Not found" and "not yours" answer the same sentence.
+      assertCan(actor, 'share.manage');
+      const link = await ShareService.getShareLinkOwner(id);
+      if (!link || link.revokedAt || !can(actor, 'share.manage', { ownerId: link.createdById })) {
+        throw forbidden('Link tidak ditemukan atau bukan milikmu.');
+      }
+      return ShareService.revokeShareLink(id);
     },
 
     markNotificationsRead: async (_: any, __: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
-      return NotifService.markAllRead(context.userId);
+      assertCanWriteSelf(context.actor);
+      return NotifService.markAllRead(context.actor.id);
     },
 
     completeOnboarding: async (_: any, { requestedRole, signupAnswers }: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCanWriteSelf(context.actor);
       const role = requestedRole as MamRole;
       if (!PUBLIC_SIGNUP_ROLES.includes(role)) throw new Error('Role tidak valid');
       const answers = parseSignupAnswers(signupAnswers);
       const user = await prisma.user.update({
-        where: { id: context.userId },
+        where: { id: context.actor.id },
         data: {
           requestedRole: role,
           signupAnswers: answers === undefined ? undefined : answers,
@@ -724,16 +786,14 @@ export const resolvers = {
     },
 
     approveUser: async (_: any, { userId, role }: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
-      const admin = await prisma.user.findUnique({ where: { id: context.userId } });
-      if (!isAdminLike(admin)) throw new Error('Forbidden: admin only');
+      await assertManageUser(context, userId, { kind: 'approve', role });
       const user = await prisma.user.update({
         where: { id: userId },
         data: {
           role: role as MamRole,
           accountStatus: 'ACTIVE',
           active: true,
-          approvedById: context.userId,
+          approvedById: actorOf(context).id,
           approvedAt: new Date(),
         },
       });
@@ -741,9 +801,7 @@ export const resolvers = {
     },
 
     rejectUser: async (_: any, { userId }: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
-      const admin = await prisma.user.findUnique({ where: { id: context.userId } });
-      if (!isAdminLike(admin)) throw new Error('Forbidden: admin only');
+      await assertManageUser(context, userId, { kind: 'reject' });
       const user = await prisma.user.update({
         where: { id: userId },
         data: { accountStatus: 'REJECTED', active: false },
@@ -751,12 +809,14 @@ export const resolvers = {
       return user;
     },
 
-    googleAuth: async (_: any, { idToken }: any) => {
+    googleAuth: async (_: any, { idToken }: any, context: GraphQLContext) => {
+      await assertLoginRate(context);
       return GoogleAuth.googleAuth(idToken);
     },
 
     sendMessage: async (_: any, { projectId, message, referencedFileId }: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      const actor = actorOf(context);
+      assertCan(actor, 'discussion.use');
       // Auto-use or create "Community" project for global chat
       let pid = projectId;
       if (!pid) {
@@ -768,12 +828,12 @@ export const resolvers = {
           pid = created.id;
         }
       }
-      const chat = await ChatService.sendMessage(context.userId, pid, message, referencedFileId);
+      const chat = await ChatService.sendMessage(actor.id, pid, message, referencedFileId);
       return chat;
     },
 
     updateProfile: async (_: any, { name, avatarUrl }: { name?: string; avatarUrl?: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCanWriteSelf(context.actor);
       const data: any = {};
       if (typeof name === 'string') {
         const trimmed = name.trim();
@@ -782,36 +842,25 @@ export const resolvers = {
         data.name = trimmed;
       }
       if (typeof avatarUrl === 'string') {
+        if (avatarUrl.length > 0 && !isRenderableImageUrl(avatarUrl)) throw new Error('Invalid avatar URL');
         data.avatarUrl = avatarUrl.length > 0 ? avatarUrl : null;
       }
       if (Object.keys(data).length === 0) throw new Error('Nothing to update');
-      return prisma.user.update({ where: { id: context.userId }, data });
+      return prisma.user.update({ where: { id: context.actor.id }, data });
     },
 
     updateUserRole: async (_: any, { userId, role }: { userId: string; role: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
-      const currentUser = await prisma.user.findUnique({ where: { id: context.userId } });
-      if (!isSuperAdmin(currentUser)) {
-        throw new Error('Forbidden: SUPER_ADMIN only');
-      }
+      await assertManageUser(context, userId, { kind: 'role', role });
       return AuthService.updateUserRole(userId, role as AuthService.Role);
     },
 
     deactivateUser: async (_: any, { id }: { id: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
-      const currentUser = await prisma.user.findUnique({ where: { id: context.userId } });
-      if (!isSuperAdmin(currentUser)) {
-        throw new Error('Forbidden: SUPER_ADMIN only');
-      }
+      await assertManageUser(context, id, { kind: 'deactivate' });
       return AuthService.deactivateUser(id);
     },
 
     reactivateUser: async (_: any, { id }: { id: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
-      const currentUser = await prisma.user.findUnique({ where: { id: context.userId } });
-      if (!isSuperAdmin(currentUser)) {
-        throw new Error('Forbidden: SUPER_ADMIN only');
-      }
+      await assertManageUser(context, id, { kind: 'reactivate' });
       return AuthService.reactivateUser(id);
     },
 
@@ -820,13 +869,12 @@ export const resolvers = {
       { userId, newPassword }: { userId: string; newPassword?: string | null },
       context: GraphQLContext,
     ) => {
-      if (!context.userId) throw new Error('Unauthorized');
-      const currentUser = await prisma.user.findUnique({ where: { id: context.userId } });
-      if (!isSuperAdmin(currentUser)) {
-        throw new Error('Forbidden: SUPER_ADMIN only');
-      }
-      const targetError = adminTargetError(context.userId, userId);
+      const actor = actorOf(context);
+      assertCan(actor, 'users.manage');
+      const currentUser = { id: actor.id, email: (await prisma.user.findUnique({ where: { id: actor.id }, select: { email: true } }))?.email ?? '' };
+      const targetError = adminTargetError(actor.id, userId);
       if (targetError) return { success: false, message: targetError, password: null };
+      await assertManageUser(context, userId, { kind: 'password' });
       try {
         const result = await AuthService.adminSetPassword(userId, newPassword);
         auditAdminAction('adminSetPassword', currentUser, result.email);
@@ -841,13 +889,12 @@ export const resolvers = {
     },
 
     deleteUser: async (_: unknown, { id }: { id: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
-      const currentUser = await prisma.user.findUnique({ where: { id: context.userId } });
-      if (!isSuperAdmin(currentUser)) {
-        throw new Error('Forbidden: SUPER_ADMIN only');
-      }
-      const targetError = adminTargetError(context.userId, id);
+      const actor = actorOf(context);
+      assertCan(actor, 'users.manage');
+      const currentUser = { id: actor.id, email: (await prisma.user.findUnique({ where: { id: actor.id }, select: { email: true } }))?.email ?? '' };
+      const targetError = adminTargetError(actor.id, id);
       if (targetError) return { success: false, message: targetError, password: null };
+      await assertManageUser(context, id, { kind: 'delete' });
       try {
         const result = await AuthService.deleteUserAccount(id);
         auditAdminAction('deleteUser', currentUser, result.email);
@@ -858,9 +905,7 @@ export const resolvers = {
     },
 
     updateProject: async (_: any, { id, input }: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
-      const user = await prisma.user.findUnique({ where: { id: context.userId } });
-      if (!isAdminLike(user)) throw new Error('Forbidden: ADMIN only');
+      assertCan(context.actor, 'item.move');
       return prisma.project.update({
         where: { id },
         data: { title: input.title, description: input.description },
@@ -868,21 +913,30 @@ export const resolvers = {
     },
 
     deleteProject: async (_: any, { id }: { id: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
-      const user = await prisma.user.findUnique({ where: { id: context.userId } });
-      if (!isAdminLike(user)) throw new Error('Forbidden: ADMIN only');
-      await prisma.project.delete({ where: { id } });
+      assertCan(context.actor, 'trash.purge');
+      // Revoke and delete in one transaction: a link created in between makes
+      // the delete fail on the one-target CHECK instead of slipping through.
+      await prisma.$transaction(async (tx) => {
+        const folders = await tx.folder.findMany({ where: { projectId: id }, select: { id: true } });
+        const files = await tx.mediaFile.findMany({ where: { projectId: id }, select: { id: true } });
+        await ShareService.revokeLinksForTargets(
+          { projectIds: [id], folderIds: folders.map((f) => f.id), fileIds: files.map((f) => f.id) },
+          'target_deleted',
+          tx,
+        );
+        await tx.project.delete({ where: { id } });
+      });
       return true;
     },
 
     moveToTrash: async (_: any, { fileId }: { fileId: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCan(context.actor, 'item.trash');
       await prisma.mediaFile.update({ where: { id: fileId }, data: { trashedAt: new Date() } });
       return true;
     },
 
     restoreFile: async (_: any, { fileId }: { fileId: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCan(context.actor, 'item.trash');
       return prisma.mediaFile.update({
         where: { id: fileId },
         data: { trashedAt: null },
@@ -891,24 +945,27 @@ export const resolvers = {
     },
 
     permanentDelete: async (_: any, { fileId }: { fileId: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCan(context.actor, 'trash.purge');
       const file = await prisma.mediaFile.findUnique({ where: { id: fileId } });
       if (file) {
+        await prisma.$transaction(async (tx) => {
+          await ShareService.revokeLinksForTargets({ fileIds: [fileId] }, 'target_deleted', tx);
+          await tx.mediaFile.delete({ where: { id: fileId } });
+        });
         const fs = await import('fs/promises');
         fs.unlink(file.storagePath).catch(() => { });
-        await prisma.mediaFile.delete({ where: { id: fileId } });
       }
       return true;
     },
 
     moveFolderToTrash: async (_: any, { folderId }: { folderId: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCan(context.actor, 'item.trash');
       await prisma.folder.update({ where: { id: folderId }, data: { trashedAt: new Date() } });
       return true;
     },
 
     restoreFolder: async (_: any, { folderId }: { folderId: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCan(context.actor, 'item.trash');
       return prisma.folder.update({
         where: { id: folderId },
         data: { trashedAt: null },
@@ -917,48 +974,37 @@ export const resolvers = {
     },
 
     permanentDeleteFolder: async (_: any, { folderId }: { folderId: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
-      const user = await prisma.user.findUnique({ where: { id: context.userId } });
-      if (!isAdminLike(user)) throw new Error('Forbidden: ADMIN only');
+      assertCan(context.actor, 'trash.purge');
 
+      const subtree = await allSubtreeFolderIds(folderId);
+      const files = await prisma.mediaFile.findMany({
+        where: { folderId: { in: subtree } },
+        select: { id: true, storagePath: true },
+      });
+      // Resolved before the rows go (the path is derived from them).
+      const folderPath = await FolderService.getFolderPhysicalPath(folderId).catch(() => null);
+
+      // Revoke links and delete rows in one transaction (see deleteProject).
+      await prisma.$transaction(async (tx) => {
+        await ShareService.revokeLinksForTargets(
+          { folderIds: subtree, fileIds: files.map((f) => f.id) },
+          'target_deleted',
+          tx,
+        );
+        await tx.mediaFile.deleteMany({ where: { folderId: { in: subtree } } });
+        await tx.folder.deleteMany({ where: { id: { in: subtree } } });
+      });
+
+      // Bytes go after the rows are committed.
       const fs = await import('fs/promises');
-
-      // Recursively delete all files and subfolders
-      async function deleteFolderRecursive(fId: string) {
-        const folder = await prisma.folder.findUnique({
-          where: { id: fId },
-          include: { files: true, children: true },
-        });
-        if (!folder) return;
-
-        // Delete files from disk + DB
-        for (const file of folder.files) {
-          fs.unlink(file.storagePath).catch(() => {});
-          await prisma.mediaFile.delete({ where: { id: file.id } }).catch(() => {});
-        }
-
-        // Recurse into children
-        for (const child of folder.children) {
-          await deleteFolderRecursive(child.id);
-        }
-
-        // Delete the folder itself
-        await prisma.folder.delete({ where: { id: fId } }).catch(() => {});
-      }
-
-      await deleteFolderRecursive(folderId);
-
-      // Also try to remove physical directory
-      try {
-        const folderPath = await FolderService.getFolderPhysicalPath(folderId);
-        await fs.rm(folderPath, { recursive: true, force: true }).catch(() => {});
-      } catch {}
+      for (const f of files) fs.unlink(f.storagePath).catch(() => {});
+      if (folderPath) await fs.rm(folderPath, { recursive: true, force: true }).catch(() => {});
 
       return true;
     },
 
     cancelUpload: async (_: any, { sessionId }: { sessionId: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      await assertUploadOwner(context, sessionId);
       await prisma.uploadSession.update({
         where: { id: sessionId },
         data: { status: 'FAILED' },
@@ -967,7 +1013,7 @@ export const resolvers = {
     },
 
     moveFile: async (_: any, { fileId, targetFolderId }: { fileId: string; targetFolderId: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCan(context.actor, 'item.move');
       const file = await prisma.mediaFile.findUnique({ where: { id: fileId } });
       if (!file) throw new Error('File not found');
       const targetFolder = await prisma.folder.findUnique({ where: { id: targetFolderId } });
@@ -989,7 +1035,8 @@ export const resolvers = {
     },
 
     copyFile: async (_: any, { fileId, targetFolderId }: { fileId: string; targetFolderId: string }, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      const actor = actorOf(context);
+      assertCan(actor, 'upload');
       const file = await prisma.mediaFile.findUnique({ where: { id: fileId } });
       if (!file) throw new Error('File not found');
       const targetFolder = await prisma.folder.findUnique({ where: { id: targetFolderId } });
@@ -1016,7 +1063,7 @@ export const resolvers = {
           storagePath: newPath,
           folderId: targetFolderId,
           projectId: targetFolder.projectId,
-          uploadedById: context.userId,
+          uploadedById: actor.id,
         },
         include: { folder: true, project: true, uploadedBy: true },
       });
@@ -1027,7 +1074,7 @@ export const resolvers = {
       { folderId, targetFolderId, targetProjectId }: { folderId: string; targetFolderId?: string | null; targetProjectId?: string | null },
       context: GraphQLContext,
     ) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      assertCan(context.actor, 'item.move');
       const folder = await prisma.folder.findUnique({ where: { id: folderId } });
       if (!folder) throw new Error('Folder not found');
 
@@ -1140,8 +1187,18 @@ export const resolvers = {
 
   User: {
     accountStatus: (parent: any) => parent.accountStatus || 'ACTIVE',
+    // Story 2.4: the UI reads this list and never re-implements role rules.
+    permissions: (parent: any) =>
+      permissionsFor({
+        id: parent.id,
+        role: parent.role,
+        active: parent.active,
+        accountStatus: parent.accountStatus,
+        readOnly: parent.readOnly,
+      }),
     signupAnswers: (parent: any) => parent.signupAnswers ? JSON.stringify(parent.signupAnswers) : null,
     hasPassword: (parent: { passwordHash?: string | null }) => !!parent.passwordHash,
+    readOnly: (parent: { readOnly?: boolean | null }) => !!parent.readOnly,
   },
 
   Project: {
@@ -1220,6 +1277,9 @@ export const resolvers = {
   // yang tidak meng-`include` relasi itu. Tanpa resolver ini field
   // non-null-nya mengembalikan null dan SELURUH query isi Section gagal.
   MediaFile: {
+    // Story 2.2: cookie-authorised media paths, never a token in the URL.
+    thumbnailUrl: (parent: any) => (parent.thumbnailPath ? mediaUrl.thumbnail(parent.id) : null),
+    downloadUrl: (parent: any) => mediaUrl.download(parent.id),
     uploadedBy: async (parent: any) => {
       if (parent.uploadedBy) return parent.uploadedBy;
       if (!parent.uploadedById) return null;
@@ -1231,6 +1291,8 @@ export const resolvers = {
   // belum ter-include — `shareLinks` lama pun bisa menampilkan pembuat tanpa
   // mengubah bentuk query yang sudah dipakai halaman Shared.
   ShareLink: {
+    // Story 2.3: only set on the createShareLink result (shown once to the creator).
+    accessCode: (parent: any) => parent.accessCode ?? null,
     createdBy: async (parent: any) => {
       if (parent.createdBy) return parent.createdBy;
       return prisma.user.findUnique({ where: { id: parent.createdById } });
@@ -1310,7 +1372,9 @@ export const resolvers = {
 
   Subscription: {
     uploadProgress: {
-      subscribe: (_: any, { sessionId }: { sessionId: string }) => {
+      // Only the uploader may follow an upload session.
+      subscribe: async (_: any, { sessionId }: { sessionId: string }, context: GraphQLContext) => {
+        await assertUploadOwner(context, sessionId);
         return pubsub.asyncIterator(`UPLOAD_PROGRESS_${sessionId}`);
       },
     },
@@ -1320,9 +1384,19 @@ export const resolvers = {
       // terhadap tabel `Session` (AuthService.validateSession). Tanpa sesi
       // valid tidak satu pun pesan, nama, atau role mengalir lewat WS.
       subscribe: (_: any, { projectId }: { projectId: string }, context: GraphQLContext) => {
-        if (!context?.userId) throw new Error('Unauthorized');
+        assertCan(context?.actor, 'project.view');
         return pubsub.asyncIterator(`CHAT_MESSAGES_${projectId}`);
       },
     },
+    notificationReceived: {
+      subscribe: (_: any, __: any, context: GraphQLContext) => {
+        const actor = actorOf(context);
+        return pubsub.asyncIterator(`NOTIFICATIONS_${actor.id}`);
+      },
+      resolve: (payload: any) => payload?.newNotification ?? payload?.notificationReceived,
+    },
   },
 };
+
+// Story 2.1: every root field passes the auth mode declared in auth-map.ts.
+export const resolvers = applyAuthMap(rawResolvers);

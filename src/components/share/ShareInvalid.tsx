@@ -11,17 +11,19 @@
  * thumbnail, maupun nama file di keadaan mana pun — termasuk PRIVATE.
  * Objek panggung sengaja memakai slot label KOSONG.
  *
- * Link PRIVATE: penerima yang sudah punya sesi valid di perangkat ini
- * dibukakan isinya lewat `/api/share/[slug]/unlock` — server baru
- * merakit payload setelah token terbukti sah. Tanpa token, tidak ada
- * satu byte isi pun yang dikirim.
+ * PRIVATE links (Story 2.3): the visitor types the access code the link's
+ * creator shared; `POST /s/<slug>/unlock` checks it, sets the
+ * `shotstash_share_<slug>` cookie and only then answers the payload.
+ * Without the code not one byte of content is sent.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Logo from "@/components/Logo";
 import { brand } from "@/lib/brand";
 import ThemeToggle from "@/components/ThemeToggle";
 import TagPill from "@/components/tag-pill/TagPill";
+import TextField from "@/components/form/TextField";
+import { ButtonPrimary } from "@/components/form/buttons";
 import type { SharePayload } from "@/lib/shareTypes";
 import styles from "./sharePage.module.css";
 
@@ -56,7 +58,7 @@ const COPY: Record<ShareInvalidKind, { title: string; text: string }> = {
   },
   private: {
     title: "Link privat",
-    text: "Kamu harus login untuk membuka link ini.",
+    text: "Masukkan kode akses dari orang yang membagikan link ini.",
   },
 };
 
@@ -72,45 +74,49 @@ export default function ShareInvalid({
   sectionId?: string | null;
   onUnlocked?: (payload: SharePayload) => void;
 }) {
-  const [checking, setChecking] = useState(kind === "private" && !!slug && !!onUnlocked);
+  const canUnlock = kind === "private" && !!slug;
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (kind !== "private" || !slug || !onUnlocked) return;
-    let alive = true;
-    (async () => {
-      let token: string | null = null;
-      try {
-        token = localStorage.getItem("shotstash_token");
-      } catch {
-        token = null;
-      }
-      if (!token) {
-        if (alive) setChecking(false);
+  const unlock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!slug || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/s/${slug}/unlock`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, section: sectionId ?? null }),
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      const body = (await res.json().catch(() => null)) as
+        | { state?: string; payload?: SharePayload; code?: string; retryAfter?: number }
+        | null;
+      if (res.ok && body?.state === "ok" && body.payload) {
+        if (onUnlocked) onUnlocked(body.payload);
+        else window.location.reload();
         return;
       }
-      try {
-        const q = sectionId ? `?section=${encodeURIComponent(sectionId)}` : "";
-        const res = await fetch(`/api/share/${slug}/unlock${q}`, {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: "no-store",
-        });
-        if (!alive) return;
-        if (res.ok) {
-          const body = (await res.json()) as { state: string; payload: SharePayload };
-          if (body.state === "ok") {
-            onUnlocked(body.payload);
-            return;
-          }
-        }
-      } catch {
-        /* Tetap di keadaan privat — tidak ada isi yang ditampilkan. */
+      if (res.status === 429) {
+        const minutes = Math.max(1, Math.ceil((body?.retryAfter ?? 60) / 60));
+        setError(`Terlalu banyak percobaan. Coba lagi dalam ${minutes} menit.`);
+      } else if (res.status === 401) {
+        setError("Kode akses salah.");
+      } else if (res.ok) {
+        // The link died between page load and unlock: reload to show why.
+        window.location.reload();
+      } else {
+        setError("Link ini sudah tidak berlaku.");
       }
-      if (alive) setChecking(false);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [kind, slug, sectionId, onUnlocked]);
+    } catch {
+      setError("Sambungan ke server terputus. Coba lagi.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const copy = COPY[kind];
 
@@ -143,9 +149,26 @@ export default function ShareInvalid({
         <div className={styles.card}>
           <p className={`spine-label ${styles.kick}`}>{brand.productName}</p>
           <h1 className={`spine-display-panel-mobile ${styles.cardTitle}`}>{copy.title}</h1>
-          <p className={`spine-body ${styles.cardText}`}>
-            {checking ? "Memeriksa akses…" : copy.text}
-          </p>
+          <p className={`spine-body ${styles.cardText}`}>{copy.text}</p>
+          {canUnlock ? (
+            <form onSubmit={unlock} noValidate>
+              <TextField
+                label="Kode akses"
+                name="accessCode"
+                autoComplete="one-time-code"
+                autoCapitalize="characters"
+                spellCheck={false}
+                maxLength={12}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                error={error}
+                required
+              />
+              <ButtonPrimary type="submit" busy={busy} busyLabel="Memeriksa..." disabled={!code.trim()}>
+                Buka link
+              </ButtonPrimary>
+            </form>
+          ) : null}
         </div>
       </div>
     </main>

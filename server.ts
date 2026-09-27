@@ -9,7 +9,18 @@ import { useServer } from 'graphql-ws/use/ws';
 import { makeExecutableSchema } from '@graphql-tools/schema';
 import { typeDefs } from './src/graphql/schema';
 import { resolvers, type GraphQLContext } from './src/graphql/resolvers';
-import * as AuthService from './src/services/auth.service';
+import { GraphQLError } from 'graphql';
+import { validateSessionToken } from './src/lib/sessionStore';
+import { CLIENT_IP_HEADER } from './src/lib/clientIp';
+import { signingSecret } from './src/lib/signingSecret';
+
+// Fail closed before serving anything: signed share URLs need a real secret.
+try {
+  signingSecret();
+} catch (err) {
+  console.error(`[startup] ${(err as Error).message}`);
+  process.exit(1);
+}
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
@@ -22,6 +33,10 @@ app.prepare().then(() => {
   const upgradeHandler = app.getUpgradeHandler();
   const server = createServer(async (req, res) => {
     try {
+      // The only client IP the app trusts by default: the TCP peer. A client
+      // cannot inject it because any incoming copy is replaced here.
+      delete req.headers[CLIENT_IP_HEADER];
+      req.headers[CLIENT_IP_HEADER] = req.socket.remoteAddress ?? '';
       const parsedUrl = parse(req.url!, true);
       await handle(req, res, parsedUrl);
     } catch (err) {
@@ -39,6 +54,18 @@ app.prepare().then(() => {
   const serverCleanup = useServer(
     {
       schema,
+      // Every new subscription re-validates the Bearer session, so a logged-out
+      // or deactivated user cannot keep subscribing on an open socket.
+      onSubscribe: async (ctx) => {
+        const params = (ctx.connectionParams ?? {}) as Record<string, unknown>;
+        const raw = typeof params.authorization === 'string' ? params.authorization : '';
+        const token = raw.startsWith('Bearer ') ? raw.slice(7) : '';
+        const session = token ? await validateSessionToken(token).catch(() => null) : null;
+        if (!session || !session.actor.active) {
+          return [new GraphQLError('Unauthorized', { extensions: { code: 'UNAUTHENTICATED' } })];
+        }
+        return undefined;
+      },
       // Story 4.1: konteks langganan dibangun dengan aturan yang SAMA
       // dengan `src/app/api/graphql/route.ts` — token Bearer dari
       // `connectionParams.authorization` (dikirim `apollo-client.ts`)
@@ -50,16 +77,15 @@ app.prepare().then(() => {
         const params = (ctx.connectionParams ?? {}) as Record<string, unknown>;
         const raw = typeof params.authorization === 'string' ? params.authorization : '';
         const token = raw.startsWith('Bearer ') ? raw.slice(7) : '';
-        let userId: string | undefined;
-        let sessionId: string | undefined;
-        if (token) {
-          const session = await AuthService.validateSession(token).catch(() => null);
-          if (session) {
-            userId = session.user.id;
-            sessionId = session.id;
-          }
-        }
-        return { req: ctx.extra.request as unknown as Request, userId, sessionId };
+        const session = token ? await validateSessionToken(token).catch(() => null) : null;
+        const live = session && session.actor.active ? session : null;
+        return {
+          req: ctx.extra.request as unknown as Request,
+          userId: live?.actor.id,
+          sessionId: live?.id,
+          sessionToken: live?.token,
+          actor: live?.actor ?? null,
+        };
       },
     },
     wsServer

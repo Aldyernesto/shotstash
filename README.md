@@ -45,10 +45,11 @@ Requires Node.js 24.
 
 ```bash
 npm install
-cp .env.example .env
+cp .env.example .env   # set SESSION_SECRET and MEDIA_SIGNING_SECRET (openssl rand -hex 32)
 npx prisma generate
 npm run dev:db      # embedded PostgreSQL (PGlite) on port 55433; keep it running
-npm run dev:seed    # in a second terminal: create the schema and demo data
+npx prisma migrate deploy   # in a second terminal: apply the migrations
+npm run dev:seed    # then create the demo data
 npm run dev         # app on http://localhost:3005
 ```
 
@@ -59,10 +60,15 @@ npx prisma generate
 npm run lint
 npm run typecheck
 npm run check:tokens && npm run check:legacy && npm run brand:css -- --check
+npm run security:matrix -- --check    # docs/security/route-matrix.md matches the code
 npm test
 node scripts/privacy-scan.mjs --all   # uses gitleaks when installed
 npm run build
 ```
+
+Local end-to-end security check (not in CI): with `npm run dev:db`, `npx prisma migrate deploy`, `npx tsx prisma/seed.ts` and `npm run dev` running, `npm run e2e:security` exercises login, cookie media, signed shares, access codes and role checks against `http://localhost:3005` (override with `E2E_BASE_URL`). It refuses to run unless the base URL and `DATABASE_URL` point at localhost, and it writes test data into that database.
+
+Every route handler is wrapped in `defineRoute({ auth })` and every GraphQL root field has an entry in `src/graphql/auth-map.ts`; the generated table lives in [docs/security/route-matrix.md](docs/security/route-matrix.md). Media bytes are served only under `/media/*` with an HttpOnly session cookie or a signed share URL; `MEDIA_SIGNING_SECRET` signs those URLs.
 
 Product name, logo and brand colors live in `src/lib/brand.ts`. To rebrand: edit it, replace the files in `public/brand/` and the favicon `src/app/icon.svg` (a copy of `public/brand/icon.svg`), then run `npm run brand:css`.
 

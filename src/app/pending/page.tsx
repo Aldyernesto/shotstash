@@ -9,6 +9,7 @@
 // polling.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { serverLogout } from '@/lib/authClient';
 import AuthPage from '@/components/auth/AuthPage';
 import AuthCard from '@/components/auth/AuthCard';
 import StatusMark from '@/components/auth/StatusMark';
@@ -92,8 +93,9 @@ export default function PendingPage() {
     return () => window.clearInterval(t);
   }, [check]);
 
-  const logout = () => {
+  const logout = async () => {
     try {
+      await serverLogout(localStorage.getItem('shotstash_token'));
       localStorage.removeItem('shotstash_token');
       localStorage.removeItem('shotstash_user');
     } catch {

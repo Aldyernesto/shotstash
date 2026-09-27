@@ -34,11 +34,11 @@ function Icon({ children }: { children: ReactNode }) {
   );
 }
 
-export function navDestinations(role: string | undefined | null): NavDestination[] {
-  // Story 2.18: gerbang role dari modul bersama — nav-capsule desktop dan
-  // bottom-bar / more-sheet HP memakai tabel yang SAMA.
-  const isSuperAdmin = perm.canOpenAdminPanel(role);
-  const isAdminLike = perm.canSeeAdminTools(role);
+export function navDestinations(user: perm.PermissionSubject): NavDestination[] {
+  // Story 2.4: gates from `me.permissions`; the desktop nav-capsule and the
+  // phone bottom-bar / more-sheet share this one table.
+  const showAdminPanel = perm.canOpenAdminPanel(user);
+  const showTrash = perm.canViewTrash(user);
 
   const list: (NavDestination | null)[] = [
     {
@@ -64,7 +64,7 @@ export function navDestinations(role: string | undefined | null): NavDestination
         </Icon>
       ),
     },
-    isAdminLike
+    showTrash
       ? {
           href: "/dashboard/trash",
           label: "Trash",
@@ -78,7 +78,7 @@ export function navDestinations(role: string | undefined | null): NavDestination
           ),
         }
       : null,
-    isSuperAdmin
+    showAdminPanel
       ? {
           href: "/dashboard/admin",
           label: "Admin Panel",

@@ -19,12 +19,12 @@
  * varian gambar pratinjau.
  */
 
-import { notFound, redirect } from "next/navigation";
-import { headers } from "next/headers";
+import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
 import type { Metadata } from "next";
-import prisma from "@/lib/prisma";
 import { brand } from "@/lib/brand";
-import { resolveShare } from "@/lib/shareLink";
+import { findLiveShare, recordShareView, resolveShare } from "@/lib/shareLink";
+import { shareSigner, shareUnlocked } from "@/modules/share";
 import ShareRoot from "@/components/share/ShareRoot";
 
 export const dynamic = "force-dynamic";
@@ -55,9 +55,9 @@ export async function generateMetadata({
   const { slug } = await params;
   const res = await resolveShare(slug, { limit: 0 });
 
-  // Kedaluwarsa, dicabut, hilang, ATAU PRIVATE → metadata generik.
-  // Link PRIVATE tidak pernah membocorkan nama atau jumlah file lewat
-  // pratinjau pesan (AC 3.11).
+  // Expired, revoked, gone or PRIVATE: generic metadata. A PRIVATE link
+  // never leaks names through chat previews, even for an unlocked visitor,
+  // because metadata is resolved without the share cookie.
   if (res.state !== "ok") return GENERIC_METADATA;
 
   const p = res.payload;
@@ -77,31 +77,18 @@ export default async function SharePageRoute({
   const { section } = await searchParams;
   const sectionId = section ?? null;
 
-  // Kartu chat lama memakai /s/<slug> langsung sebagai <video src>:
-  // permintaan media dialihkan ke aliran MP4, navigasi browser tidak.
-  const h = await headers();
-  const fetchDest = h.get("sec-fetch-dest") || "";
-  const rangeHeader = h.get("range") || "";
-  const accept = h.get("accept") || "";
-  const requestedAsMedia =
-    fetchDest === "video" || !!rangeHeader || (!accept.includes("text/html") && accept.includes("video"));
-  if (requestedAsMedia) {
-    const link = await prisma.shareLink.findUnique({
-      where: { slug },
-      select: { fileId: true, file: { select: { id: true, projectId: true, mimeType: true } } },
-    });
-    if (link?.file?.mimeType.startsWith("video/")) {
-      redirect(
-        `/api/download?projectId=${link.file.projectId}&fileIds=${link.file.id}&inline=1&shareSlug=${slug}`,
-      );
-    }
-  }
+  // PRIVATE links open only with the `shotstash_share_<slug>` cookie set by
+  // `POST /s/<slug>/unlock`; media URLs in the payload are signed.
+  const link = await findLiveShare({ slug });
+  const unlocked = link ? shareUnlocked(await cookies(), link) : false;
 
-  const resolution = await resolveShare(slug, { sectionId });
+  const resolution = await resolveShare(slug, { sectionId, unlocked, signer: shareSigner });
 
   // Story 4.5: `prisma.shareLink.findUnique({ where: { slug } })` null →
   // 404 lewat `not-found.tsx`, bukan 200 dengan tampilan yang sama.
   if (resolution.state === "not-found") notFound();
+  // One view per successful page render (media requests are not counted).
+  if (resolution.state === "ok") await recordShareView(slug);
 
   return <ShareRoot resolution={resolution} slug={slug} sectionId={sectionId} />;
 }

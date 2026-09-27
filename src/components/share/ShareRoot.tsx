@@ -4,10 +4,8 @@
  * Stories 3.9 / 3.11 — akar klien halaman `/s/[slug]`.
  *
  * Server sudah memutuskan keadaannya (lihat `src/lib/shareLink.ts`).
- * Komponen ini hanya memilih wujudnya dan — khusus link PRIVATE —
- * memberi kesempatan penerima yang SUDAH login di perangkat ini untuk
- * membuka isinya, karena sesi Shotstash hidup di `localStorage` dan tidak
- * pernah terlihat oleh server saat merender halaman.
+ * Komponen ini hanya memilih wujudnya dan, khusus link PRIVATE, menerima
+ * payload setelah kode akses terbukti benar (Story 2.3).
  */
 
 import React, { useCallback, useState } from "react";

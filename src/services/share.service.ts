@@ -1,9 +1,10 @@
-// Shotstash — Share Link Service
-// Layer 3: Business Logic
+// Shotstash Share Link Service
 
 import { customAlphabet } from 'nanoid';
+import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { createNotification } from './notification.service';
+import { generateAccessCode, hashAccessCode } from '@/modules/share';
 
 type ShareMode = 'PUBLIC' | 'PRIVATE';
 
@@ -27,11 +28,17 @@ export async function createShareLink(data: {
   expiresInHours?: number;
   createdById: string;
 }) {
+  const targets = [data.fileId, data.folderId, data.projectId].filter(Boolean);
+  if (targets.length !== 1) throw new Error('Exactly one target is required: fileId, folderId or projectId');
+
   const slug = generateSlug();
 
   const expiresAt = data.expiresInHours
     ? new Date(Date.now() + data.expiresInHours * 60 * 60 * 1000)
     : null;
+
+  // PRIVATE: a one-time access code; only its hash is stored.
+  const accessCode = data.mode === 'PRIVATE' ? generateAccessCode() : null;
 
   const shareLink = await prisma.shareLink.create({
     data: {
@@ -42,87 +49,62 @@ export async function createShareLink(data: {
       projectId2: data.projectId || null,
       createdById: data.createdById,
       expiresAt,
+      accessCodeHash: accessCode ? hashAccessCode(accessCode) : null,
     },
     include: { file: true, folder: true, projectRef: { include: { folders: { where: { parentId: null, trashedAt: null } } } } },
   });
 
   const url = `${BASE_URL}/s/${slug}`;
 
-  // Notify
-  const users = await prisma.user.findMany({ select: { id: true } });
+  // Only the creator is notified: other users may not be allowed to see the target.
   const name = data.fileId ? (shareLink.file?.originalName || 'a file') : 'a folder';
-  for (const u of users) {
-    createNotification({
-      userId: u.id, type: 'file_shared',
-      title: 'File Shared', body: `New share link created for ${name}`,
-      data: { slug, fileId: data.fileId || '' },
-    }).catch(() => {});
-  }
+  createNotification({
+    userId: data.createdById, type: 'file_shared',
+    title: 'File Shared', body: `New share link created for ${name}`,
+    data: { slug, fileId: data.fileId || '' },
+  }).catch(() => {});
 
-  return { ...shareLink, url };
-}
-
-// ============================================
-// Access Share Link
-// ============================================
-
-export async function accessShareLink(slug: string, userId?: string) {
-  const shareLink = await prisma.shareLink.findUnique({
-    where: { slug },
-    include: {
-      file: {
-        include: { project: true, uploadedBy: true },
-      },
-    },
-  });
-
-  if (!shareLink) {
-    throw new Error('Link tidak ditemukan');
-  }
-
-  // Cek expiry
-  if (shareLink.expiresAt && shareLink.expiresAt < new Date()) {
-    throw new Error('Link sudah kedaluwarsa');
-  }
-
-  // Cek akses private
-  if (shareLink.mode === 'PRIVATE' && !userId) {
-    throw new Error('Anda harus login untuk mengakses link ini');
-  }
-
-  // Increment access counter
-  await prisma.shareLink.update({
-    where: { slug },
-    data: { accessCount: { increment: 1 } },
-  });
-
-  return shareLink;
+  return { ...shareLink, url, accessCode };
 }
 
 // ============================================
 // Revoke Share Link
 // ============================================
 
-// Story 4.4: aturan cabut DISELARASKAN dengan aturan lihat halaman Shared —
-// SUPER_ADMIN/ADMIN boleh mencabut link mana pun, role lain hanya miliknya.
-// Permintaan yang tidak berhak dijawab satu kalimat yang sama tanpa
-// membedakan "tidak ada" dari "bukan milikmu". Barisnya benar-benar
-// DIHAPUS (bukan disembunyikan): /s/[slug] jatuh ke notFound() dan
-// /api/download?shareSlug= tidak lagi lolos cabang share.
-export async function revokeShareLink(id: string, userId: string) {
-  const shareLink = await prisma.shareLink.findUnique({
-    where: { id },
+// Soft revocation (Story 2.3): the row stays with `revokedAt`, so the share
+// page answers "not found" and every signed URL for it answers 404. Who may
+// revoke is decided by the caller through `can(actor, 'share.manage', { ownerId })`.
+export async function getShareLinkOwner(id: string) {
+  return prisma.shareLink.findUnique({ where: { id }, select: { id: true, createdById: true, revokedAt: true } });
+}
+
+export async function revokeShareLink(id: string, reason = 'revoked') {
+  await prisma.shareLink.updateMany({
+    where: { id, revokedAt: null },
+    data: { revokedAt: new Date(), revokedReason: reason },
   });
-
-  const user = shareLink
-    ? await prisma.user.findUnique({ where: { id: userId }, select: { role: true } })
-    : null;
-  const adminLike = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
-
-  if (!shareLink || (!adminLike && shareLink.createdById !== userId)) {
-    throw new Error('Link tidak ditemukan atau bukan milikmu.');
-  }
-
-  await prisma.shareLink.delete({ where: { id } });
   return true;
+}
+
+/**
+ * Revokes every live link that points at these targets. Called before any
+ * hard delete: the target foreign keys are ON DELETE SET NULL and the
+ * `share_links_exactly_one_target` CHECK only lets revoked links lose their target.
+ */
+export async function revokeLinksForTargets(
+  targets: { fileIds?: string[]; folderIds?: string[]; projectIds?: string[] },
+  reason = 'target_deleted',
+  db: Pick<typeof prisma, 'shareLink'> | Prisma.TransactionClient = prisma,
+) {
+  const or = [
+    targets.fileIds?.length ? { fileId: { in: targets.fileIds } } : null,
+    targets.folderIds?.length ? { folderId: { in: targets.folderIds } } : null,
+    targets.projectIds?.length ? { projectId2: { in: targets.projectIds } } : null,
+  ].filter(Boolean) as object[];
+  if (!or.length) return 0;
+  const res = await db.shareLink.updateMany({
+    where: { revokedAt: null, OR: or },
+    data: { revokedAt: new Date(), revokedReason: reason },
+  });
+  return res.count;
 }

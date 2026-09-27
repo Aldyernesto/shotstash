@@ -1,7 +1,7 @@
 // Google Sign-In Service
 import { OAuth2Client } from 'google-auth-library';
 import prisma from '@/lib/prisma';
-import crypto from 'crypto';
+import { createSession } from './auth.service';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
@@ -44,11 +44,7 @@ export async function googleAuth(idToken: string) {
     }
   }
 
-  // Create session
-  const token = crypto.randomBytes(48).toString('hex');
-  await prisma.session.create({
-    data: { userId: user.id, token, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
-  });
-
-  return { token, user };
+  // Same session store and lifetime as password login.
+  const session = await createSession(user.id);
+  return { token: session.token, user };
 }

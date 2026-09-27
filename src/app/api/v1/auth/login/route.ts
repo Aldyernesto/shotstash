@@ -1,0 +1,54 @@
+/**
+ * REST login (Story 2.2). Returns the Bearer token for `/api/graphql` and
+ * `/api/v1/*` and sets the `shotstash_session` media cookie
+ * (HttpOnly; SameSite=Lax; Path=/media; Secure only over HTTPS).
+ * Rate limited to 10 attempts per 15 minutes per IP and per email.
+ */
+import { NextResponse } from 'next/server';
+import { defineRoute, jsonError } from '@/lib/defineRoute';
+import { clientIp } from '@/lib/clientIp';
+import { loginLimit, rateLimitedResponse } from '@/lib/rateLimit';
+import { SESSION_COOKIE, sessionCookieOptions } from '@/lib/sessionStore';
+import * as AuthService from '@/services/auth.service';
+
+export const dynamic = 'force-dynamic';
+
+export const POST = defineRoute({
+  auth: 'public',
+  handler: async ({ req }) => {
+    const ip = clientIp(req.headers) ?? 'unknown';
+    const body = (await req.json().catch(() => null)) as { email?: unknown; password?: unknown } | null;
+    const email = typeof body?.email === 'string' ? body.email.trim() : '';
+    const password = typeof body?.password === 'string' ? body.password : '';
+    const retryAfter = await loginLimit(ip, email || null);
+    if (retryAfter !== null) return rateLimitedResponse(retryAfter);
+    if (!email || !password) return jsonError(400, 'BAD_REQUEST', 'email and password are required');
+
+    let user: Awaited<ReturnType<typeof AuthService.loginUser>>;
+    try {
+      user = await AuthService.loginUser(email, password);
+    } catch (err) {
+      return jsonError(401, 'INVALID_CREDENTIALS', (err as Error)?.message || 'Invalid email or password');
+    }
+
+    const session = await AuthService.createSession(user.id, {
+      ip,
+      userAgent: req.headers.get('user-agent') ?? undefined,
+    });
+    const res = NextResponse.json({
+      token: session.token,
+      expiresAt: session.expiresAt.toISOString(),
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        avatarUrl: user.avatarUrl,
+        accountStatus: user.accountStatus,
+        onboardedAt: user.onboardedAt,
+      },
+    });
+    res.cookies.set(SESSION_COOKIE, session.token, sessionCookieOptions(req, session.expiresAt));
+    return res;
+  },
+});

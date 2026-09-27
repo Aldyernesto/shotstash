@@ -215,13 +215,14 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
       const token = localStorage.getItem('shotstash_token');
       const fd = new FormData();
       fd.append('file', file);
+      fd.append('kind', 'user');
       const res = await fetch('/api/upload/cover', {
         method: 'POST',
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: fd,
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      if (!res.ok) throw new Error(data.message || data.error || 'Upload failed');
       setAvatarUrl(data.url);
     } catch (err: any) {
       setError(err.message);

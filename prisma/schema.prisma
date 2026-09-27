@@ -63,6 +63,8 @@ model User {
   approvedAt    DateTime?
   avatarUrl     String?
   signupAnswers Json?
+  // Denies every write (demo and audit accounts). Reads still work.
+  readOnly      Boolean         @default(false) @map("read_only")
   sessions      Session[]
   uploadedFiles MediaFile[]
   shareLinks    ShareLink[]
@@ -195,8 +197,14 @@ model ShareLink {
   createdBy   User       @relation(fields: [createdById], references: [id])
   accessCount Int        @default(0)
   expiresAt   DateTime?
+  // PRIVATE links: hash of the one-time access code (never the code itself).
+  accessCodeHash String? @map("access_code_hash")
+  // Soft revocation: the row stays so the page can answer "inactive".
+  revokedAt     DateTime? @map("revoked_at")
+  revokedReason String?   @map("revoked_reason")
   createdAt   DateTime   @default(now())
 
+  // A CHECK constraint (migration 0002) requires exactly one target unless the link is revoked.
   @@index([slug])
   @@map("share_links")
 }

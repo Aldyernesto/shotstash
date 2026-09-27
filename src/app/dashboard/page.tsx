@@ -98,6 +98,7 @@ function fileMetaLine(file: any): string {
 
 import { useQuery, useMutation, useApolloClient, gql } from "@apollo/client";
 import { useAuth } from "@/components/AuthContext";
+import { mediaUrl } from "@/lib/mediaUrls";
 import { readDropAsTrees, countFiles, type DropNode } from "@/lib/dropTree";
 
 const GET_PROJECTS = gql`
@@ -566,11 +567,13 @@ export default function DashboardPage() {
   const { user } = useAuth();
   // Story 2.18: gerbang role datang dari SATU modul bersama
   // (`src/lib/permissions.ts`); tidak ada perbandingan role di berkas layar.
-  const isAdmin = perm.isAdmin(user);
+  // Story 2.4: gates come from `me.permissions` only.
   const canCreateProject = perm.canCreateProject(user);
   const canUpload = perm.canUpload(user);
   const canMove = perm.canMove(user);
   const canManageTrash = perm.canManageTrash(user);
+  const canShare = perm.canShare(user);
+  const canPurge = perm.canPurgeTrash(user);
 
   // Story 3.2: satu host `toast` (dipasang di dashboard/layout.tsx).
   const { pushToast: pushSpineToast } = useToast();
@@ -1143,6 +1146,11 @@ export default function DashboardPage() {
       onSelect: () => handleShare(file.id, file.originalName),
     });
 
+    // Story 2.4: Share is rendered only with share.manage.
+    if (!canShare) {
+      const at = entries.findIndex((e) => e.id === "share");
+      if (at >= 0) entries.splice(at, 1);
+    }
     if (canMove) {
       entries.push(
         { kind: "separator", id: "sep-move" },
@@ -1222,6 +1230,11 @@ export default function DashboardPage() {
           }),
       },
     ];
+    // Story 2.4: Share is rendered only with share.manage.
+    if (!canShare) {
+      const at = entries.findIndex((e) => e.id === "share");
+      if (at >= 0) entries.splice(at, 1);
+    }
     if (canMove) {
       entries.push(
         { kind: "separator", id: "sep-admin" },
@@ -1295,6 +1308,11 @@ export default function DashboardPage() {
           }),
       },
     ];
+    // Story 2.4: Share is rendered only with share.manage.
+    if (!canShare) {
+      const at = entries.findIndex((e) => e.id === "share");
+      if (at >= 0) entries.splice(at, 1);
+    }
     if (canMove) {
       entries.push(
         { kind: "separator", id: "sep-admin" },
@@ -1308,6 +1326,10 @@ export default function DashboardPage() {
             setRenameProjectName(project.title);
           },
         },
+      );
+    }
+    if (canPurge) {
+      entries.push(
         { kind: "separator", id: "sep-danger" },
         {
           kind: "item",
@@ -1570,10 +1592,8 @@ export default function DashboardPage() {
     ? viewerFiles.findIndex((f: any) => f.id === previewFile.id)
     : -1;
 
-  const inlineSrcOf = (f: any) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("shotstash_token") || "" : "";
-    return `/api/download?projectId=${currentProjectId}&fileIds=${f.id}&inline=1&token=${token}`;
-  };
+  // Story 2.2: media bytes ride the HttpOnly `shotstash_session` cookie; no token in any URL.
+  const inlineSrcOf = (f: any) => mediaUrl.inline(f.id);
 
   const currentProjectTitle =
     (currentFolderId ? folderData?.folder?.project?.title : rootData?.project?.title) ||
@@ -1656,7 +1676,7 @@ export default function DashboardPage() {
       file: f
         ? {
             kind: determineType(f.mimeType),
-            thumbnailUrl: f.thumbnailPath ? `/api/thumbnail/${f.id}` : null,
+            thumbnailUrl: f.thumbnailPath ? mediaUrl.thumbnail(f.id) : null,
             extension: (f.originalName?.split(".").pop() || null) as string | null,
           }
         : null,
@@ -1760,17 +1780,15 @@ export default function DashboardPage() {
   const [dlProgress, setDlProgress] = useState<{ pct: number; active: boolean }>({ pct: 0, active: false });
 
   const openDirectDownload = (fileId: string) => {
-    const t = localStorage.getItem('shotstash_token');
-    window.open(`/api/download?projectId=${currentProjectId}&fileIds=${fileId}${t ? `&token=${t}` : ''}`, "_blank");
+    window.open(mediaUrl.download(fileId), "_blank");
   };
 
   const parallelDownload = async (fileId: string, filename: string, mimeType?: string) => {
-    const token = localStorage.getItem("shotstash_token");
     const PARTS = 4;
     setDlProgress({ pct: 0, active: true });
     try {
       // Head request to get file size
-      const headRes = await fetch(`/api/download?projectId=${currentProjectId}&fileIds=${fileId}`, { method: 'HEAD', headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
+      const headRes = await fetch(mediaUrl.download(fileId), { method: 'HEAD', credentials: 'same-origin' });
       const totalSize = parseInt(headRes.headers.get('Content-Length') || '0');
 
       if (totalSize < 5 * 1024 * 1024 || !headRes.headers.get('Accept-Ranges')) {
@@ -1788,9 +1806,11 @@ export default function DashboardPage() {
         Array.from({ length: PARTS }, async (_, i) => {
           const start = i * chunkSize;
           const end = i === PARTS - 1 ? totalSize - 1 : start + chunkSize - 1;
-          const res = await fetch(`/api/download?projectId=${currentProjectId}&fileIds=${fileId}`, {
-            headers: { Range: `bytes=${start}-${end}`, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          const res = await fetch(mediaUrl.download(fileId), {
+            headers: { Range: `bytes=${start}-${end}` },
+            credentials: 'same-origin',
           });
+          if (res.status !== 206) throw new Error(`range ${res.status}`);
           const buf = new Uint8Array(await res.arrayBuffer());
           setDlProgress((p) => ({ ...p, pct: Math.min(100, p.pct + Math.round(100 / PARTS)) }));
           return { index: i, data: buf };
@@ -1901,8 +1921,7 @@ export default function DashboardPage() {
       }
     }
 
-    const t = localStorage.getItem('shotstash_token'); if (t) params.append('token', t);
-    window.open(`/api/download?${params.toString()}`, '_blank');
+    window.open(`/media/z?${params.toString()}`, '_blank');
     clearSelection();
   };
 
@@ -2433,9 +2452,9 @@ export default function DashboardPage() {
                   sizeBytes={Number(file.size) || 0}
                   thumbnailUrl={
                     file.thumbnailPath
-                      ? `/api/thumbnail/${file.id}`
+                      ? mediaUrl.thumbnail(file.id)
                       : file.mimeType?.startsWith('image/')
-                        ? `/api/download?projectId=${currentProjectId}&fileIds=${file.id}&inline=1&token=${typeof window !== 'undefined' ? localStorage.getItem('shotstash_token') || '' : ''}`
+                        ? mediaUrl.inline(file.id)
                         : null
                   }
                   draggable={canMove}
@@ -2446,7 +2465,7 @@ export default function DashboardPage() {
                     const f = files.find((x: any) => x.id === id);
                     if (f) openFile(f);
                   }}
-                  onShare={handleShare}
+                  onShare={canShare ? handleShare : undefined}
                   onDragStart={handleDragStartFile}
                   onDragEnd={handleDragEnd}
                   isSelected={selectedFileIds.has(file.id)}
@@ -2546,7 +2565,7 @@ export default function DashboardPage() {
               onOpenProject={handleProjectClick}
               onOpenFolder={handleFolderClick}
               onOpenFile={(file) => openFile(file)}
-              onShareFile={handleShare}
+              onShareFile={canShare ? handleShare : undefined}
               onProjectMenu={(project, anchor) =>
                 openProjectMenu(project.id, project, anchor)
               }
@@ -2607,7 +2626,7 @@ export default function DashboardPage() {
           noun={bulkNoun}
           resultText={bulkResult}
           allSelected={totalSelected > 0 && totalSelected === folders.length + files.length}
-          canTrash={isAdmin}
+          canTrash={canManageTrash}
           onToggleSelectAll={toggleSelectAll}
           onCancel={() => {
             const wasSelectMode = selectMode;
@@ -2786,13 +2805,17 @@ export default function DashboardPage() {
           onIndexChange={(i) => setPreviewFile(viewerFiles[i])}
           onClose={() => setPreviewFile(null)}
           srcOf={(f) => inlineSrcOf(f)}
-          posterOf={(f) => (f.thumbnailPath ? `/api/thumbnail/${f.id}` : undefined)}
+          posterOf={(f) => (f.thumbnailPath ? mediaUrl.thumbnail(f.id) : undefined)}
           projectTitle={currentProjectTitle}
           sectionName={currentFolderName}
-          onShare={(f) => {
-            handleShare(f.id, f.originalName);
-            setPreviewFile(null);
-          }}
+          onShare={
+            canShare
+              ? (f) => {
+                  handleShare(f.id, f.originalName);
+                  setPreviewFile(null);
+                }
+              : undefined
+          }
           onDownload={(f) => openDirectDownload(f.id)}
         />
       )}

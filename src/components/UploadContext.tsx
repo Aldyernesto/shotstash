@@ -327,7 +327,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
               });
               if (!res.ok) {
                 const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-                throw new Error(errData.error || `Chunk ${i} failed`);
+                throw new Error(errData.message || errData.error || `Chunk ${i} failed`);
               }
               lastErr = null;
               break;

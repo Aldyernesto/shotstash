@@ -62,6 +62,16 @@ async function main() {
     });
   }
 
+  // Links into the sample project go first (share_links_exactly_one_target CHECK).
+  await prisma.shareLink.deleteMany({
+    where: {
+      OR: [
+        { projectId2: SAMPLE_PROJECT_ID },
+        { folder: { projectId: SAMPLE_PROJECT_ID } },
+        { file: { projectId: SAMPLE_PROJECT_ID } },
+      ],
+    },
+  });
   await prisma.project.deleteMany({ where: { id: SAMPLE_PROJECT_ID } });
   const project = await prisma.project.create({
     data: {

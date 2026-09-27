@@ -73,22 +73,20 @@ export default function MobileFrame({
   onOpenProfile,
   onOpenLogout,
 }: {
-  user: { name?: string | null; email?: string | null; avatarUrl?: string | null; role?: string | null } | null;
+  user: { name?: string | null; email?: string | null; avatarUrl?: string | null; role?: string | null; permissions?: readonly string[] | null } | null;
   pathname: string;
   onOpenProfile: () => void;
   onOpenLogout: () => void;
 }) {
   const router = useRouter();
-  const role = user?.role ?? null;
-  // Story 2.18: gerbang role dari modul bersama — slot bottom-bar memakai
-  // tabel yang SAMA dengan nav-capsule dan ruang kerja berkas.
-  const isEditor = perm.isEditor(role);
-  const canUpload = perm.canUpload(role);
+  // Story 2.4: bottom-bar slots use the same `me.permissions` gates as the
+  // nav-capsule and the file workspace.
+  const canUpload = perm.canUpload(user);
 
   // Sheet "Lainnya" hanya dirender bila isinya ≥ 1 tujuan (AC 2.3):
   // tujuan yang sudah jadi slot tidak diulang di dalam sheet.
   const slotHrefs = new Set<string>(["/dashboard", "/dashboard/shared"]);
-  const all = user ? navDestinations(role) : [];
+  const all = user ? navDestinations(user) : [];
   const sheetItems = all.filter((d) => !slotHrefs.has(d.href));
 
   const [sheet, setSheet] = useState<SheetMode>(null);
@@ -208,7 +206,7 @@ export default function MobileFrame({
           <span className={`spine-chip ${styles.slotLabel}`}>Upload</span>
         </button>,
       );
-    } else if (isEditor) {
+    } else {
       slots.push(
         <button
           type="button"

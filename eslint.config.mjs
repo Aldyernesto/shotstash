@@ -46,6 +46,12 @@ const eslintConfig = defineConfig([
       }],
     },
   },
+  {
+    // Unit tests run the module internals directly with node --test (type
+    // stripping needs explicit file paths, which the public index cannot give).
+    files: ["scripts/**/*.test.mjs"],
+    rules: { "no-restricted-imports": "off" },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

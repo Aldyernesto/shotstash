@@ -46,6 +46,10 @@ export const typeDefs = `#graphql
     signupAnswers: String
     # false = akun Google-only (belum punya password)
     hasPassword: Boolean!
+    # Denies every write when true.
+    readOnly: Boolean!
+    # Story 2.4: actions this user may perform (can()); the UI reads only this.
+    permissions: [String!]!
     chats: [ProjectChat!]!
     createdAt: DateTime!
   }
@@ -95,7 +99,7 @@ export const typeDefs = `#graphql
     total: Int!
   }
 
-  # Story 2.4: satu file perwakilan. thumbnailUrl = /api/thumbnail/{id}
+  # Story 2.4: satu file perwakilan. thumbnailUrl = /media/t/{id}
   # bila thumbnailPath ada, selain itu null (klien merender placeholder);
   # duration null (tidak ada kolomnya di DB); extension hanya dokumen.
   type RepFile {
@@ -144,6 +148,8 @@ export const typeDefs = `#graphql
     targetType: String!
     targetName: String!
     accessCount: Int!
+    # Story 2.3: PRIVATE access code, returned once by createShareLink, null elsewhere.
+    accessCode: String
     # Story 4.4 (aditif): pembuat link — "dibuat {nama}" / "dibuat kamu"
     # di bagian "Link aktif" share-modal; dimuat dari createdById.
     createdBy: User!

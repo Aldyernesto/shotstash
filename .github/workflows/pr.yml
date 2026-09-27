@@ -56,6 +56,9 @@ jobs:
       - name: Brand CSS is up to date
         run: npm run brand:css -- --check
 
+      - name: Route auth matrix is up to date
+        run: npm run security:matrix -- --check
+
       - name: Tests
         run: npm test
 

@@ -35,13 +35,13 @@ export function makeApolloClient() {
     });
   }
 
-  // Error link: auto-logout when session is deleted (e.g., disconnected from mobile)
+  // Error link: auto-logout when the session is gone (revoked, expired, user deactivated).
+  // FORBIDDEN is a permission answer for a valid session and never logs out.
   const errorLink = onError(({ graphQLErrors, networkError }) => {
     const authError =
       graphQLErrors?.some((e) =>
-        e.message.includes('Unauthorized') ||
-        e.message.includes('Session') ||
-        (e.extensions?.code === 'FORBIDDEN')
+        e.extensions?.code === 'UNAUTHENTICATED' ||
+        e.message === 'Unauthorized'
       ) ||
       networkError?.message?.includes('401');
     if (authError && typeof window !== 'undefined') {

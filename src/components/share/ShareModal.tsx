@@ -59,7 +59,7 @@ import { useToast, humanizeError } from "@/components/feedback/ToastProvider";
 import RepThumb from "@/components/dashboard/RepThumb";
 import type { RepFile } from "@/components/dashboard/ProjectCard";
 import { useAuth } from "@/components/AuthContext";
-import { isAdmin } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions";
 import { formatDate, formatDateTimeWIB, formatNumber, formatTimeWIB } from "@/lib/format";
 import { parseSectionName } from "@/lib/sectionNumber";
 import styles from "./shareModal.module.css";
@@ -72,6 +72,7 @@ const CREATE_SHARE_LINK = gql`
       url
       mode
       expiresAt
+      accessCode
     }
   }
 `;
@@ -235,7 +236,14 @@ export default function ShareModal({
 }: ShareModalProps) {
   const [mode, setMode] = useState<Mode>("PUBLIC");
   const [expiry, setExpiry] = useState<Expiry>("24");
-  const [result, setResult] = useState<{ url: string; slug: string; mode: Mode; expiresAt: string | null } | null>(null);
+  const [result, setResult] = useState<{
+    url: string;
+    slug: string;
+    mode: Mode;
+    expiresAt: string | null;
+    /** PRIVATE only: shown once, never stored in the browser. */
+    accessCode: string | null;
+  } | null>(null);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const expiryNoteId = useId();
@@ -247,7 +255,8 @@ export default function ShareModal({
   /* ---------------- Story 4.6: daftar "Link aktif" ---------------- */
 
   const { user } = useAuth();
-  const adminView = isAdmin(user);
+  // Team-wide list for accounts that manage users (the server applies the same rule).
+  const adminView = hasPermission(user, "users.manage");
   const { pushToast } = useToast();
   const targetVars = useMemo(
     () => ({
@@ -390,7 +399,13 @@ export default function ShareModal({
       });
       const link = data?.createShareLink;
       if (!link?.url || !link?.slug) throw new Error("no url");
-      setResult({ url: link.url, slug: link.slug, mode, expiresAt: link.expiresAt ?? null });
+      setResult({
+        url: link.url,
+        slug: link.slug,
+        mode,
+        expiresAt: link.expiresAt ?? null,
+        accessCode: link.accessCode ?? null,
+      });
       // Link baru masuk daftar "Link aktif" tanpa menutup-membuka modal.
       setFreshIds((prev) => new Set(prev).add(link.id));
       linksQuery.refetch().catch(() => undefined);
@@ -635,6 +650,32 @@ export default function ShareModal({
               </ButtonPrimary>
             )}
           />
+          {result.accessCode ? (
+            <div className={styles.codeBox} role="note">
+              <span className={`spine-label ${styles.codeLabel}`}>Kode akses</span>
+              <span className={styles.codeRow}>
+                <code className={styles.codeValue}>{result.accessCode}</code>
+                <PillButton
+                  variant="surface"
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard
+                      ?.writeText(result.accessCode ?? "")
+                      .then(() => pushToast({ tone: "success", message: "Kode akses disalin." }))
+                      .catch(() => undefined);
+                  }}
+                >
+                  <span className={styles.btnIcon} aria-hidden="true">
+                    {ICON_COPY}
+                  </span>
+                  Salin Kode
+                </PillButton>
+              </span>
+              <span className={`spine-footnote ${styles.codeNote}`}>
+                Kode ini hanya tampil sekali. Kirim terpisah dari tautannya; penerima memasukkannya untuk membuka link.
+              </span>
+            </div>
+          ) : null}
         </div>
       ) : (
         <>
@@ -658,7 +699,7 @@ export default function ShareModal({
                 {
                   value: "PRIVATE",
                   title: "Private",
-                  note: "Hanya user Shotstash yang sudah login.",
+                  note: "Hanya yang punya kode akses.",
                   icon: ICON_LOCK,
                 },
               ]}

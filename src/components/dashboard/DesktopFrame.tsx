@@ -138,14 +138,14 @@ export default function DesktopFrame({
   onOpenProfile,
   onOpenLogout,
 }: {
-  user: { name?: string | null; email?: string | null; avatarUrl?: string | null; role?: string | null } | null;
+  user: { name?: string | null; email?: string | null; avatarUrl?: string | null; role?: string | null; permissions?: readonly string[] | null } | null;
   pathname: string;
   onOpenProfile: () => void;
   onOpenLogout: () => void;
 }) {
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
-  const destinations = navDestinations(user?.role);
+  const destinations = navDestinations(user);
   const activeHref = destinations.find((d) => isActiveDestination(d, pathname))?.href ?? null;
 
   const wrapRef = useRef<HTMLElement>(null);

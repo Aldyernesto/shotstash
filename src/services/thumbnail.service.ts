@@ -133,5 +133,5 @@ async function generateVideoThumbnail(filePath: string, thumbPath: string): Prom
 }
 
 export function getThumbnailUrl(fileId: string): string {
-  return `/api/thumbnail/${fileId}`;
+  return `/media/t/${fileId}`;
 }

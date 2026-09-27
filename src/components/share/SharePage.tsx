@@ -16,16 +16,21 @@
  *   - "Access count", mime "Type", nama pengunggah, dan Section lain di
  *     project — ketiganya tidak pernah ikut di payload (lihat
  *     `src/lib/shareLink.ts`).
+ *
+ * Story 2.3: every media URL is a signed `/media/s/<token>` URL valid for
+ * 5 minutes. The page re-mints them through `POST /s/<slug>/sign` every
+ * 4 minutes; the inline video keeps its source and is re-signed only when
+ * it fails, resuming at the same position.
  */
 
-import React, { useCallback, useId, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import Logo from "@/components/Logo";
 import { brand } from "@/lib/brand";
 import ThemeToggle from "@/components/ThemeToggle";
 import TagPill from "@/components/tag-pill/TagPill";
 import { ButtonPrimary, PillButton } from "@/components/form/buttons";
 import { ErrorBox } from "@/components/dashboard/states";
-import VideoPlayer from "@/components/media/VideoPlayer";
+import VideoPlayer, { type VideoPlayerHandle } from "@/components/media/VideoPlayer";
 import { KIND_WORD, SHARE_PAGE_SIZE, type ShareFile, type ShareSection, type SharePayload } from "@/lib/shareTypes";
 import { formatDate, formatNumber, formatTimeWIB } from "@/lib/format";
 import ShareInvalid, { type ShareInvalidKind } from "./ShareInvalid";
@@ -90,17 +95,13 @@ function NumberSticker({ value, className }: { value: string; className?: string
 
 function PublicFileCard({
   file,
-  projectId,
-  slug,
   onOpen,
 }: {
   file: ShareFile;
-  projectId: string;
-  slug: string;
   onOpen?: (file: ShareFile) => void;
 }) {
-  const href = `/api/download?projectId=${projectId}&fileIds=${file.id}&shareSlug=${slug}`;
-  const inline = `${href}&inline=1`;
+  const href = file.downloadUrl ?? undefined;
+  const inline = file.inlineUrl ?? undefined;
   const label = [file.name, KIND_WORD[file.kind].toLowerCase(), file.sizeText].join(", ");
   return (
     <article className={styles.fileCell}>
@@ -162,13 +163,11 @@ function PublicFileCard({
 function PublicSectionCard({
   section,
   slug,
-  projectId,
   onZip,
   zipBusy,
 }: {
   section: ShareSection;
   slug: string;
-  projectId: string;
   onZip: (id: string, title: string) => void;
   zipBusy: string | null;
 }) {
@@ -245,6 +244,88 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
   const liveRef = useRef<HTMLParagraphElement>(null);
   const [live, setLive] = useState("");
   const gridId = useId();
+  /* Signed URLs of the single-file variant. The media source stays put
+     (re-signed only on error) so playback never restarts on a refresh. */
+  const [single, setSingle] = useState<ShareFile | null>(payload.single);
+  const [mediaSrc, setMediaSrc] = useState<string | null>(payload.single?.inlineUrl ?? null);
+  /** Stage thumbnails are signed too, so they are refreshed with the rest. */
+  const [stageThumbs, setStageThumbs] = useState<(string | null)[]>(payload.stageThumbs);
+  /** True while an error re-sign is in flight or failed: at most one retry per failure. */
+  const mediaRetryRef = useRef(false);
+  const videoRef = useRef<VideoPlayerHandle>(null);
+  const filesRef = useRef(files);
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
+
+  const mapDeadRef = useRef<(body: { state?: string; target?: string } | null) => ShareInvalidKind | null>(() => null);
+
+  /** Re-mints signed URLs for these files. Null when the link died meanwhile. */
+  type SignResult = {
+    files?: Record<string, Pick<ShareFile, "thumbnailUrl" | "inlineUrl" | "downloadUrl">>;
+    stageThumbs?: (string | null)[] | null;
+    sectionThumbs?: Record<string, (string | null)[]> | null;
+  };
+  const signFiles = useCallback(
+    async (fileIds: string[], thumbs = false): Promise<SignResult | null> => {
+      const res = await fetch(`/s/${payload.slug}/sign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileIds, thumbs, section: payload.section?.id ?? null }),
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        const kind = mapDeadRef.current(body);
+        if (kind) setDead(kind);
+        return null;
+      }
+      return (body ?? {}) as SignResult;
+    },
+    [payload.slug, payload.section],
+  );
+
+  // Refresh every 4 minutes (signed URLs live 5).
+  useEffect(() => {
+    const t = window.setInterval(async () => {
+      const ids = filesRef.current.map((f) => f.id);
+      if (payload.single) ids.push(payload.single.id);
+      const result = await signFiles(ids, true).catch(() => null);
+      if (!result) return;
+      const fresh = result.files ?? {};
+      setFiles((prev) => prev.map((f) => (fresh[f.id] ? { ...f, ...fresh[f.id] } : f)));
+      setSingle((prev) => (prev && fresh[prev.id] ? { ...prev, ...fresh[prev.id] } : prev));
+      if (result.stageThumbs) setStageThumbs(result.stageThumbs);
+      const sectionThumbs = result.sectionThumbs;
+      if (sectionThumbs) {
+        setSections((prev) => prev.map((s) => (sectionThumbs[s.id] ? { ...s, repThumbs: sectionThumbs[s.id] } : s)));
+      }
+    }, 4 * 60 * 1000);
+    return () => window.clearInterval(t);
+  }, [payload.single, signFiles]);
+
+  /** The inline media failed (expired URL): re-sign and resume where it was. */
+  const onMediaError = useCallback(async () => {
+    // One retry per failure: if the fresh URL fails too, stop (no loop).
+    if (!payload.single || mediaRetryRef.current) return;
+    mediaRetryRef.current = true;
+    const el = videoRef.current?.element() ?? null;
+    const at = el ? el.currentTime : 0;
+    const wasPlaying = el ? !el.paused : false;
+    const fresh = await signFiles([payload.single.id]).catch(() => null);
+    const next = fresh?.files?.[payload.single.id]?.inlineUrl;
+    if (!next || next === mediaSrc) return;
+    setMediaSrc(next);
+    if (el) {
+      const resume = () => {
+        mediaRetryRef.current = false; // loaded again: a later expiry may retry once more
+        el.currentTime = at;
+        if (wasPlaying) void el.play().catch(() => undefined);
+      };
+      el.addEventListener("loadedmetadata", resume, { once: true });
+    }
+  }, [payload.single, signFiles, mediaSrc]);
 
   const pagesSections = payload.kind === "project" && !payload.section;
   const shown = pagesSections ? sections.length : files.length;
@@ -258,9 +339,14 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
     if (body.state === "expired") return "expired";
     if (body.state === "not-found") return "not-found";
     if (body.state === "private") return "private";
-    if (body.state === "gone") return body.target === "project" ? "project-gone" : "section-gone";
+    if (body.state === "gone") {
+      return body.target === "project" ? "project-gone" : body.target === "file" ? "file-gone" : "section-gone";
+    }
     return null;
   };
+  useEffect(() => {
+    mapDeadRef.current = mapDead;
+  });
 
   const fetchPage = useCallback(
     async (offset: number, nextSort: string, replace: boolean) => {
@@ -270,9 +356,8 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
         sort: nextSort,
       });
       if (payload.section) q.set("section", payload.section.id);
-      const token = typeof window !== "undefined" ? localStorage.getItem("shotstash_token") : null;
-      const res = await fetch(`/api/share/${payload.slug}/page?${q.toString()}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      const res = await fetch(`/s/${payload.slug}/items?${q.toString()}`, {
+        credentials: "same-origin",
         cache: "no-store",
       });
       if (!res.ok) {
@@ -332,26 +417,28 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
   };
 
   /**
-   * "Download ZIP". Rute unduh MENGALIRKAN arsip, jadi kegagalannya tidak
-   * pernah kembali ke halaman — karena itu link & target diperiksa dulu
-   * lewat `/prepare`. Tombol TIDAK PERNAH terkunci di "Menyiapkan…".
+   * "Download ZIP". The archive STREAMS, so its failures never come back to
+   * the page: `POST /s/<slug>/sign` checks the link, the target and the
+   * first file first and mints a fresh signed ZIP URL. The button never
+   * stays stuck on "Menyiapkan...".
    */
   const downloadZip = async (sectionId: string | null, key: string) => {
     if (zipBusy) return;
     setZipBusy(key);
     setZipError(null);
     try {
-      const q = new URLSearchParams();
-      if (sectionId) q.set("section", sectionId);
-      else if (payload.section) q.set("section", payload.section.id);
-      if (payload.kind === "file" && payload.single) q.set("file", payload.single.id);
-      const token = typeof window !== "undefined" ? localStorage.getItem("shotstash_token") : null;
-      const res = await fetch(`/api/share/${payload.slug}/prepare?${q.toString()}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      const section = sectionId ?? payload.section?.id ?? null;
+      const res = await fetch(`/s/${payload.slug}/sign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ zip: true, section }),
+        credentials: "same-origin",
         cache: "no-store",
       });
+      const body = (await res.json().catch(() => null)) as
+        | { zipUrl?: string | null; cause?: string | null; state?: string; target?: string }
+        | null;
       if (!res.ok) {
-        const body = await res.json().catch(() => null);
         const kind = mapDead(body);
         if (kind) {
           setDead(kind);
@@ -360,19 +447,17 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
         setZipError("Server sedang bermasalah.");
         return;
       }
-      const body = (await res.json()) as { ok: boolean; cause?: string };
-      if (!body.ok) {
-        setZipError(body.cause ?? "Sambungan bermasalah.");
+      if (!body?.zipUrl) {
+        setZipError(
+          body?.cause === "EMPTY"
+            ? "Tidak ada file untuk diunduh di link ini."
+            : body?.cause === "UNREADABLE"
+              ? "Berkasnya tidak bisa dibaca di penyimpanan."
+              : "Berkasnya sudah tidak ada lagi.",
+        );
         return;
       }
-      // Sah — serahkan ke rute unduh.
-      const dl = new URLSearchParams({ projectId: payload.projectId, shareSlug: payload.slug });
-      if (payload.kind === "file" && payload.single) dl.set("fileIds", payload.single.id);
-      else if (sectionId) dl.set("folderId", sectionId);
-      else if (payload.section) dl.set("folderId", payload.section.id);
-      else if (payload.folderId) dl.set("folderId", payload.folderId);
-      else if (payload.zipFolderIds.length) dl.set("folderIds", payload.zipFolderIds.join(","));
-      window.location.href = `/api/download?${dl.toString()}`;
+      window.location.href = body.zipUrl;
     } catch {
       setZipError("Sambungan ke server terputus.");
     } finally {
@@ -380,9 +465,8 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
     }
   };
 
-  if (dead) return <ShareInvalid kind={dead} />;
+  if (dead) return <ShareInvalid kind={dead} slug={payload.slug} />;
 
-  const single = payload.single;
   const headline = payload.section ? payload.section.title : payload.title;
   const stickerNumber = payload.section ? payload.section.number : payload.number;
 
@@ -410,7 +494,7 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
             </h1>
           </div>
           <div className={styles.stack} aria-hidden="true">
-            {(payload.kind === "file" ? [payload.stageThumbs[0] ?? null] : payload.stageThumbs)
+            {(payload.kind === "file" ? [stageThumbs[0] ?? null] : stageThumbs)
               .slice(0, 3)
               .map((url, i) => (
                 <span
@@ -511,17 +595,20 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
           >
             {single.kind === "video" ? (
               <VideoPlayer
-                src={`/api/download?projectId=${payload.projectId}&fileIds=${single.id}&inline=1&shareSlug=${payload.slug}`}
+                ref={videoRef}
+                src={mediaSrc ?? ""}
                 poster={single.thumbnailUrl}
                 label={single.name}
                 playSize="lg"
                 onMetadata={(m) => setMediaRatio(m.width / m.height)}
+                onSourceError={onMediaError}
               />
             ) : single.kind === "image" ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
-                src={`/api/download?projectId=${payload.projectId}&fileIds=${single.id}&inline=1&shareSlug=${payload.slug}`}
+                src={mediaSrc ?? undefined}
                 alt={single.name}
+                onError={onMediaError}
                 // Halaman ini di-render server: foto (apalagi dari cache) bisa
                 // selesai dimuat SEBELUM listener React terpasang, sehingga
                 // onLoad tidak pernah menyala — baca juga saat elemen dipasang.
@@ -531,6 +618,7 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
                   }
                 }}
                 onLoad={(e) => {
+                  mediaRetryRef.current = false;
                   const img = e.currentTarget;
                   if (img.naturalWidth > 0 && img.naturalHeight > 0) setMediaRatio(img.naturalWidth / img.naturalHeight);
                 }}
@@ -580,13 +668,12 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
                     key={s.id}
                     section={s}
                     slug={payload.slug}
-                    projectId={payload.projectId}
                     zipBusy={zipBusy}
                     onZip={(id) => downloadZip(id, id)}
                   />
                 ))
               : files.map((f) => (
-                  <PublicFileCard key={f.id} file={f} projectId={payload.projectId} slug={payload.slug} />
+                  <PublicFileCard key={f.id} file={f} />
                 ))}
           </div>
 

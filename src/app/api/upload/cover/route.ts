@@ -1,44 +1,41 @@
-import { NextRequest, NextResponse } from 'next/server';
+// Cover upload: project covers (`kind=project`, needs `section.create`) and
+// user avatars (`kind=user`, any writable account). Answers the relative
+// cookie-authorised URL `/media/c/<kind>/<id>`; nothing absolute is stored.
 import { promises as fs } from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
-import prisma from '@/lib/prisma';
+import { NextResponse } from 'next/server';
+import { defineRoute, jsonError } from '@/lib/defineRoute';
+import { can } from '@/modules/auth';
+import { COVER_EXTENSIONS, coverUrl, coversDir, type CoverKind } from '@/modules/media';
 
-const STORAGE_LOCAL_ROOT = process.env.STORAGE_LOCAL_ROOT || './data/media';
-const COVERS_DIR = path.join(STORAGE_LOCAL_ROOT, 'covers');
+const MAX_COVER_BYTES = 10 * 1024 * 1024;
 
-async function getUserFromHeader(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
-  const token = authHeader.split(' ')[1];
-  const session = await prisma.session.findUnique({
-    where: { token },
-    include: { user: true }
-  });
-  if (!session || session.expiresAt < new Date()) return null;
-  return session.user;
-}
+export const POST = defineRoute({
+  auth: 'session',
+  action: 'section.create (project) / self (user)',
+  handler: async ({ req, actor }) => {
+    const formData = await req.formData().catch(() => null);
+    if (!formData) return jsonError(400, 'BAD_REQUEST', 'Invalid form data');
+    const kind: CoverKind = formData.get('kind') === 'user' ? 'user' : 'project';
 
-export async function POST(req: NextRequest) {
-  try {
-    const user = await getUserFromHeader(req);
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const allowed =
+      kind === 'user'
+        ? !!actor && actor.active && actor.accountStatus === 'ACTIVE' && !actor.readOnly
+        : can(actor, 'section.create');
+    if (!allowed) return jsonError(403, 'FORBIDDEN', 'Forbidden');
 
-    const formData = await req.formData();
-    const file = formData.get('file') as File;
-    if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    const file = formData.get('file');
+    if (!(file instanceof File)) return jsonError(400, 'BAD_REQUEST', 'No file provided');
+    if (file.size > MAX_COVER_BYTES) return jsonError(413, 'TOO_LARGE', 'Cover is too large');
 
     const ext = path.extname(file.name).toLowerCase() || '.jpg';
+    if (!COVER_EXTENSIONS.includes(ext)) return jsonError(415, 'UNSUPPORTED_TYPE', 'Unsupported image type');
+
     const id = randomUUID();
-    const filename = `${id}${ext}`;
+    await fs.mkdir(coversDir(), { recursive: true });
+    await fs.writeFile(path.join(coversDir(), `${id}${ext}`), Buffer.from(await file.arrayBuffer()));
 
-    await fs.mkdir(COVERS_DIR, { recursive: true });
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await fs.writeFile(path.join(COVERS_DIR, filename), buffer);
-
-    const url = `http://localhost:3005/api/cover/${id}`;
-    return NextResponse.json({ url, id });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
-  }
-}
+    return NextResponse.json({ url: coverUrl(kind, id), id });
+  },
+});

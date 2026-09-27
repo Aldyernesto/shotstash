@@ -15,7 +15,10 @@ export type ShareFile = {
   kind: ShareFileKind;
   sizeBytes: number;
   sizeText: string;
+  /** Signed `/media/s/<token>` URLs (valid 5 min); re-minted through `POST /s/<slug>/sign`. */
   thumbnailUrl: string | null;
+  inlineUrl: string | null;
+  downloadUrl: string | null;
   /** Kolom durasi belum ada di skema — selalu null untuk saat ini. */
   duration: string | null;
 };
@@ -37,14 +40,10 @@ export type SharePayload = {
   title: string;
   number: string | null;
   projectId: string;
-  /** Varian Section: id folder yang dibagikan (untuk URL unduh ZIP). */
+  /** Varian Section: id folder yang dibagikan. */
   folderId: string | null;
-  /**
-   * Varian Project: id SELURUH Section yang ikut dibagikan — dipakai
-   * hanya untuk merakit URL "Download ZIP" isi penuh. Tidak memuat nama,
-   * jumlah, atau thumbnail, jadi tidak membocorkan apa pun.
-   */
-  zipFolderIds: string[];
+  /** Signed URL of the ZIP for the whole payload (valid 24 h), null when nothing can be signed. */
+  zipUrl: string | null;
   projectName: string | null;
   /** Varian file: nama Section induk untuk kicker. */
   sectionLabel: string | null;

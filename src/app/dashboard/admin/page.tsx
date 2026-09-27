@@ -6,7 +6,7 @@ import { gql } from "@apollo/client";
 import styles from "./page.module.css";
 import { useAuth } from "@/components/AuthContext";
 // Story 2.18: gerbang Admin Panel dari modul bersama.
-import { canOpenAdminPanel, isSuperAdmin } from "@/lib/permissions";
+import { canOpenAdminPanel, hasPermission, isSuperAdmin } from "@/lib/permissions";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
 // Story 3.18: lapisan bersama — `dialog`/`confirm-sheet`, `notice-bar`,
@@ -247,7 +247,8 @@ export default function AdminPanel() {
     error: statsError,
     refetch: refetchStats,
   } = useQuery(STORAGE_STATS, {
-    skip: !canOpenAdminPanel(user),
+    // Storage stats are instance configuration (super admin only).
+    skip: !hasPermission(user, "instance.configure"),
   });
 
   const stats = statsData?.storageStats;

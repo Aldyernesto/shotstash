@@ -20,7 +20,7 @@ import { useQuery, useMutation, gql } from "@apollo/client";
 import Link from "next/link";
 import styles from "./page.module.css";
 import { useAuth } from "@/components/AuthContext";
-import { canManageTrash } from "@/lib/permissions";
+import { canPurgeTrash, canViewTrash } from "@/lib/permissions";
 import RepThumb from "@/components/dashboard/RepThumb";
 import StatusMark from "@/components/auth/StatusMark";
 import { ConfirmDialog } from "@/components/overlay/Dialog";
@@ -185,7 +185,9 @@ type PendingAction = {
 
 export default function TrashPage() {
   const { user } = useAuth();
-  const allowed = canManageTrash(user);
+  const allowed = canViewTrash(user);
+  // Story 2.4: only super admin and admin purge; the button is not rendered otherwise.
+  const canPurge = canPurgeTrash(user);
 
   const { data, loading, error, refetch } = useQuery(GET_ALL_TRASHED, {
     fetchPolicy: "cache-and-network",
@@ -460,6 +462,7 @@ export default function TrashPage() {
                           </span>
                           Restore
                         </PillButton>
+                        {canPurge ? (
                         <ButtonDanger
                           variant="outline"
                           className={styles.actionBtn}
@@ -479,6 +482,7 @@ export default function TrashPage() {
                           </span>
                           Delete Forever
                         </ButtonDanger>
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -555,6 +559,7 @@ export default function TrashPage() {
                           </span>
                           Restore
                         </PillButton>
+                        {canPurge ? (
                         <ButtonDanger
                           variant="outline"
                           className={styles.actionBtn}
@@ -574,6 +579,7 @@ export default function TrashPage() {
                           </span>
                           Delete Forever
                         </ButtonDanger>
+                        ) : null}
                       </div>
                     </div>
                   );

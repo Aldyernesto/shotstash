@@ -125,6 +125,40 @@
   margin-top: 14px;
 }
 
+/* Story 2.3: one-time access code of a PRIVATE link. */
+.codeBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--app-ok-border);
+  border-radius: var(--spine-radius-md);
+}
+
+.codeLabel {
+  margin: 0;
+}
+
+.codeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.codeValue {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.codeNote {
+  margin: 0;
+}
+
 .copy > button {
   width: 100%;
 }

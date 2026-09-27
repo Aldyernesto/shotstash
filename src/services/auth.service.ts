@@ -1,30 +1,14 @@
-// Shotstash — Auth Service
-// Layer 3: Business Logic
-// Security: Argon2id + HttpOnly Secure Cookie
+// Shotstash Auth Service: passwords, sessions and user administration.
 
 import * as bcrypt from 'bcryptjs';
-import { randomInt, randomUUID } from 'crypto';
+import { randomInt } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
+import { createSessionRow, destroySessionToken, validateSessionToken } from '@/lib/sessionStore';
 import { GOOGLE_ONLY_MARKER } from '@/lib/authMessages';
 import { isEmailConfigured } from './email.service';
 
 export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'FIELD_CREW' | 'EDITOR' | 'VIEWER';
-
-// ============================================
-// Cookie Configuration
-// ============================================
-
-export const SESSION_COOKIE_NAME = 'shotstash_session';
-
-export const COOKIE_OPTIONS = {
-  httpOnly: true,        // Anti-XSS: JS tidak bisa akses cookie
-  secure: process.env.NODE_ENV === 'production', // HTTPS only di production
-  sameSite: 'lax' as const,  // Anti-CSRF
-  maxAge: 7 * 24 * 60 * 60,  // 7 hari
-  path: '/',
-  domain: process.env.COOKIE_DOMAIN || undefined,
-};
 
 // ============================================
 // Password Hashing (Bcryptjs)
@@ -42,47 +26,21 @@ export async function verifyPassword(
 }
 
 // ============================================
-// Session Management
+// Session Management (store lives in src/lib/sessionStore.ts)
 // ============================================
 
 export async function createSession(userId: string, meta?: { ip?: string; userAgent?: string }) {
-  const token = randomUUID();
-  const expiresAt = new Date(Date.now() + COOKIE_OPTIONS.maxAge * 1000);
-
-  const session = await prisma.session.create({
-    data: {
-      token,
-      userId,
-      expiresAt,
-      ipAddress: meta?.ip,
-      userAgent: meta?.userAgent,
-    },
-  });
-
-  return session;
+  return createSessionRow(userId, meta);
 }
 
+/** Live session for a token (sliding expiry), or null. */
 export async function validateSession(token: string) {
-  const session = await prisma.session.findUnique({
-    where: { token },
-    include: { user: true },
-  });
-
-  if (!session) return null;
-
-  // Session expired?
-  if (session.expiresAt < new Date()) {
-    await prisma.session.delete({ where: { id: session.id } });
-    return null;
-  }
-
-  return session;
+  return validateSessionToken(token);
 }
 
+/** Revokes the session with this token. */
 export async function destroySession(token: string) {
-  await prisma.session.delete({ where: { token } }).catch(() => {
-    // Session mungkin sudah expired/dihapus
-  });
+  return destroySessionToken(token);
 }
 
 // ============================================
