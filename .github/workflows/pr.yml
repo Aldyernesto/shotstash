@@ -62,13 +62,9 @@ jobs:
       - name: Tests
         run: npm test
 
-      - name: No Indonesian leftovers (translated scope)
+      # Story 3.5: required for the whole src/ tree (exceptions in scripts/i18n-scope.json).
+      - name: No Indonesian leftovers (whole tree)
         run: npm run i18n:check
-
-      # Informational until Story 3.5 translates the rest and makes it required.
-      - name: No Indonesian leftovers (whole tree, non-blocking)
-        run: npm run i18n:check:all
-        continue-on-error: true
 
       - name: Install gitleaks
         run: |

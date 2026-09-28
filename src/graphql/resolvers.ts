@@ -34,6 +34,7 @@ import * as Trash from '@/modules/trash';
 import { isSupportedLocale } from '@/modules/i18n';
 import { LOGIN_INTERNAL_ERROR } from '../lib/authMessages';
 import { GraphQLError } from 'graphql';
+import { codedError } from '@/modules/errors';
 
 function rateLimited(retryAfter: number) {
   return new GraphQLError('Too many attempts', { extensions: { code: 'RATE_LIMITED', retryAfter } });
@@ -109,8 +110,11 @@ async function superAdminCount(): Promise<number> {
 // User-management target guard (Story 2.4): throws FORBIDDEN when the change is not allowed.
 async function assertManageUser(context: GraphQLContext, targetId: string, change: UserChange) {
   const actor = actorOf(context);
-  const target = await prisma.user.findUnique({ where: { id: targetId }, select: { id: true, role: true } });
-  if (!target) throw new Error('User tidak ditemukan.');
+  const target = await prisma.user.findUnique({
+    where: { id: targetId },
+    select: { id: true, role: true, accountStatus: true },
+  });
+  if (!target) throw codedError('USER_NOT_FOUND', 'User not found');
   if (!canManageUser(actor, target, change, await superAdminCount())) {
     throw forbidden(`Forbidden: users.manage (${change.kind})`);
   }
@@ -120,23 +124,27 @@ async function assertManageUser(context: GraphQLContext, targetId: string, chang
 async function assertUploadOwner(context: GraphQLContext, sessionId: string) {
   const actor = actorOf(context);
   const session = await prisma.uploadSession.findUnique({ where: { id: sessionId }, select: { uploadedById: true } });
-  if (!session) throw new Error('Upload session tidak ditemukan');
+  if (!session) throw codedError('UPLOAD_SESSION_NOT_FOUND', 'Upload session not found');
   assertCan(actor, 'upload', { ownerId: session.uploadedById });
 }
 // Aksi admin berisiko (reset password / hapus akun): target tidak boleh diri sendiri.
 // Target SUPER_ADMIN & user tidak ditemukan ditolak di AuthService (AdminActionError).
-function adminTargetError(callerId: string, targetId: string): string | null {
-  if (!targetId) return 'User tidak ditemukan.';
-  if (targetId === callerId) return 'Tidak bisa melakukan aksi ini pada akun sendiri.';
+// Admin payloads carry a stable `errorCode` (plus activity counts for
+// USER_HAS_ACTIVITY); `message` is an English developer string.
+function adminTargetError(callerId: string, targetId: string) {
+  if (!targetId) return { success: false, message: 'User not found', password: null, errorCode: 'USER_NOT_FOUND' };
+  if (targetId === callerId) {
+    return { success: false, message: 'This action cannot target your own account', password: null, errorCode: 'CANNOT_TARGET_SELF' };
+  }
   return null;
 }
 function adminActionFailure(action: string, error: unknown) {
   if (error instanceof AuthService.AdminActionError) {
-    return { success: false, message: error.message, password: null };
+    return { success: false, message: error.message, password: null, errorCode: error.code, ...error.details };
   }
   // Jangan log argumen mutasi (bisa berisi password) — cukup pesan error.
-  console.error(`[${action}] gagal:`, (error as Error)?.message);
-  return { success: false, message: 'Gagal memproses permintaan. Coba lagi.', password: null };
+  console.error(`[${action}] failed:`, (error as Error)?.message);
+  return { success: false, message: 'Internal error', password: null, errorCode: 'INTERNAL' };
 }
 // Jejak audit aksi admin berisiko. JANGAN pernah sertakan password.
 function auditAdminAction(action: string, actor: { id: string; email: string } | null, targetEmail: string) {
@@ -146,10 +154,16 @@ function auditAdminAction(action: string, actor: { id: string; email: string } |
 // (JANGAN log argumen mutasi: berisi kode/token/password).
 function passwordResetFailure(action: string, error: unknown) {
   if (error instanceof PasswordReset.PasswordResetError) {
-    return { success: false, message: error.message, resetToken: null, errorCode: error.code };
+    return {
+      success: false,
+      message: error.message,
+      resetToken: null,
+      errorCode: error.code,
+      attemptsLeft: error.attemptsLeft,
+    };
   }
-  console.error(`[${action}] gagal:`, (error as Error)?.message);
-  return { success: false, message: 'Gagal memproses permintaan. Coba lagi.', resetToken: null, errorCode: 'INTERNAL' };
+  console.error(`[${action}] failed:`, (error as Error)?.message);
+  return { success: false, message: 'Internal error', resetToken: null, errorCode: 'INTERNAL', attemptsLeft: null };
 }
 function parseSignupAnswers(value: unknown) {
   if (value == null || value === '') return undefined;
@@ -157,27 +171,43 @@ function parseSignupAnswers(value: unknown) {
   try { return JSON.parse(value); } catch { return { raw: value }; }
 }
 
-function validateFileTypeForFolder(folderName: string, ext: string): string | null {
-  const fname = folderName.toLowerCase();
-  if (fname === 'video' && !VIDEO_EXTS.includes(ext)) {
-    return `Folder Video hanya menerima file video (${VIDEO_EXTS.join(', ')}). File .${ext} ditolak.`;
-  }
-  if (fname === 'photo' && !PHOTO_EXTS.includes(ext)) {
-    return `Folder Photo hanya menerima file gambar (${PHOTO_EXTS.join(', ')}). File .${ext} ditolak.`;
-  }
-  if (fname === 'dokumen' && !DOC_EXTS.includes(ext)) {
-    return `Folder Dokumen hanya menerima file dokumen (${DOC_EXTS.join(', ')}). File .${ext} ditolak.`;
-  }
+type DefaultSectionType = 'video' | 'photo' | 'document';
+
+/**
+ * Names of the default Sections a new project gets (Video, Photo, Documents),
+ * lowercased, plus the names older installs used for them.
+ */
+const DEFAULT_SECTION_TYPES: Record<string, DefaultSectionType> = {
+  video: 'video',
+  photo: 'photo',
+  foto: 'photo', // i18n-ignore: legacy default Section name, matched only
+  documents: 'document',
+  dokumen: 'document', // i18n-ignore: legacy default Section name, matched only
+};
+
+function defaultSectionType(name: string): DefaultSectionType | null {
+  return DEFAULT_SECTION_TYPES[name.trim().toLowerCase()] ?? null;
+}
+
+/** FILE_TYPE_NOT_ALLOWED when a default Section (Video, Photo, Documents) refuses this extension. */
+function validateFileTypeForFolder(folderName: string, ext: string): GraphQLError | null {
+  const type = defaultSectionType(folderName);
+  const refuse = (sectionType: DefaultSectionType, allowed: string[]) =>
+    codedError('FILE_TYPE_NOT_ALLOWED', `The ${folderName} Section accepts only ${allowed.join(', ')}; .${ext} refused`, {
+      sectionType,
+      ext,
+    });
+  if (type === 'video' && !VIDEO_EXTS.includes(ext)) return refuse('video', VIDEO_EXTS);
+  if (type === 'photo' && !PHOTO_EXTS.includes(ext)) return refuse('photo', PHOTO_EXTS);
+  if (type === 'document' && !DOC_EXTS.includes(ext)) return refuse('document', DOC_EXTS);
   return null;
 }
 
-// Trace folder ancestry to find the root default folder type
+// Trace folder ancestry to find the root default Section (its own name).
 async function getRootFolderType(folderId: string): Promise<string | null> {
   let current = await prisma.folder.findUnique({ where: { id: folderId } });
   while (current) {
-    if (['Video', 'Photo', 'Dokumen'].includes(current.name)) {
-      return current.name;
-    }
+    if (defaultSectionType(current.name)) return current.name;
     if (!current.parentId) break;
     current = await prisma.folder.findUnique({ where: { id: current.parentId } });
   }
@@ -308,10 +338,10 @@ async function repFilesFor(
   includeTrashed = false,
 ) {
   if (!Number.isInteger(limit) || limit < 1) {
-    throw new Error(`limit harus bilangan bulat minimal 1 (maksimal ${max}).`);
+    throw codedError('INVALID_LIMIT', `limit must be an integer from 1 to ${max}`, { max });
   }
   if (limit > max) {
-    throw new Error(`limit sampel maksimal ${max} (diminta ${limit}).`);
+    throw codedError('INVALID_LIMIT', `limit must be at most ${max} (got ${limit})`, { max });
   }
   const files = await prisma.mediaFile.findMany({
     where: includeTrashed ? where : { ...where, trashedAt: null },
@@ -356,13 +386,14 @@ function decorateShareLink<
 >(link: T) {
   // Derive a friendly target type + name based on which relation is set.
   let targetType = 'unknown';
-  let targetName = 'Tidak ditemukan';
+  // null = the target is gone; the client shows its own "deleted" label.
+  let targetName: string | null = null;
   if (link.file) { targetType = 'file'; targetName = link.file.originalName; }
   else if (link.folder) { targetType = 'folder'; targetName = link.folder.name; }
   else if (link.projectRef) { targetType = 'project'; targetName = link.projectRef.title; }
-  else if (link.fileId) { targetType = 'file'; targetName = 'File sudah dihapus'; }
-  else if (link.folderId) { targetType = 'folder'; targetName = 'Folder sudah dihapus'; }
-  else if (link.projectId2) { targetType = 'project'; targetName = 'Project sudah dihapus'; }
+  else if (link.fileId) targetType = 'file';
+  else if (link.folderId) targetType = 'folder';
+  else if (link.projectId2) targetType = 'project';
   return {
     ...link,
     project: link.projectRef,
@@ -525,7 +556,7 @@ const rawResolvers = {
         projectId ? { projectId2: projectId } : null,
       ].filter(Boolean) as ({ fileId: string } | { folderId: string } | { projectId2: string })[];
       if (targets.length !== 1) {
-        throw new Error('Tentukan tepat satu target: fileId, folderId, atau projectId.');
+        throw codedError('INVALID_SHARE_TARGET', 'Exactly one target is required: fileId, folderId or projectId');
       }
 
       const links = await prisma.shareLink.findMany({
@@ -573,12 +604,12 @@ const rawResolvers = {
     },
 
     notifications: async (_: any, { unreadOnly }: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      if (!context.userId) throw codedError('UNAUTHENTICATED', 'Unauthorized');
       return NotifService.getNotifications(context.userId, unreadOnly);
     },
 
     unreadNotificationCount: async (_: any, __: any, context: GraphQLContext) => {
-      if (!context.userId) throw new Error('Unauthorized');
+      if (!context.userId) throw codedError('UNAUTHENTICATED', 'Unauthorized');
       return NotifService.unreadCount(context.userId);
     },
 
@@ -663,7 +694,7 @@ const rawResolvers = {
       const adminCreate = !!context.actor;
       // Signup publik: role yang diminta hanya boleh dari PUBLIC_SIGNUP_ROLES (kalau diisi).
       if (!adminCreate && requestedRole && !PUBLIC_SIGNUP_ROLES.includes(requestedRole)) {
-        return { success: false, message: 'Role yang diminta tidak valid untuk pendaftaran publik' };
+        return { success: false, message: 'Requested role is not allowed for public sign-up', errorCode: 'INVALID_ROLE' };
       }
 
       // Signed in: an admin creating a team account (users.manage).
@@ -672,7 +703,7 @@ const rawResolvers = {
           throw forbidden('Forbidden: users.manage');
         }
         if (!TEAM_CREATE_ROLES.includes(requestedRole)) {
-          return { success: false, message: 'Super Admin hanya boleh membuat Admin, Editor, Field Crew, atau Viewer dari panel ini' };
+          return { success: false, message: 'Only admin, crew, editor or viewer accounts can be created here', errorCode: 'INVALID_ROLE' };
         }
       }
 
@@ -696,7 +727,8 @@ const rawResolvers = {
         if (error instanceof AuthService.PasswordRuleError || error instanceof AuthService.EmailTakenError) {
           return { success: false, message: error.message, errorCode: error.code };
         }
-        return { success: false, message: error.message };
+        console.error('[register] unexpected failure:', error?.message);
+        return { success: false, message: 'Internal error', errorCode: 'INTERNAL' };
       }
     },
 
@@ -741,7 +773,7 @@ const rawResolvers = {
         const rootType = await getRootFolderType(input.folderId);
         if (rootType) {
           const invalid = validateFileTypeForFolder(rootType, ext);
-          if (invalid) throw new Error(invalid);
+          if (invalid) throw invalid;
         }
       }
 
@@ -812,7 +844,7 @@ const rawResolvers = {
       assertCan(actor, 'share.manage');
       const link = await ShareService.getShareLinkOwner(id);
       if (!link || link.revokedAt || !can(actor, 'share.manage', { ownerId: link.createdById })) {
-        throw forbidden('Link tidak ditemukan atau bukan milikmu.');
+        throw forbidden('Share link not found or not owned by the caller');
       }
       return ShareService.revokeShareLink(id);
     },
@@ -825,7 +857,7 @@ const rawResolvers = {
     completeOnboarding: async (_: any, { requestedRole, signupAnswers }: any, context: GraphQLContext) => {
       assertCanWriteSelf(context.actor);
       const role = requestedRole as MamRole;
-      if (!PUBLIC_SIGNUP_ROLES.includes(role)) throw new Error('Role tidak valid');
+      if (!PUBLIC_SIGNUP_ROLES.includes(role)) throw codedError('INVALID_ROLE', 'Invalid role');
       const answers = parseSignupAnswers(signupAnswers);
       const user = await prisma.user.update({
         where: { id: context.actor.id },
@@ -841,8 +873,11 @@ const rawResolvers = {
 
     approveUser: async (_: any, { userId, role }: any, context: GraphQLContext) => {
       await assertManageUser(context, userId, { kind: 'approve', role });
-      const user = await prisma.user.update({
-        where: { id: userId },
+      // Only a PENDING sign-up can be approved. The status check and the write
+      // are one statement, so a concurrent approve or reject (or approving a
+      // sign-up another admin already rejected) finds nothing to update.
+      const { count } = await prisma.user.updateMany({
+        where: { id: userId, accountStatus: 'PENDING' },
         data: {
           role: role as MamRole,
           accountStatus: 'ACTIVE',
@@ -851,14 +886,17 @@ const rawResolvers = {
           approvedAt: new Date(),
         },
       });
-      return user;
+      if (count === 0) throw codedError('ALREADY_HANDLED', 'User is no longer pending');
+      return prisma.user.findUnique({ where: { id: userId } });
     },
 
     rejectUser: async (_: any, { userId }: any, context: GraphQLContext) => {
       await assertManageUser(context, userId, { kind: 'reject' });
-      // Same as deactivation: the account's sessions go, so a later approval
-      // cannot revive an old token.
-      return AuthService.rejectUser(userId);
+      // Only a PENDING sign-up can be rejected (atomic status check, see
+      // approveUser). Its sessions go too, like a deactivation.
+      const user = await AuthService.rejectUser(userId);
+      if (!user) throw codedError('ALREADY_HANDLED', 'User is no longer pending');
+      return user;
     },
 
     googleAuth: async (_: any, { idToken }: any, context: GraphQLContext) => {
@@ -898,12 +936,12 @@ const rawResolvers = {
       const data: any = {};
       if (typeof name === 'string') {
         const trimmed = name.trim();
-        if (trimmed.length === 0) throw new Error('Name cannot be empty');
-        if (trimmed.length > 80) throw new Error('Name too long');
+        if (trimmed.length === 0) throw codedError('NAME_REQUIRED', 'Name cannot be empty');
+        if (trimmed.length > 80) throw codedError('NAME_TOO_LONG', 'Name too long', { max: 80 });
         data.name = trimmed;
       }
       if (typeof avatarUrl === 'string') {
-        if (avatarUrl.length > 0 && !isRenderableImageUrl(avatarUrl)) throw new Error('Invalid avatar URL');
+        if (avatarUrl.length > 0 && !isRenderableImageUrl(avatarUrl)) throw codedError('INVALID_AVATAR_URL', 'Invalid avatar URL');
         data.avatarUrl = avatarUrl.length > 0 ? avatarUrl : null;
       }
       // Story 3.1: '' or null clears the choice (back to the instance default).
@@ -913,7 +951,7 @@ const rawResolvers = {
         else if (isSupportedLocale(wanted)) data.locale = wanted;
         else throw new GraphQLError('Unsupported locale', { extensions: { code: 'UNSUPPORTED_LOCALE' } });
       }
-      if (Object.keys(data).length === 0) throw new Error('Nothing to update');
+      if (Object.keys(data).length === 0) throw codedError('NOTHING_TO_UPDATE', 'Nothing to update');
       return prisma.user.update({ where: { id: context.actor.id }, data });
     },
 
@@ -941,14 +979,15 @@ const rawResolvers = {
       assertCan(actor, 'users.manage');
       const currentUser = { id: actor.id, email: (await prisma.user.findUnique({ where: { id: actor.id }, select: { email: true } }))?.email ?? '' };
       const targetError = adminTargetError(actor.id, userId);
-      if (targetError) return { success: false, message: targetError, password: null };
+      if (targetError) return targetError;
       await assertManageUser(context, userId, { kind: 'password' });
       try {
         const result = await AuthService.adminSetPassword(userId, newPassword);
         auditAdminAction('adminSetPassword', currentUser, result.email);
         return {
           success: true,
-          message: `Password ${result.email} berhasil diatur. Semua sesi login user ini sudah di-logout.`,
+          message: `Password set for ${result.email}; all of their sessions were signed out`,
+          errorCode: null,
           password: result.generatedPassword,
         };
       } catch (error) {
@@ -961,12 +1000,12 @@ const rawResolvers = {
       assertCan(actor, 'users.manage');
       const currentUser = { id: actor.id, email: (await prisma.user.findUnique({ where: { id: actor.id }, select: { email: true } }))?.email ?? '' };
       const targetError = adminTargetError(actor.id, id);
-      if (targetError) return { success: false, message: targetError, password: null };
+      if (targetError) return targetError;
       await assertManageUser(context, id, { kind: 'delete' });
       try {
         const result = await AuthService.deleteUserAccount(id);
         auditAdminAction('deleteUser', currentUser, result.email);
-        return { success: true, message: `Akun ${result.email} berhasil dihapus.`, password: null };
+        return { success: true, message: `Account ${result.email} deleted`, password: null, errorCode: null };
       } catch (error) {
         return adminActionFailure('deleteUser', error);
       }
@@ -1097,10 +1136,10 @@ const rawResolvers = {
       const folder = await assertLiveFolder(folderId);
 
       if (!targetFolderId && !targetProjectId) {
-        throw new Error('Provide either targetFolderId or targetProjectId');
+        throw codedError('INVALID_MOVE_TARGET', 'Provide either targetFolderId or targetProjectId');
       }
       if (targetFolderId && targetFolderId === folderId) {
-        throw new Error('Cannot move folder into itself');
+        throw codedError('MOVE_INTO_ITSELF', 'Cannot move a Section into itself');
       }
 
       // Resolve destination: either inside a folder or at a project root
@@ -1113,7 +1152,7 @@ const rawResolvers = {
         let cursor: { id: string; parentId: string | null } | null = targetFolder;
         while (cursor?.parentId) {
           if (cursor.parentId === folderId) {
-            throw new Error('Cannot move folder into its own descendant');
+            throw codedError('MOVE_INTO_ITSELF', 'Cannot move a Section into its own descendant');
           }
           cursor = await prisma.folder.findUnique({
             where: { id: cursor.parentId },
@@ -1122,7 +1161,7 @@ const rawResolvers = {
         }
       } else {
         const targetProject = await prisma.project.findUnique({ where: { id: targetProjectId! } });
-        if (!targetProject) throw new Error('Target project not found');
+        if (!targetProject) throw codedError('NOT_FOUND', 'Target project not found');
         destProjectId = targetProject.id;
       }
 

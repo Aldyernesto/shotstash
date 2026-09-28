@@ -1,5 +1,7 @@
-// Template email reset password (React Email). Dirender di server → HTML + plain text.
-// Semua teks Bahasa Indonesia. Subject sengaja polos (tanpa kata pemicu spam / tanda seru / huruf kapital semua).
+// Password reset email template (React Email), rendered on the server to HTML + plain text.
+// Story 3.5: every word comes from `email.passwordReset.*` in the recipient's locale
+// (users.locale, then DEFAULT_LOCALE, then English); the expiry time is shown in
+// DEFAULT_TIMEZONE with its zone label. The subject stays plain (no spam triggers).
 
 import {
   Body,
@@ -16,6 +18,8 @@ import {
   render,
 } from '@react-email/components';
 import { brand } from '@/lib/brand';
+import { translatorFor } from '@/modules/i18n';
+import { passwordResetCopy, type EmailTranslate, type PasswordResetCopy } from './passwordResetCopy';
 
 export type PasswordResetEmailProps = {
   name: string;
@@ -26,18 +30,28 @@ export type PasswordResetEmailProps = {
   appUrl: string;
   /** Akun belum punya password (daftar via Google). */
   googleOnly?: boolean;
+  /** Recipient's `users.locale`; null means the instance default. */
+  locale?: string | null;
+  /** Zone for the expiry time (DEFAULT_TIMEZONE); invalid or missing means UTC. */
+  timeZone?: string | null;
+  /** How long the code is valid, in minutes. */
+  validMinutes?: number;
 };
 
-export const PASSWORD_RESET_EMAIL_SUBJECT = `Kode reset password ${brand.productName}`;
+type TemplateProps = { email: string; code: string; appUrl: string; googleOnly: boolean; copy: PasswordResetCopy };
 
-/** Jam kedaluwarsa dalam WIB, format HH:MM (24 jam). */
-export function formatWibTime(date: Date): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'Asia/Jakarta',
-  }).format(date);
+/** The email's words for these props, in the recipient's locale. */
+export function passwordResetEmailCopy(props: PasswordResetEmailProps): PasswordResetCopy {
+  return passwordResetCopy({
+    translatorFor: (locale) => translatorFor(locale) as unknown as EmailTranslate,
+    locale: props.locale,
+    timeZone: props.timeZone,
+    name: props.name,
+    email: props.email,
+    expiresAt: props.expiresAt,
+    validMinutes: props.validMinutes ?? 15,
+    productName: brand.productName,
+  });
 }
 
 export function passwordResetVerifyUrl(appUrl: string, email: string): string {
@@ -58,18 +72,16 @@ const colors = {
 
 const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
-export default function PasswordResetEmail({ name, email, code, expiresAt, appUrl, googleOnly = false }: PasswordResetEmailProps) {
+function PasswordResetEmail({ email, code, appUrl, googleOnly, copy }: TemplateProps) {
   const verifyUrl = passwordResetVerifyUrl(appUrl, email);
-  const until = formatWibTime(expiresAt);
-  const greetingName = name?.trim() || `Sahabat ${brand.productName}`;
 
   return (
-    <Html lang="id" dir="ltr">
+    <Html lang={copy.lang} dir="ltr">
       <Head>
         <meta name="color-scheme" content="light only" />
         <meta name="supported-color-schemes" content="light" />
       </Head>
-      <Preview>Gunakan kode ini untuk membuat password baru. Berlaku 15 menit.</Preview>
+      <Preview>{copy.preview}</Preview>
       <Body style={{ margin: 0, padding: '24px 12px', backgroundColor: colors.page, fontFamily }}>
         <Container
           style={{
@@ -95,15 +107,14 @@ export default function PasswordResetEmail({ name, email, code, expiresAt, appUr
           </Section>
 
           <Heading as="h1" style={{ margin: '24px 0 12px', fontSize: '22px', lineHeight: '30px', fontWeight: 800, color: colors.text, textAlign: 'center' }}>
-            Kode reset password
+            {copy.heading}
           </Heading>
 
           <Text style={{ margin: '0 0 12px', fontSize: '15px', lineHeight: '24px', color: colors.dim }}>
-            Halo {greetingName},
+            {copy.greeting}
           </Text>
           <Text style={{ margin: '0 0 16px', fontSize: '15px', lineHeight: '24px', color: colors.dim }}>
-            Kami menerima permintaan untuk membuat password baru akun Shotstash dengan email {email}.
-            Masukkan kode berikut di halaman reset password:
+            {copy.intro}
           </Text>
 
           <Section
@@ -132,7 +143,7 @@ export default function PasswordResetEmail({ name, email, code, expiresAt, appUr
           </Section>
 
           <Text style={{ margin: '0 0 24px', fontSize: '14px', lineHeight: '22px', color: colors.muted, textAlign: 'center' }}>
-            Kode berlaku 15 menit (sampai {until} WIB).
+            {copy.validity}
           </Text>
 
           <Section style={{ textAlign: 'center', margin: '0 0 24px' }}>
@@ -149,24 +160,23 @@ export default function PasswordResetEmail({ name, email, code, expiresAt, appUr
                 display: 'inline-block',
               }}
             >
-              Masukkan Kode
+              {copy.button}
             </Button>
           </Section>
 
           {googleOnly && (
             <Text style={{ margin: '0 0 16px', fontSize: '14px', lineHeight: '22px', color: colors.dim }}>
-              Akun kamu terdaftar via Google. Setelah membuat password, kamu tetap bisa masuk dengan tombol
-              &quot;Login dengan Google&quot;.
+              {copy.googleOnly}
             </Text>
           )}
 
           <Hr style={{ borderColor: colors.border, margin: '8px 0 16px' }} />
 
           <Text style={{ margin: '0 0 12px', fontSize: '13px', lineHeight: '20px', color: colors.muted }}>
-            Kalau kamu tidak meminta reset, abaikan email ini; password tidak berubah. Jangan bagikan kode ke siapa pun.
+            {copy.ignore}
           </Text>
           <Text style={{ margin: 0, fontSize: '12px', lineHeight: '18px', color: colors.muted }}>
-            Email otomatis dari Shotstash. Mohon tidak membalas email ini.
+            {copy.footer}
           </Text>
         </Container>
       </Body>
@@ -176,7 +186,16 @@ export default function PasswordResetEmail({ name, email, code, expiresAt, appUr
 
 /** Render subject + HTML + plain text untuk dikirim lewat email.service. */
 export async function renderPasswordResetEmail(props: PasswordResetEmailProps) {
-  const element = <PasswordResetEmail {...props} />;
+  const copy = passwordResetEmailCopy(props);
+  const element = (
+    <PasswordResetEmail
+      email={props.email}
+      code={props.code}
+      appUrl={props.appUrl}
+      googleOnly={props.googleOnly ?? false}
+      copy={copy}
+    />
+  );
   const [html, text] = await Promise.all([
     render(element),
     render(element, {
@@ -185,5 +204,5 @@ export async function renderPasswordResetEmail(props: PasswordResetEmailProps) {
       htmlToTextOptions: { selectors: [{ selector: 'h1', options: { uppercase: false } }] },
     }),
   ]);
-  return { subject: PASSWORD_RESET_EMAIL_SUBJECT, html, text };
+  return { subject: copy.subject, html, text };
 }

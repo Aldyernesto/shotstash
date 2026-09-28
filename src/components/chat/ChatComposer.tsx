@@ -18,6 +18,7 @@
  */
 
 import React, { useId, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import styles from "./chat.module.css";
 import { MentionDropdown, MENTION_LIMIT, type MentionOption } from "./MentionDropdown";
 
@@ -66,8 +67,8 @@ export function ChatComposer({
   onChange,
   onSend,
   placeholder,
-  label = "Tulis pesan",
-  sendLabel = "Kirim",
+  label,
+  sendLabel,
   busy = false,
   disabled = false,
   attachments,
@@ -76,6 +77,7 @@ export function ChatComposer({
   inputRef,
   className,
 }: ChatComposerProps) {
+  const t = useTranslations("chat.composer");
   const uid = useId();
   const listId = `${uid}-mentions`;
   const optionIdPrefix = `${uid}-mention`;
@@ -153,7 +155,7 @@ export function ChatComposer({
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder={placeholder}
-          aria-label={label}
+          aria-label={label ?? t("label")}
           aria-disabled={disabled || undefined}
           readOnly={disabled}
           {...(mentions
@@ -169,7 +171,7 @@ export function ChatComposer({
         />
         <button
           type="button"
-          aria-label={sendLabel}
+          aria-label={sendLabel ?? t("send")}
           aria-disabled={empty || disabled || undefined}
           aria-busy={busy || undefined}
           className={`spine-focus-ring ${styles.send} ${sendState}`}
@@ -181,7 +183,7 @@ export function ChatComposer({
       {/* Mode kalem: spinner berhenti berputar, jadi keadaannya harus tetap
           TERTULIS — kalimat status ini yang membawanya (AC 3.16). */}
       <p className="spine-visually-hidden" role="status">
-        {busy ? "Mengirim pesan…" : ""}
+        {busy ? t("sending") : ""}
       </p>
       {hint ? <p className={`spine-footnote ${styles.hint}`}>{hint}</p> : null}
     </div>

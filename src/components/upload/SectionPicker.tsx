@@ -13,9 +13,9 @@
  */
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import { Dialog } from "@/components/overlay/Dialog";
 import { PillButton } from "@/components/form/buttons";
-import { formatNumber } from "@/lib/format";
 import { parseSectionName } from "@/lib/sectionNumber";
 import styles from "./upload.module.css";
 
@@ -48,14 +48,16 @@ export default function SectionPicker({
   onCreate?: () => void;
   onClose: () => void;
 }) {
+  const t = useTranslations("upload.picker");
+  const tc = useTranslations("common");
   return (
     <Dialog
       size="lg"
       mobilePlacement="bottom"
       mobilePreviewFirst={false}
-      title="Pilih Section Tujuan"
-      lead="Pilih Section untuk diupload, atau buat Section baru."
-      closeLabel="Tutup"
+      title={t("title")}
+      lead={t("lead")}
+      closeLabel={t("close")}
       onClose={onClose}
       footer={
         <div className={styles.pickFooter}>
@@ -64,13 +66,13 @@ export default function SectionPicker({
               <span aria-hidden="true" style={{ display: "grid", placeItems: "center", width: 16, height: 16 }}>
                 {PLUS}
               </span>
-              Buat Section Baru
+              {t("create")}
             </PillButton>
           ) : (
             <span />
           )}
           <PillButton variant="surface" onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </PillButton>
         </div>
       }
@@ -78,7 +80,7 @@ export default function SectionPicker({
       {sections.length === 0 ? (
         /* Daftar kosong TIDAK PERNAH dikirim tanpa kalimat. */
         <p className={`spine-body-sm ${styles.pickEmpty}`}>
-          Belum ada Section di project ini. Buat Section baru untuk mulai mengunggah.
+          {t("empty")}
         </p>
       ) : null}
       <ul className={styles.pickList}>
@@ -95,16 +97,16 @@ export default function SectionPicker({
                 {parsed.number ? (
                   <span className={`spine-display-label ${styles.sticker} ${styles.pickSticker}`}>
                     <small className="spine-sticker-unit" aria-hidden="true">
-                      NO
+                      {tc("numberPrefix")}
                     </small>
-                    <span className="spine-visually-hidden">Nomor </span>
+                    <span className="spine-visually-hidden">{tc("number")} </span>
                     {parsed.number}
                   </span>
                 ) : (
                   <span className={styles.pickSticker} aria-hidden="true" />
                 )}
                 <b className={`spine-display-card ${styles.pickName}`}>{parsed.title}</b>
-                <span className={`spine-chip ${styles.pickCount}`}>{formatNumber(count)} file</span>
+                <span className={`spine-chip ${styles.pickCount}`}>{t("files", { count })}</span>
                 {CHEVRON}
               </button>
             </li>

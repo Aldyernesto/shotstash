@@ -7,6 +7,8 @@
  * yang ini.
  */
 
+import { errorCodeOf, errorKind } from "../../lib/errorCodes.ts";
+
 export type UploadTaskStatus =
   | "pending"
   | "uploading"
@@ -20,8 +22,8 @@ export type UploadTask = {
   /** 0-100, dari potongan yang BENAR-BENAR terkirim. */
   progress: number;
   status: UploadTaskStatus;
-  /** Sebab kegagalan dalam KALIMAT Bahasa Indonesia. */
-  error?: string;
+  /** Why the row failed; rendered from messages. */
+  error?: UploadFailure;
   /** Section tujuan baris ini (sub-Section hasil seret folder). */
   targetFolderId?: string;
   /** Nama sub-Section baru bila baris ini datang dari folder yang diseret. */
@@ -39,48 +41,72 @@ export type UploadBatchState = {
   aborted: boolean;
 };
 
-/** Kalimat penolakan `initiateUpload`, bukan teks mentah server. */
-export const UPLOAD_REJECT: Record<string, string> = {
-  session: "Sesi kamu sudah berakhir. Masuk lagi lalu ulangi upload.",
-  forbidden: "Kamu tidak punya izin mengunggah ke Section ini.",
-  missingFolder: "Section tujuan sudah tidak ada. Pilih Section lain.",
-  quota: "Penyimpanan penuh. Hubungi admin Shotstash.",
-  offline: "Kamu sedang offline. Sambungkan internet lalu tekan Upload lagi.",
-  generic: "Upload tidak bisa dimulai. Coba lagi sebentar lagi.",
+/**
+ * Why an upload could not start or a row failed. The visible sentence comes
+ * from messages (`upload.reject.<reason>` for the panel, `upload.rowReason.<reason>`
+ * for a row); raw server text is never shown.
+ */
+export const UPLOAD_REASONS = [
+  "session",
+  "forbidden",
+  "missingFolder",
+  "quota",
+  "storage",
+  "tooLarge",
+  "unsupportedType",
+  "checksum",
+  "offline",
+  "generic",
+] as const;
+
+export type UploadRejectCode = (typeof UPLOAD_REASONS)[number];
+
+/** A failed row: the reason, plus the server code when there was one. */
+export type UploadFailure = { reason: UploadRejectCode; code?: string };
+
+const REASON_BY_CODE: Record<string, UploadRejectCode> = {
+  UNAUTHENTICATED: "session",
+  FORBIDDEN: "forbidden",
+  NOT_FOUND: "missingFolder",
+  TOO_LARGE: "tooLarge",
+  UNSUPPORTED_TYPE: "unsupportedType",
+  FILE_TYPE_NOT_ALLOWED: "unsupportedType",
+  STORAGE_UNAVAILABLE: "storage",
+  CHECKSUM_MISMATCH: "checksum",
 };
 
-export type UploadRejectCode = keyof typeof UPLOAD_REJECT;
+/** Reasons for an uncoded HTTP failure (for example a storage-edge PUT). */
+const REASON_BY_STATUS: Record<number, UploadRejectCode> = {
+  401: "session",
+  403: "forbidden",
+  404: "missingFolder",
+  413: "tooLarge",
+  507: "quota",
+};
 
-/**
- * Menerjemahkan kegagalan `initiateUpload` / potongan menjadi SATU kode
- * yang punya kalimat Indonesia. "Unauthorized", "Forbidden: ADMIN or
- * FIELD_CREW only", dan "HTTP 502" tidak pernah tampil apa adanya.
- */
-export function classifyUploadError(err: unknown): UploadRejectCode {
-  const raw = String(
-    (err as { message?: string } | null | undefined)?.message ?? err ?? "",
-  ).toLowerCase();
-  if (raw.includes("unauthorized") || raw.includes("401") || raw.includes("session")) return "session";
-  if (raw.includes("forbidden") || raw.includes("403") || raw.includes("permission")) return "forbidden";
-  if (raw.includes("folder not found") || raw.includes("section") || raw.includes("404")) return "missingFolder";
-  if (raw.includes("quota") || raw.includes("storage full") || raw.includes("enospc") || raw.includes("507")) {
-    return "quota";
+function statusOf(err: unknown): number | null {
+  const v = err as { status?: unknown; statusCode?: unknown; networkError?: { statusCode?: unknown } } | null;
+  for (const s of [v?.status, v?.statusCode, v?.networkError?.statusCode]) {
+    if (typeof s === "number") return s;
   }
-  if (raw.includes("failed to fetch") || raw.includes("networkerror") || raw.includes("network error")) {
-    return "offline";
-  }
-  return "generic";
+  return null;
 }
 
-/** Kalimat sebab untuk BARIS yang gagal ("Gagal — {sebab}"). */
-export function humanizeTaskError(err: unknown): string {
-  const code = classifyUploadError(err);
-  if (code === "offline") return "koneksi terputus setelah 3 kali coba";
-  if (code === "session") return "sesi kamu sudah berakhir";
-  if (code === "forbidden") return "kamu tidak punya izin ke Section ini";
-  if (code === "missingFolder") return "Section tujuan sudah tidak ada";
-  if (code === "quota") return "penyimpanan penuh";
-  return "server menolak potongan terakhir";
+/**
+ * Classifies an `initiateUpload` / chunk failure by its structure only
+ * (server code, HTTP status, network error), never by message text.
+ */
+export function classifyUploadError(err: unknown): UploadFailure {
+  const code = errorCodeOf(err) ?? undefined;
+  if (code && REASON_BY_CODE[code]) return { reason: REASON_BY_CODE[code], code };
+  const status = statusOf(err);
+  if (!code && status !== null && REASON_BY_STATUS[status]) return { reason: REASON_BY_STATUS[status] };
+  const kind = errorKind(err);
+  if (kind === "session") return { reason: "session", code };
+  if (kind === "forbidden") return { reason: "forbidden", code };
+  if (kind === "offline") return { reason: "offline", code };
+  if (kind === "notFound") return { reason: "missingFolder", code };
+  return { reason: "generic", code };
 }
 
 /** Ringkasan antrean yang dipakai footer, `batch-progress`, dan dock. */

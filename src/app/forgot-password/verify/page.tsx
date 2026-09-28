@@ -35,7 +35,7 @@ import {
 } from '../shared';
 
 const VERIFY_CODE = `mutation VerifyPasswordResetCode($email: String!, $code: String!) {
-  verifyPasswordResetCode(email: $email, code: $code) { success message resetToken errorCode }
+  verifyPasswordResetCode(email: $email, code: $code) { success message resetToken errorCode attemptsLeft }
 }`;
 
 const emptyCode = () => Array.from({ length: RESET_CODE_LENGTH }, () => '');
@@ -57,7 +57,7 @@ function VerifyCodeForm() {
   const [cooldown, setCooldown] = useState(0);
   const [resending, setResending] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
-  // "Kode berlaku sampai HH:MM WIB" — null saat hidrasi (fallback teks durasi).
+  // "Code valid until 17:00 GMT+7" (viewer zone); null while hydrating (duration fallback).
   const [expiryMs, setExpiryMs] = useState<number | null>(null);
   const submittingRef = useRef(false);
   const codeRef = useRef<CodeInputHandle>(null);
@@ -120,7 +120,7 @@ function VerifyCodeForm() {
     setInvalid(false);
     setInfo(null);
     try {
-      const data = await resetGql<{ verifyPasswordResetCode: PasswordResetResult }>(VERIFY_CODE, { email, code: fullCode });
+      const data = await resetGql<{ verifyPasswordResetCode: PasswordResetResult & { attemptsLeft?: number | null } }>(VERIFY_CODE, { email, code: fullCode });
       const result = data.verifyPasswordResetCode;
       if (result.success && result.resetToken) {
         // Token hanya hidup di sessionStorage — bila browser memblokirnya,
@@ -135,7 +135,13 @@ function VerifyCodeForm() {
         return;
       }
       if (result.errorCode === 'UNAVAILABLE') { setUnavailable(true); return; }
-      setError(resetErrorMessage(t, result.errorCode) ?? t('errors.invalidCode'));
+      // A wrong code says how many tries are left (Story 3.5: from `attemptsLeft`).
+      const left = result.errorCode === 'INVALID_CODE' ? result.attemptsLeft : null;
+      setError(
+        typeof left === 'number' && left > 0
+          ? t('errors.invalidCodeAttempts', { count: left })
+          : (resetErrorMessage(t, result.errorCode) ?? t('errors.invalidCode')),
+      );
       if (result.errorCode === 'CODE_LOCKED') {
         setCode(emptyCode());
         // Kotak dikosongkan → fokus kembali ke kotak pertama (setelah disabled lepas).

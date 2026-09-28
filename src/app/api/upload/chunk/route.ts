@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { uploadChunk } from '@/services/upload.service';
 import prisma from '@/lib/prisma';
 import { defineRoute, jsonError } from '@/lib/defineRoute';
+import { errorCodeOf } from '@/lib/errorCodes';
 import { can } from '@/modules/auth';
 
 // Manual multipart parser — handles chunked transfer encoding from nginx
@@ -79,6 +80,11 @@ export const POST = defineRoute({
       });
     } catch (error) {
       console.error(`[chunk] failed after ${Date.now() - startMs}ms:`, (error as Error)?.message);
+      // A closed or vanished session keeps its own code; anything else is UPLOAD_FAILED.
+      const code = errorCodeOf(error);
+      if (code === 'UPLOAD_SESSION_CLOSED' || code === 'UPLOAD_SESSION_NOT_FOUND') {
+        return jsonError(409, code, 'Upload session is not open');
+      }
       return jsonError(409, 'UPLOAD_FAILED', 'Chunk could not be stored');
     }
     return NextResponse.json({ success: true, chunkIndex: parsed.chunkIndex });

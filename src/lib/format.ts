@@ -133,7 +133,7 @@ export function formatRelative(
  * "(camera time)" so the reader knows it is not their zone. Never pass a
  * Date here: a Date has already lost the camera's wall clock.
  */
-export function formatExifCameraTime(raw: string, label = LEGACY_CAMERA_TIME): string {
+export function formatExifCameraTime(raw: string, label: string): string {
   return `${raw} ${label}`;
 }
 
@@ -180,62 +180,16 @@ export function describeAspect(width: number, height: number): AspectInfo | null
   return { orientation, ratio };
 }
 
-/* Default words keep the previous Indonesian output for the untranslated
-   viewer (Story 3.4 passes labels from messages and removes these). */
-const LEGACY_ORIENTATION: Record<Orientation, string> = {
-  portrait: "Potret",
-  landscape: "Lanskap",
-  square: "Persegi",
-};
-const LEGACY_CAMERA_TIME = "(waktu kamera)";
-
 /** Info panel dimensions: 2160, 3840 -> "2160 × 3840 px · Portrait (9:16)".
     Pixels are written plain (no grouping): a size, not a count. */
 export function formatDimensions(
   width: number,
   height: number,
-  orientationLabel: (o: Orientation) => string = (o) => LEGACY_ORIENTATION[o],
+  orientationLabel: (o: Orientation) => string,
 ): string {
   const info = describeAspect(width, height);
   const base = `${Math.round(width)} × ${Math.round(height)} px`;
   if (!info) return base;
   const word = orientationLabel(info.orientation);
   return info.ratio ? `${base} · ${word} (${info.ratio})` : `${base} · ${word}`;
-}
-
-/* ------------------------------------------------------------------ */
-/* Deprecated: kept only so group C screens compile until they move to */
-/* messages (Story 3.4). Do not use in new code.                        */
-/* ------------------------------------------------------------------ */
-
-/** @deprecated Use an ICU plural message instead. */
-export function formatCount(n: number, unit: string): string {
-  return `${formatNumber(n)} ${unit}`;
-}
-
-/* The WIB helpers keep their previous output exactly (Asia/Jakarta,
-   Indonesian date, " WIB") so untranslated screens render the same on the
-   server and in the browser until Story 3.4 moves them to formatTime. */
-const TZ_WIB = "Asia/Jakarta";
-
-/** @deprecated Untranslated screens only: "20:15 WIB". Use formatTime. */
-export function formatTimeWIB(d: DateLike): string {
-  const time = new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: TZ_WIB,
-  }).format(toDate(d));
-  return `${time} WIB`;
-}
-
-/** @deprecated Untranslated screens only: "25 Sep 2026 · 20:15 WIB". Use formatDateTime. */
-export function formatDateTimeWIB(d: DateLike): string {
-  const date = new Intl.DateTimeFormat("id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: TZ_WIB,
-  }).format(toDate(d));
-  return `${date} · ${formatTimeWIB(d)}`;
 }

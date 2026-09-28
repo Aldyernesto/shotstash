@@ -16,6 +16,7 @@
 
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslations } from "next-intl";
 import styles from "./fileViewer.module.css";
 import VideoPlayer, { type VideoPlayerHandle } from "./VideoPlayer";
 import { formatClock } from "@/lib/format";
@@ -128,6 +129,7 @@ export default function FileViewer({
   renderDownload,
   actionNote,
 }: FileViewerProps) {
+  const t = useTranslations("viewer");
   const desktop = useIsDesktop();
   const overlayRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<VideoPlayerHandle>(null);
@@ -223,8 +225,8 @@ export default function FileViewer({
 
   const kind = file ? kindOf(file.mimeType) : "photo";
   const counter = useMemo(
-    () => `${kind === "video" ? "Video" : "Foto"} · ${index + 1} / ${total}`,
-    [kind, index, total],
+    () => t("counter", { kind, index: index + 1, total }),
+    [t, kind, index, total],
   );
 
   if (!mounted || !file) return null;
@@ -267,9 +269,9 @@ export default function FileViewer({
   const mediaNode = failed ? (
     <div className={styles.errorWrap}>
       <ErrorBox
-        title="Gagal memuat media."
-        text="Sambungan ke server terputus saat mengambil file ini."
-        retryLabel="Coba lagi"
+        title={t("loadFailedTitle")}
+        text={t("loadFailedText")}
+        retryLabel={t("retry")}
         onRetry={() => setRetryKey((k) => k + 1)}
       />
     </div>
@@ -327,18 +329,18 @@ export default function FileViewer({
         onClick={() => onDownload(file)}
       >
         {DownloadIcon}
-        Download
+        {t("download")}
       </button>
     ) : null);
   const shareNode = onShare ? (
     <button
       type="button"
       className={desktop ? styles.pill : styles.iconButton}
-      aria-label={desktop ? undefined : `Bagikan ${file.originalName}`}
+      aria-label={desktop ? undefined : t("shareFile", { name: file.originalName })}
       onClick={() => onShare(file)}
     >
       {ShareIcon}
-      {desktop ? "Share" : null}
+      {desktop ? t("share") : null}
     </button>
   ) : null;
 
@@ -368,7 +370,7 @@ export default function FileViewer({
           <button
             type="button"
             className={styles.iconButton}
-            aria-label="Tutup viewer (Esc)"
+            aria-label={t("closeViewer")}
             onClick={onClose}
           >
             {CloseIcon}
@@ -393,7 +395,7 @@ export default function FileViewer({
             ref={infoButtonRef}
             type="button"
             className={styles.iconButton}
-            aria-label="Info file"
+            aria-label={t("info.title")}
             aria-expanded={infoOpen}
             onClick={toggleInfo}
           >
@@ -417,7 +419,7 @@ export default function FileViewer({
               <button
                 type="button"
                 className={`${styles.iconButton} ${styles.navPrev}`}
-                aria-label="File sebelumnya (←)"
+                aria-label={t("prevKey")}
                 onClick={() => go(-1)}
               >
                 {PrevIcon}
@@ -425,7 +427,7 @@ export default function FileViewer({
               <button
                 type="button"
                 className={`${styles.iconButton} ${styles.navNext}`}
-                aria-label="File berikutnya (→)"
+                aria-label={t("nextKey")}
                 onClick={() => go(1)}
               >
                 {NextIcon}
@@ -454,7 +456,7 @@ export default function FileViewer({
             <button
               type="button"
               className={styles.iconButton}
-              aria-label="File sebelumnya"
+              aria-label={t("prev")}
               onClick={() => go(-1)}
             >
               {PrevIcon}
@@ -466,7 +468,7 @@ export default function FileViewer({
             <button
               type="button"
               className={styles.iconButton}
-              aria-label="File berikutnya"
+              aria-label={t("next")}
               onClick={() => go(1)}
             >
               {NextIcon}
@@ -484,16 +486,12 @@ export default function FileViewer({
 
       <div className={styles.hint}>
         {desktop ? (
-          <>
-            <kbd>Spasi</kbd>putar / jeda<i>|</i>
-            <kbd>←</kbd>
-            <kbd>→</kbd>pindah file<i>|</i>
-            <kbd>M</kbd>bisu<i>|</i>
-            <kbd>F</kbd>layar penuh<i>|</i>
-            <kbd>Esc</kbd>tutup
-          </>
+          t.rich("keyHints", {
+            kbd: (chunks) => <kbd>{chunks}</kbd>,
+            sep: () => <i>|</i>,
+          })
         ) : (
-          "Geser kiri / kanan untuk pindah file."
+          t("swipeHint")
         )}
       </div>
 

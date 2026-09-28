@@ -70,6 +70,7 @@ npm run lint
 npm run typecheck
 npm run check:tokens && npm run check:legacy && npm run brand:css -- --check
 npm run security:matrix -- --check    # docs/security/route-matrix.md matches the code
+npm run i18n:check                   # no Indonesian leftovers anywhere in src or messages
 npm test
 node scripts/privacy-scan.mjs --all   # uses gitleaks when installed
 npm run build
@@ -78,6 +79,8 @@ npm run build
 Local end-to-end checks (not in CI). First-run setup on an empty database: `npm run dev:db:reset`, `npm run dev:db`, `npx prisma migrate deploy`, `npm run dev`, then `npm run e2e:setup` (gate redirect and 503, setup, concurrent 409, redirect after setup). Security: with `npm run dev:db`, `npx prisma migrate deploy`, `npx tsx prisma/seed.ts` and `npm run dev` running, `npm run e2e:security` exercises login, cookie media, signed shares, access codes, role checks, rate limits, security headers, health and the trash lifecycle (start the server with `EMAIL_TRANSPORT=log` to include the reset-limit rows; login limits mean a second run needs 15 minutes or a server restart) against `http://localhost:3005` (override with `E2E_BASE_URL`). Both refuse to run unless the base URL and `DATABASE_URL` point at localhost, and they write test data into that database.
 
 Every route handler is wrapped in `defineRoute({ auth })` and every GraphQL root field has an entry in `src/graphql/auth-map.ts`; the generated table lives in [docs/security/route-matrix.md](docs/security/route-matrix.md). Media bytes are served only under `/media/*` with an HttpOnly session cookie or a signed share URL; `MEDIA_SIGNING_SECRET` signs those URLs.
+
+All UI text lives in `messages/en.json` (next-intl, English only in v1). How to add a locale, the translation checks and the copy rules: [docs/i18n.md](docs/i18n.md).
 
 Product name, logo and brand colors live in `src/lib/brand.ts`. The identity is blue: the three-bar mark (`#3d6cff`) and a UI accent family (`accent` `#3563f2` with white text) documented in [docs/design/DESIGN.md](docs/design/DESIGN.md). To rebrand: edit `src/lib/brand.ts`, replace the SVG sources in `public/brand/` (`icon.svg`, `logo-on-dark.svg`, `logo-on-light.svg`, `og.svg`), run `npm run brand:assets` (copies the favicon to `src/app/icon.svg` and renders `logo.png`, `og.png` and `src/app/apple-icon.png` with sharp), then `npm run brand:css`.
 

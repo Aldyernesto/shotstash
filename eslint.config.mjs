@@ -4,8 +4,8 @@ import nextTs from "eslint-config-next/typescript";
 import i18next from "eslint-plugin-i18next";
 import { readFileSync } from "node:fs";
 
-// Story 3.1: files already moved to messages/*.json. Literal UI text there
-// is an error; Story 3.5 widens the scope to all of src.
+// Story 3.5: every file under src/ takes its UI text from messages/*.json.
+// Literal UI text is an error anywhere in src (scope: scripts/i18n-scope.json).
 const i18nScope = JSON.parse(
   readFileSync(new URL("./scripts/i18n-scope.json", import.meta.url), "utf8"),
 ).files;
@@ -90,6 +90,9 @@ const eslintConfig = defineConfig([
   },
   // Override default ignores of eslint-config-next.
   globalIgnores([
+    // Local development data (gitignored): PGlite database and media storage.
+    ".devdb/**",
+    "data/**",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",

@@ -54,6 +54,7 @@ const TILE_SLOT_CLASS = [
 
 export default function HeroStage() {
   const t = useTranslations('hero');
+  const tc = useTranslations('common');
   const tiles = approvedHeroPhotosForSlot('tile');
   const band = approvedHeroPhotosForSlot('band');
   const stack = approvedHeroPhotosForSlot('mobile');
@@ -118,7 +119,7 @@ export default function HeroStage() {
         )}
 
         <div className={styles.copy}>
-          <TagPill>{t('tag')}</TagPill>
+          <TagPill>{tc('archiveTag')}</TagPill>
           <h1 className={`spine-display-hero ${styles.headline}`}>
             {t.rich('headline', {
               br: () => <br />,

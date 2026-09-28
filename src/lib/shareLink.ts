@@ -26,7 +26,9 @@
  */
 
 import prisma from "@/lib/prisma";
-import { formatFileSize, formatNumber, formatServerDate } from "@/lib/format";
+import { formatDate, formatFileSize } from "@/lib/format";
+import { resolveServerTimeZone } from "@/i18n/config";
+import { fileKindOf, sortFiles, sortSections } from "@/lib/shareSort";
 import { parseSectionName } from "@/lib/sectionNumber";
 import { liveSubtree, zipFileName, zipPlanForFolders, type ZipPlan } from "@/lib/mediaTree";
 import { linkInactiveReason } from "@/lib/shareState";
@@ -35,6 +37,7 @@ export { linkInactiveReason };
 import {
   FILE_SORTS,
   SECTION_SORTS,
+  normalizeShareSort,
   SHARE_PAGE_SIZE,
   type ShareFile,
   type ShareFileKind,
@@ -45,17 +48,10 @@ import {
 } from "@/lib/shareTypes";
 
 export type { ShareFile, ShareFileKind, SharePayload, ShareResolution, ShareSection, ShareSort };
-export { FILE_SORTS, SECTION_SORTS, SHARE_PAGE_SIZE, KIND_WORD } from "@/lib/shareTypes";
+export { FILE_SORTS, SECTION_SORTS, SHARE_PAGE_SIZE } from "@/lib/shareTypes";
+export { fileKindOf, shareLocale } from "@/lib/shareSort";
 
 const REP_MAX = 3;
-
-export function fileKindOf(mimeType?: string | null): ShareFileKind {
-  const m = String(mimeType || "");
-  if (m.startsWith("video/")) return "video";
-  if (m.startsWith("image/")) return "image";
-  if (m.startsWith("audio/")) return "audio";
-  return "document";
-}
 
 type RawFile = {
   id: string;
@@ -77,7 +73,7 @@ function bindSigner(shareId: string, signer?: ShareSigner | null): BoundSigner {
 }
 
 /** Memetakan baris database ke bentuk klien — `mimeType` TIDAK ikut. */
-function toShareFile(f: RawFile, sign: BoundSigner): ShareFile {
+function toShareFile(f: RawFile, sign: BoundSigner, locale: string): ShareFile {
   const bytes = Number(f.size) || 0;
   const original = sign(f.id);
   return {
@@ -85,7 +81,7 @@ function toShareFile(f: RawFile, sign: BoundSigner): ShareFile {
     name: f.originalName,
     kind: fileKindOf(f.mimeType),
     sizeBytes: bytes,
-    sizeText: formatFileSize(bytes),
+    sizeText: formatFileSize(bytes, { locale }),
     thumbnailUrl: f.thumbnailPath ? sign(`t:${f.id}`) : null,
     inlineUrl: original,
     downloadUrl: original ? `${original}?dl=1` : null,
@@ -93,35 +89,35 @@ function toShareFile(f: RawFile, sign: BoundSigner): ShareFile {
   };
 }
 
-function breakdownOf(files: { mimeType: string }[]): string | null {
+/** Counts per kind; the page words them from messages. Null when empty. */
+function breakdownOf(files: { mimeType: string }[]): SharePayload["breakdown"] {
   let photos = 0;
   let videos = 0;
-  let docs = 0;
+  let documents = 0;
   for (const f of files) {
     const k = fileKindOf(f.mimeType);
     if (k === "image") photos++;
     else if (k === "video") videos++;
-    else docs++;
+    else documents++;
   }
-  const parts: string[] = [];
-  if (photos) parts.push(`${formatNumber(photos)} foto`);
-  if (videos) parts.push(`${formatNumber(videos)} video`);
-  if (docs) parts.push(`${formatNumber(docs)} dokumen`);
-  if (!parts.length) return null;
-  if (parts.length === 1) return `Berisi ${parts[0]}.`;
-  return `Berisi ${parts.slice(0, -1).join(", ")}, dan ${parts[parts.length - 1]}.`;
+  return photos || videos || documents ? { photos, videos, documents } : null;
 }
 
-function newestDate(rows: { createdAt: Date }[], fallback: Date): string {
+/** Short date in the visitor's locale and the instance zone (DEFAULT_TIMEZONE, UTC by default). */
+function serverDate(d: Date, locale: string): string {
+  return formatDate(d, { locale, timeZone: resolveServerTimeZone(process.env.DEFAULT_TIMEZONE) });
+}
+
+function newestDate(rows: { createdAt: Date }[], fallback: Date, locale: string): string {
   let best = fallback;
   for (const r of rows) if (r.createdAt > best) best = r.createdAt;
-  return formatServerDate(best);
+  return serverDate(best, locale);
 }
 
-function totalSizeText(files: { size: bigint | number }[]): string {
+function totalSizeText(files: { size: bigint | number }[], locale: string): string {
   let total = 0;
   for (const f of files) total += Number(f.size) || 0;
-  return formatFileSize(total);
+  return formatFileSize(total, { locale });
 }
 
 function repThumbsOf(files: RawFile[], sign: BoundSigner): (string | null)[] {
@@ -148,39 +144,6 @@ export async function folderChainTrashed(folderId: string | null | undefined): P
 }
 
 
-const KIND_ORDER: Record<ShareFileKind, number> = { video: 0, image: 1, audio: 2, document: 3 };
-
-function sortFiles<T extends { originalName: string; mimeType: string; size: bigint | number; createdAt: Date }>(
-  rows: T[],
-  sort: ShareSort,
-): T[] {
-  const out = [...rows];
-  if (sort === "nama") out.sort((a, b) => a.originalName.localeCompare(b.originalName, "id"));
-  else if (sort === "ukuran") out.sort((a, b) => Number(b.size) - Number(a.size));
-  else if (sort === "tipe")
-    out.sort(
-      (a, b) =>
-        KIND_ORDER[fileKindOf(a.mimeType)] - KIND_ORDER[fileKindOf(b.mimeType)] ||
-        a.originalName.localeCompare(b.originalName, "id"),
-    );
-  else out.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()); // "tanggal" ▼
-  return out;
-}
-
-function sortSections(rows: ShareSection[], sort: ShareSort): ShareSection[] {
-  const out = [...rows];
-  if (sort === "nama") out.sort((a, b) => a.title.localeCompare(b.title, "id"));
-  else if (sort === "jumlah") out.sort((a, b) => b.fileCount - a.fileCount);
-  else
-    out.sort((a, b) => {
-      // "Nomor ▲" — nama tanpa nomor selalu di belakang.
-      const na = a.number === null ? Infinity : Number(a.number.split(".")[0]);
-      const nb = b.number === null ? Infinity : Number(b.number.split(".")[0]);
-      return na - nb || a.title.localeCompare(b.title, "id");
-    });
-  return out;
-}
-
 export type ResolveOptions = {
   /** PRIVATE links only: the caller verified the share access cookie. */
   unlocked?: boolean;
@@ -190,8 +153,10 @@ export type ResolveOptions = {
   sectionId?: string | null;
   /** Berapa baris pertama yang ikut dirender (grid berpaging). */
   limit?: number;
-  /** Urutan `sort-pills`; bawaan "tanggal" (file) / "nomor" (Section). */
-  sort?: ShareSort | null;
+  /** Sort id or an old alias (see normalizeShareSort); default "date" (files) / "number" (Sections). */
+  sort?: string | null;
+  /** Visitor locale (see `shareLocale`): names sort and sizes and dates format in it. Default "en". */
+  locale?: string;
 };
 
 export async function resolveShare(
@@ -199,12 +164,10 @@ export async function resolveShare(
   options: ResolveOptions = {},
 ): Promise<ShareResolution> {
   const limit = options.limit ?? SHARE_PAGE_SIZE;
-  const fileSort: ShareSort = FILE_SORTS.includes(options.sort as ShareSort)
-    ? (options.sort as ShareSort)
-    : "tanggal";
-  const sectionSort: ShareSort = SECTION_SORTS.includes(options.sort as ShareSort)
-    ? (options.sort as ShareSort)
-    : "nomor";
+  const locale = options.locale ?? "en";
+  const wanted = normalizeShareSort(options.sort);
+  const fileSort: ShareSort = wanted && FILE_SORTS.includes(wanted) ? wanted : "date";
+  const sectionSort: ShareSort = wanted && SECTION_SORTS.includes(wanted) ? wanted : "number";
 
   const link = await prisma.shareLink.findUnique({
     where: { slug },
@@ -270,7 +233,7 @@ export async function resolveShare(
       : null;
     if (options.sectionId && !drill) return { state: "gone", target: "section" };
 
-    const drillFiles = drill ? sortFiles(filesOf(drill), fileSort) : [];
+    const drillFiles = drill ? sortFiles(filesOf(drill), fileSort, locale) : [];
     const drillName = drill ? parseSectionName(drill.name) : null;
 
     const sectionRows = drill
@@ -288,6 +251,7 @@ export async function resolveShare(
             };
           }),
           sectionSort,
+          locale,
         );
 
     return {
@@ -304,12 +268,12 @@ export async function resolveShare(
         sectionLabel: null,
         fileCount: drill ? drillFiles.length : allFiles.length,
         sectionCount: folders.length,
-        totalSizeText: totalSizeText(drill ? drillFiles : allFiles),
-        dateText: newestDate(drill ? drillFiles : allFiles, project.createdAt),
+        totalSizeText: totalSizeText(drill ? drillFiles : allFiles, locale),
+        dateText: newestDate(drill ? drillFiles : allFiles, project.createdAt, locale),
         breakdown: breakdownOf(drill ? drillFiles : allFiles),
         expiresAt: link.expiresAt ? link.expiresAt.toISOString() : null,
         stageThumbs: repThumbsOf(drill ? drillFiles : allFiles, sign),
-        files: drill ? drillFiles.slice(0, limit).map((f) => toShareFile(f, sign)) : [],
+        files: drill ? drillFiles.slice(0, limit).map((f) => toShareFile(f, sign, locale)) : [],
         sections: sectionRows.slice(0, limit),
         single: null,
         section: drill
@@ -329,7 +293,7 @@ export async function resolveShare(
     const folder = link.folder;
     if (!folder || (await folderChainTrashed(folder.id))) return { state: "gone", target: "section" };
 
-    const files = sortFiles([...folder.files, ...folder.children.flatMap((c) => c.files)], fileSort);
+    const files = sortFiles([...folder.files, ...folder.children.flatMap((c) => c.files)], fileSort, locale);
     const parsed = parseSectionName(folder.name);
 
     return {
@@ -346,12 +310,12 @@ export async function resolveShare(
         sectionLabel: null,
         fileCount: files.length,
         sectionCount: null,
-        totalSizeText: totalSizeText(files),
-        dateText: newestDate(files, folder.createdAt),
+        totalSizeText: totalSizeText(files, locale),
+        dateText: newestDate(files, folder.createdAt, locale),
         breakdown: breakdownOf(files),
         expiresAt: link.expiresAt ? link.expiresAt.toISOString() : null,
         stageThumbs: repThumbsOf(files, sign),
-        files: files.slice(0, limit).map((f) => toShareFile(f, sign)),
+        files: files.slice(0, limit).map((f) => toShareFile(f, sign, locale)),
         sections: [],
         single: null,
         section: null,
@@ -379,21 +343,17 @@ export async function resolveShare(
       folderId: null,
       zipUrl: singleUrl ? `${singleUrl}?dl=1` : null,
       projectName: file.project?.title ?? null,
-      sectionLabel: parsedSection
-        ? [parsedSection.number ? `NO ${parsedSection.number}` : null, parsedSection.title]
-            .filter(Boolean)
-            .join(" ")
-        : null,
+      sectionLabel: parsedSection ? { number: parsedSection.number, title: parsedSection.title } : null,
       fileCount: 1,
       sectionCount: null,
-      totalSizeText: formatFileSize(Number(file.size) || 0),
-      dateText: formatServerDate(file.createdAt),
+      totalSizeText: formatFileSize(Number(file.size) || 0, { locale }),
+      dateText: serverDate(file.createdAt, locale),
       breakdown: null,
       expiresAt: link.expiresAt ? link.expiresAt.toISOString() : null,
       stageThumbs: repThumbsOf([file as RawFile], sign),
       files: [],
       sections: [],
-      single: toShareFile(file as RawFile, sign),
+      single: toShareFile(file as RawFile, sign, locale),
       section: null,
     },
   };
@@ -413,7 +373,8 @@ export async function resolveSharePage(
     unlocked?: boolean;
     signer?: ShareSigner | null;
     sectionId?: string | null;
-    sort?: ShareSort | null;
+    sort?: string | null;
+    locale?: string;
     offset: number;
     limit: number;
   },
@@ -423,6 +384,7 @@ export async function resolveSharePage(
     signer: options.signer,
     sectionId: options.sectionId,
     sort: options.sort,
+    locale: options.locale,
     // Semua baris dirakit di server lalu dipotong di sini; yang DIKIRIM
     // tetap hanya satu halaman.
     limit: Number.MAX_SAFE_INTEGER,

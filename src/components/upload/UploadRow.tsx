@@ -15,8 +15,10 @@
  */
 
 import React from "react";
-import { formatFileSize } from "@/lib/format";
+import { useTranslations } from "next-intl";
+import { useFormat } from "@/i18n/useFormat";
 import type { UploadTask } from "./uploadTypes";
+import { useUploadFailureText } from "./useUploadFailureText";
 import styles from "./upload.module.css";
 
 const ICON_PHOTO = (
@@ -69,19 +71,19 @@ function iconFor(name: string) {
   return ICON_DOC;
 }
 
-/** Kalimat status — selalu teks, tidak pernah warna saja. */
-export function statusSentence(task: UploadTask): string {
+/** Status sentence: always text, never color alone. */
+function statusSentence(task: UploadTask, t: ReturnType<typeof useTranslations<"upload.row">>): string {
   switch (task.status) {
     case "success":
-      return "Selesai";
+      return t("statusDone");
     case "merging":
-      return "Menggabungkan…";
+      return t("statusMerging");
     case "uploading":
-      return `Mengupload ${task.progress}%`;
+      return t("statusUploading", { progress: task.progress });
     case "error":
-      return "Gagal";
+      return t("statusFailed");
     default:
-      return "Menunggu";
+      return t("statusWaiting");
   }
 }
 
@@ -92,9 +94,13 @@ export default function UploadRow({
   task: UploadTask;
   onRemove: (id: string) => void;
 }) {
+  const t = useTranslations("upload.row");
+  const f = useFormat();
+  const failureText = useUploadFailureText();
   const failed = task.status === "error";
   const active = task.status === "uploading" || task.status === "merging";
-  const sizeText = formatFileSize(task.file.size);
+  const sizeText = f.fileSize(task.file.size);
+  const status = statusSentence(task, t);
 
   return (
     <li className={`${styles.row} ${failed ? styles.rowFailed : ""}`}>
@@ -113,23 +119,23 @@ export default function UploadRow({
                 mentah server. */}
             <span className={`spine-chip ${styles.rowMeta} ${styles.rowMetaErr}`}>
               {ICON_WARN}
-              Gagal — {task.error ?? "sebab tidak diketahui"}
+              {t("failedBecause", { cause: task.error ? failureText(task.error, "row") : t("unknownCause") })}
             </span>
             <span className={`spine-chip ${styles.rowMeta}`}>
               {sizeText}
               {task.subSectionName ? (
                 <span className={`spine-chip ${styles.subChip}`}>
-                  Sub-Section baru: {task.subSectionName}
+                  {t("newSubSection", { name: task.subSectionName })}
                 </span>
               ) : null}
             </span>
           </>
         ) : (
           <span className={`spine-chip ${styles.rowMeta}`}>
-            {sizeText} · {statusSentence(task)}
+            {sizeText} · {status}
             {task.subSectionName ? (
               <span className={`spine-chip ${styles.subChip}`}>
-                Sub-Section baru: {task.subSectionName}
+                {t("newSubSection", { name: task.subSectionName })}
               </span>
             ) : null}
           </span>
@@ -139,11 +145,11 @@ export default function UploadRow({
           <span
             className={styles.rowBar}
             role="progressbar"
-            aria-label={`Progres ${task.file.name}`}
+            aria-label={t("progressOf", { name: task.file.name })}
             aria-valuenow={task.progress}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-valuetext={statusSentence(task)}
+            aria-valuetext={status}
           >
             <i style={{ width: `${task.progress}%` }} />
           </span>
@@ -155,7 +161,7 @@ export default function UploadRow({
         {task.status === "pending" ? (
           <button
             type="button"
-            aria-label={`Hapus ${task.file.name} dari antrean`}
+            aria-label={t("remove", { name: task.file.name })}
             className={`spine-focus-ring ${styles.rowRemove}`}
             onClick={() => onRemove(task.id)}
           >

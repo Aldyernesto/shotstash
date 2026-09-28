@@ -31,12 +31,17 @@ export function isSupportedLocale(value: unknown): value is Locale {
 /**
  * The first supported candidate, else English. Candidates are tried in
  * order, so pass them highest priority first; unknown values (`fr`, `xx`,
- * empty, null) are skipped.
+ * empty, null) are skipped. Matching ignores case; the result is the
+ * canonical tag from SUPPORTED_LOCALES.
  */
 export function resolveLocale(...candidates: Array<string | null | undefined>): Locale {
   for (const candidate of candidates) {
-    const value = typeof candidate === 'string' ? candidate.trim().toLowerCase() : candidate;
-    if (isSupportedLocale(value)) return value;
+    if (typeof candidate !== 'string') continue;
+    // Language tags are case-insensitive (BCP 47): "PT-br" finds "pt-BR" and
+    // resolves to the canonical spelling listed in SUPPORTED_LOCALES.
+    const wanted = candidate.trim().toLowerCase();
+    const hit = SUPPORTED_LOCALES.find((l) => l.toLowerCase() === wanted);
+    if (hit) return hit;
   }
   return FALLBACK_LOCALE;
 }

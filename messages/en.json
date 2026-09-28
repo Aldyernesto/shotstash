@@ -3,9 +3,14 @@
     "cancel": "Cancel",
     "close": "Close",
     "save": "Save",
-    "saving": "Saving...",
+    "saving": "Saving…",
     "retry": "Try again",
-    "loading": "Loading..."
+    "loading": "Loading…",
+    "numberPrefix": "No.",
+    "number": "Number",
+    "archiveTag": "Premium archive",
+    "revokeLinkTitle": "Revoke access to this link?",
+    "revokeLink": "Revoke access"
   },
   "format": {
     "justNow": "just now",
@@ -42,7 +47,7 @@
   "language": {
     "label": "Language",
     "instanceDefault": "Instance default",
-    "hint": "Used for menus and messages in the app."
+    "hint": "Used for menus, messages and emails."
   },
   "login": {
     "titleLogin": "Studio Access",
@@ -59,8 +64,8 @@
     "forgotPasswordFallback": "Forgot password? Ask your {productName} admin",
     "signupNote": "After signing up, you'll fill in a short <b>onboarding</b> (account type and a few questions). An admin reviews your account before you can use the studio.",
     "pendingNotice": "<b>Your account is waiting for admin approval.</b> Opening the status page…",
-    "busyLogin": "Signing in...",
-    "busySignup": "Creating account...",
+    "busyLogin": "Signing in…",
+    "busySignup": "Creating account…",
     "submitLogin": "Sign in",
     "submitSignup": "Create account",
     "or": "OR",
@@ -103,7 +108,6 @@
     "closeNotice": "Close notice"
   },
   "hero": {
-    "tag": "Premium archive",
     "headline": "Your footage<br></br><sticker>your hardware</sticker><br></br>your cloud",
     "lead": "All your clips and photos on your own hardware: tidy, quick to find, ready to share with team and clients.",
     "pauseMotion": "Pause animation"
@@ -327,8 +331,6 @@
     "empty": "Still empty",
     "emptyDropHint": "Still empty, drag files here",
     "uploadFirst": "Upload first footage",
-    "number": "Number",
-    "numberPrefix": "NO",
     "share": "Share {name}",
     "projectName": "{title}, {files}, {date}",
     "sectionName": "{title}, {files}",
@@ -514,7 +516,7 @@
     "resetTitle": "Reset password",
     "backToLogin": "Back to sign in",
     "unavailable": "Password reset isn't available yet. For now, ask your {productName} admin to set a new password for you.",
-    "sending": "Sending...",
+    "sending": "Sending…",
     "errors": {
       "transport": "Couldn't reach the server. Check your connection and try again.",
       "requestFailed": "Request failed. Try again.",
@@ -527,7 +529,8 @@
       "passwordTooShort": "Use at least {min} characters.",
       "passwordTooLong": "Use at most {max} bytes (about {max} plain characters; accented letters and emoji count more).",
       "passwordMismatch": "The passwords don't match.",
-      "internal": "Something went wrong. Try again."
+      "internal": "Something went wrong. Try again.",
+      "invalidCodeAttempts": "Wrong code. {count, plural, one {# attempt} other {# attempts}} left."
     },
     "request": {
       "title": "Forgot your password?",
@@ -544,7 +547,7 @@
       "spamHint": "Not in your inbox? Check your spam folder.",
       "codeIncomplete": "Enter the {length}-character code from the email.",
       "storageBlocked": "Your browser is blocking session storage, so the reset can't continue. Open this page in a normal window (not private mode) and request a new code.",
-      "checking": "Checking...",
+      "checking": "Checking…",
       "submit": "Verify code",
       "resent": "If the email is registered, a new code is on its way. Use the code from the latest email you get.",
       "resendFailed": "Couldn't resend the code. Try again.",
@@ -588,7 +591,7 @@
     "passwordLabel": "Password",
     "confirmLabel": "Confirm password",
     "minHint": "At least {min} characters.",
-    "creating": "Creating...",
+    "creating": "Creating…",
     "submit": "Create owner",
     "done": "Setup complete. Sign in with the new account.",
     "errors": {
@@ -633,9 +636,9 @@
   },
   "profile": {
     "title": "Profile settings",
-    "changePhotoTitle": "Click to change photo",
-    "uploading": "Uploading...",
-    "changePhotoHint": "Click the photo to change it",
+    "changePhotoTitle": "Change photo",
+    "uploading": "Uploading…",
+    "changePhotoHint": "Select the photo to change it",
     "removePhoto": "Remove",
     "name": "Name",
     "email": "Email",
@@ -647,7 +650,7 @@
     "saveFailed": "Couldn't save your profile. Try again."
   },
   "dialog": {
-    "busy": "Working..."
+    "busy": "Working…"
   },
   "fields": {
     "copyPassword": "Copy password",
@@ -662,11 +665,683 @@
     "notFound": "That item no longer exists.",
     "timeout": "The server took too long. Try again.",
     "server": "The server has a problem. Try again later.",
-    "generic": "Something went wrong. Try again."
+    "generic": "Something went wrong. Try again.",
+    "codes": {
+      "UNAUTHENTICATED": "Your session has expired. Sign in again.",
+      "FORBIDDEN": "You don't have access to do that.",
+      "NOT_FOUND": "That item no longer exists.",
+      "RATE_LIMITED": "Too many attempts. Wait a moment and try again.",
+      "INVALID_INPUT": "Some of the details aren't valid. Check them and try again.",
+      "BAD_REQUEST": "That request wasn't valid. Try again.",
+      "BAD_USER_INPUT": "Some of the details aren't valid. Check them and try again.",
+      "INTERNAL": "Something went wrong on the server. Try again.",
+      "NOT_IMPLEMENTED": "That isn't available yet.",
+      "GONE": "This link is no longer active.",
+      "SETUP_REQUIRED": "Setup isn't finished yet. Ask your admin.",
+      "MESSAGE_TOO_LONG": "The message is too long. Keep it under {maxLength, number} characters.",
+      "UNSUPPORTED_LOCALE": "That language isn't available.",
+      "NOT_IN_TRASH": "That item isn't in the Trash anymore.",
+      "ALREADY_TRASHED": "That item is already in the Trash.",
+      "ANCESTOR_TRASHED": "This item is inside a Section in the Trash. Restore that Section first.",
+      "INVALID_CODE": "Wrong access code. Check it and try again.",
+      "UPLOAD_FAILED": "The upload couldn't finish. Try again.",
+      "TOO_LARGE": "The file is too large.",
+      "UNSUPPORTED_TYPE": "This file type isn't supported.",
+      "ACCOUNT_DEACTIVATED": "This account has been deactivated. Ask your admin.",
+      "ACCOUNT_REJECTED": "This sign-up was rejected. Ask your admin for details.",
+      "ALREADY_HANDLED": "Another admin already handled this sign-up. The list is up to date now.",
+      "CANNOT_TARGET_SELF": "You can't do this to your own account.",
+      "CHECKSUM_MISMATCH": "The file changed on its way to the server. Upload it again.",
+      "CODE_LOCKED": "Too many wrong tries, so this code was cancelled. Request a new code.",
+      "EMAIL_NOT_VERIFIED": "Google hasn't verified this email address yet.",
+      "EMAIL_TAKEN": "This email is already registered.",
+      "FILE_TYPE_NOT_ALLOWED": "This Section only takes {sectionType, select, video {videos} photo {photos} other {documents}}, so .{ext} files can't go here.",
+      "GOOGLE_NOT_CONFIGURED": "Google sign-in isn't set up on this server.",
+      "GOOGLE_ONLY_ACCOUNT": "This account signs in with Google. Use the \"Sign in with Google\" button.",
+      "GRAPHQL_PARSE_FAILED": "Something went wrong. Try again.",
+      "GRAPHQL_VALIDATION_FAILED": "Something went wrong. Try again.",
+      "INTERNAL_SERVER_ERROR": "Something went wrong on the server. Try again.",
+      "INVALID_AVATAR_URL": "That photo can't be used. Pick another one.",
+      "INVALID_CREDENTIALS": "Wrong email or password.",
+      "INVALID_EMAIL": "Enter a valid email address.",
+      "INVALID_LIMIT": "Ask for between 1 and {max, number} items.",
+      "INVALID_MOVE_TARGET": "Choose where to move it first.",
+      "INVALID_ROLE": "That role isn't allowed here.",
+      "INVALID_SHARE_TARGET": "Choose one file, Section or Project to share.",
+      "INVALID_TOKEN": "That sign-in didn't work. Try again.",
+      "MOVE_INTO_ITSELF": "A Section can't move into itself or one of its sub-Sections.",
+      "NAME_REQUIRED": "Enter a name.",
+      "NAME_TOO_LONG": "Keep the name under {max, number} characters.",
+      "NOTHING_TO_UPDATE": "Nothing changed.",
+      "PASSWORD_MISMATCH": "The passwords don't match.",
+      "PASSWORD_TOO_LONG": "That password is too long. Use a shorter one.",
+      "PASSWORD_TOO_SHORT": "That password is too short. Use a longer one.",
+      "SERVICE_UNAVAILABLE": "The server isn't ready yet. Try again in a moment.",
+      "SETUP_ALREADY_DONE": "Setup is already complete. Sign in instead.",
+      "SETUP_TOKEN_INVALID": "The setup token is missing or wrong.",
+      "STORAGE_UNAVAILABLE": "The media folder can't be written to right now.",
+      "SUPER_ADMIN_PROTECTED": "A super admin account can't be reset or deleted here.",
+      "TOKEN_INVALID": "Your reset session has ended. Start again.",
+      "UNAVAILABLE": "Password reset isn't available yet.",
+      "UPLOAD_SESSION_CLOSED": "This upload already ended. Start it again.",
+      "UPLOAD_SESSION_NOT_FOUND": "This upload can't be found anymore. Start it again.",
+      "USER_HAS_ACTIVITY": "This account has activity (uploads, share links or messages), so it can't be deleted. Deactivate it instead to block access and keep its data.",
+      "USER_NOT_FOUND": "That account no longer exists."
+    },
+    "forbidden": "You don't have access to do that."
   },
   "copyPill": {
     "copyLink": "Copy link {path}",
     "copied": "Link copied to clipboard.",
     "copyFailed": "Couldn't copy automatically. Select the link and copy it by hand."
+  },
+  "shareInvalid": {
+    "expired": {
+      "title": "This link has expired",
+      "text": "This link isn't active anymore. Ask the {productName} team who shared it for a new one."
+    },
+    "notFound": {
+      "title": "Link not found",
+      "text": "Check the link you received, or ask the {productName} team for a new one."
+    },
+    "projectGone": {
+      "title": "Project no longer available",
+      "text": "This project was deleted or moved."
+    },
+    "sectionGone": {
+      "title": "Section no longer available",
+      "text": "This Section was deleted or moved."
+    },
+    "fileGone": {
+      "title": "File no longer available",
+      "text": "This file was deleted or moved."
+    },
+    "private": {
+      "title": "Private link",
+      "text": "Enter the access code from the person who shared this link."
+    },
+    "codeLabel": "Access code",
+    "checking": "Checking…",
+    "open": "Open link",
+    "rateLimited": "Too many attempts. Try again in {minutes, plural, one {# minute} other {# minutes}}.",
+    "wrongCode": "Wrong access code.",
+    "inactive": "This link isn't active anymore.",
+    "offline": "Can't reach the server. Try again."
+  },
+  "email": {
+    "passwordReset": {
+      "subject": "Your {productName} password reset code",
+      "preview": "Use this code to set a new password. It's valid for {minutes, plural, one {# minute} other {# minutes}}.",
+      "heading": "Password reset code",
+      "greeting": "Hi {name},",
+      "greetingAnon": "Hi there,",
+      "intro": "We got a request to set a new password for the {productName} account with the email {email}. Enter this code on the password reset page:",
+      "validity": "The code is valid for {minutes, plural, one {# minute} other {# minutes}} (until {time}).",
+      "button": "Enter the code",
+      "googleOnly": "Your account signs in with Google. After you set a password, you can still sign in with the \"Sign in with Google\" button.",
+      "ignore": "If you didn't ask for a reset, ignore this email; your password stays the same. Never share this code with anyone.",
+      "footer": "Automatic email from {productName}. Please don't reply."
+    }
+  },
+  "viewer": {
+    "counter": "{kind, select, video {Video} other {Photo}} · {index, number} / {total, number}",
+    "loadFailedTitle": "Couldn't load this file.",
+    "loadFailedText": "The connection to the server dropped while fetching it.",
+    "retry": "Try again",
+    "download": "Download",
+    "share": "Share",
+    "shareFile": "Share {name}",
+    "closeViewer": "Close viewer (Esc)",
+    "prevKey": "Previous file (←)",
+    "nextKey": "Next file (→)",
+    "prev": "Previous file",
+    "next": "Next file",
+    "keyHints": "<kbd>Space</kbd>play / pause<sep></sep><kbd>←</kbd><kbd>→</kbd>change file<sep></sep><kbd>M</kbd>mute<sep></sep><kbd>F</kbd>full screen<sep></sep><kbd>Esc</kbd>close",
+    "swipeHint": "Swipe left or right to change files.",
+    "info": {
+      "title": "File info",
+      "none": "None",
+      "type": "Type",
+      "size": "Size",
+      "dimensions": "Dimensions",
+      "captured": "Captured",
+      "uploaded": "Uploaded",
+      "project": "Project",
+      "section": "Section",
+      "kindVideo": "Video",
+      "kindPhoto": "Photo",
+      "close": "Close info",
+      "expand": "Expand info",
+      "collapse": "Collapse info",
+      "showAll": "Show all info"
+    },
+    "video": {
+      "loading": "Loading video…",
+      "play": "Play",
+      "pause": "Pause",
+      "position": "Video position",
+      "positionValue": "{now} of {total}",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "fullscreen": "Full screen",
+      "exitFullscreen": "Exit full screen"
+    }
+  },
+  "share": {
+    "metaDescription": "{count, plural, one {# footage file} other {# footage files}} from {source}.",
+    "sectionNumbered": "No. {number} {title}",
+    "kind": {
+      "image": "Photo",
+      "video": "Video",
+      "audio": "Audio",
+      "document": "Document"
+    },
+    "kindLower": {
+      "image": "photo",
+      "video": "video",
+      "audio": "audio",
+      "document": "document"
+    },
+    "fileLabel": "{name}, {kind}, {size}",
+    "downloadFile": "Download {name}",
+    "open": "Open",
+    "openSection": "Open Section {title}, {files}",
+    "downloadZipOf": "Download ZIP of {title}",
+    "sort": {
+      "name": "Name",
+      "dateDesc": "Date ▼",
+      "size": "Size",
+      "type": "Type",
+      "numberAsc": "Number ▲",
+      "fileCount": "File count"
+    },
+    "sortGroup": "Sort",
+    "moreFilesShown": "{count, plural, one {# more file shown.} other {# more files shown.}}",
+    "moreSectionsShown": "{count, plural, one {# more section shown.} other {# more sections shown.}}",
+    "loadMoreFailed": "Couldn't load more. Try again.",
+    "sortFailed": "Couldn't re-sort. Try again.",
+    "zipErrors": {
+      "server": "The server has a problem.",
+      "empty": "There are no files to download in this link.",
+      "unreadable": "The files can't be read from storage.",
+      "missing": "The files aren't there anymore.",
+      "offline": "Can't reach the server."
+    },
+    "kickProject": "Project · <b>{name}</b>",
+    "kickSection": "Section · <b>{label}</b>",
+    "sectionCount": "{count, plural, one {# section} other {# sections}}",
+    "breakdown": "Contains {parts}.",
+    "preparing": "Preparing…",
+    "download": "Download",
+    "downloadZip": "Download ZIP",
+    "zipFailed": "Couldn't prepare the download. Try again.",
+    "validUntil": "Link valid until <b>{date}, {time}</b>",
+    "noExpiry": "Link never expires",
+    "projectContents": "Project contents · <b>{count, plural, one {# section} other {# sections}}</b>",
+    "sectionContents": "Section contents · <b>{count, plural, one {# file} other {# files}}</b>",
+    "showingFiles": "Showing {shown, number} of {total, plural, one {# file} other {# files}}.",
+    "showingSections": "Showing {shown, number} of {total, plural, one {# section} other {# sections}}.",
+    "showMoreFiles": "Show {count, plural, one {# more file} other {# more files}}",
+    "showMoreSections": "Show {count, plural, one {# more section} other {# more sections}}",
+    "loading": "Loading…"
+  },
+  "shareModal": {
+    "title": {
+      "file": "Share file",
+      "section": "Share Section",
+      "project": "Share Project"
+    },
+    "level": {
+      "project": "Project",
+      "section": "Section",
+      "file": "File"
+    },
+    "sectionCount": "{count, plural, one {# section} other {# sections}}",
+    "activeFor": {
+      "file": "Active links for this file",
+      "section": "Active links for this Section",
+      "project": "Active links for this project"
+    },
+    "activeMine": "Your active links",
+    "noLinks": {
+      "file": "No links for this file yet.",
+      "section": "No links for this Section yet.",
+      "project": "No links for this project yet."
+    },
+    "linkCount": "{count, plural, one {# link} other {# links}}",
+    "linksLoading": "Loading links…",
+    "linksFailed": "Couldn't load active links.",
+    "revoked": "Link revoked.",
+    "revokeFailed": "Couldn't revoke the link. Try again.",
+    "confirmText": "The link <b>{path}</b> will stop working.",
+    "revoking": "Revoking…",
+    "revokeLabel": "Revoke access to {path}",
+    "newTag": "NEW",
+    "mode": {
+      "public": "Public",
+      "private": "Private"
+    },
+    "until": "until {dateTime}",
+    "permanent": "Permanent",
+    "views": "{count, plural, one {<b>#</b> view} other {<b>#</b> views}}",
+    "createdByYou": "created by <b>you</b>",
+    "createdBy": "created by <b>{name}</b>",
+    "done": "Done",
+    "creating": "Creating…",
+    "create": "Create link",
+    "readyTitle": "Link ready to share",
+    "readyUntil": "valid until {date}, {time}",
+    "readyUntilRevoked": "valid until revoked from Share or the Shared page",
+    "copyLink": "Copy link",
+    "accessCode": "Access code",
+    "codeCopied": "Access code copied.",
+    "copyCode": "Copy code",
+    "codeNote": "This code is shown only once. Send it separately from the link; the recipient enters it to open the link.",
+    "modeLabel": "Access mode",
+    "modePublicNote": "Anyone with the link can open it.",
+    "modePrivateNote": "Only people with the access code.",
+    "expiryLabel": "Expires",
+    "expiry24h": "24 hours",
+    "expiry7d": "7 days",
+    "validUntil": "Link valid until <b>{date}, {time}</b>.",
+    "validUntilRevoked": "Link stays valid until revoked from Share or the Shared page.",
+    "createFailed": "Couldn't create the link. Check your connection and try again.",
+    "expiryNever": "Never"
+  },
+  "upload": {
+    "reject": {
+      "session": "Your session has ended. Sign in again, then retry the upload.",
+      "forbidden": "You don't have permission to upload to this Section.",
+      "missingFolder": "This Section no longer exists. Pick another Section.",
+      "quota": "Storage is full. Contact your admin.",
+      "tooLarge": "This file is too large to upload.",
+      "unsupportedType": "This file type can't be uploaded here.",
+      "checksum": "The file got damaged on the way. Try the upload again.",
+      "offline": "You're offline. Reconnect, then press Upload again.",
+      "generic": "The upload couldn't start. Try again in a moment.",
+      "storage": "Storage isn't available right now. Ask your admin to check it, then try again."
+    },
+    "rowReason": {
+      "session": "your session has ended",
+      "forbidden": "no permission for this Section",
+      "missingFolder": "the Section no longer exists",
+      "quota": "storage is full",
+      "tooLarge": "file too large",
+      "unsupportedType": "file type not allowed",
+      "checksum": "file damaged in transit",
+      "offline": "connection lost after 3 tries",
+      "generic": "rejected by the server",
+      "storage": "storage unavailable"
+    },
+    "live": {
+      "fileDone": "{name} done.",
+      "fileFailed": "{name} failed.",
+      "batchStarted": "Uploading {count, plural, one {# file} other {# files}}.",
+      "batchDone": "Upload batch finished."
+    },
+    "toast": {
+      "stopped": "Upload stopped.",
+      "fileFailed": "{name} couldn't be uploaded."
+    },
+    "panel": {
+      "title": "Upload files",
+      "close": "Close",
+      "cancel": "Cancel",
+      "done": "Done",
+      "uploadCount": "Upload ({count, number})",
+      "uploading": "Uploading…",
+      "minimize": "Minimize",
+      "minimizeLabel": "Minimize the upload panel (uploads keep running)",
+      "to": "to {number, select, none {} other {<sticker>{number}</sticker>}}<name>{section}</name>",
+      "sectionFallback": "Section",
+      "helpPointer": "Drag files here or click to choose. Big files go up in 10 MB pieces.",
+      "helpTouch": "Tap to choose files. Big files go up in 10 MB pieces.",
+      "dropzonePointer": "Click or drag files here",
+      "dropzoneTouch": "Tap to choose files",
+      "dropHere": "Drop the files here",
+      "pickOtherSection": "Pick another Section",
+      "summaryDone": "{done, plural, one {# file uploaded} other {# files uploaded}}",
+      "summaryDoneFailed": "{done, plural, one {# file uploaded} other {# files uploaded}}, {failed, number} failed",
+      "summaryRunning": "{done, number} of {total, plural, one {# file} other {# files}} done · {running, number} uploading · {waiting, number} waiting"
+    },
+    "row": {
+      "statusDone": "Done",
+      "statusMerging": "Merging…",
+      "statusUploading": "Uploading {progress, number}%",
+      "statusFailed": "Failed",
+      "statusWaiting": "Waiting",
+      "failedBecause": "Failed: {cause}",
+      "unknownCause": "unknown cause",
+      "newSubSection": "New sub-Section: {name}",
+      "progressOf": "Progress of {name}",
+      "remove": "Remove {name} from the queue"
+    },
+    "batch": {
+      "ofDone": "<figure>{done, number}</figure> of {total, plural, one {# file} other {# files}} done",
+      "ready": "<figure>{count, number}</figure> {count, plural, one {file} other {files}} ready to upload",
+      "runningWaiting": "{running, number} uploading · {waiting, number} waiting",
+      "failed": "{count, number} failed",
+      "progress": "Batch progress",
+      "progressValue": "{done, number} of {total, plural, one {# file} other {# files}} done"
+    },
+    "heic": {
+      "title": "Convert HEIC to JPG?",
+      "body": "Some of your files are <b>.heic</b>. Most browsers and editing apps can't open this format directly. Convert them to JPG automatically so they work everywhere?",
+      "note": "This choice applies to every HEIC file in this upload.",
+      "convert": "Yes, convert to JPG",
+      "keep": "No, keep .heic"
+    },
+    "picker": {
+      "title": "Choose a Section",
+      "lead": "Pick a Section to upload to, or create a new one.",
+      "close": "Close",
+      "create": "New Section",
+      "cancel": "Cancel",
+      "empty": "This project has no Sections yet. Create one to start uploading.",
+      "files": "{count, plural, one {# file} other {# files}}"
+    },
+    "dock": {
+      "sectionFallback": "Section",
+      "titleDone": "Upload done · {section}",
+      "titleRunning": "Uploading to {section}",
+      "subDone": "{done, number} of {total, plural, one {# file} other {# files}} uploaded",
+      "subDoneFailed": "{done, number} of {total, plural, one {# file} other {# files}} uploaded · {failed, number} failed",
+      "subRunning": "{done, number} of {total, plural, one {# file} other {# files}} · {running, number} uploading",
+      "subRunningFailed": "{done, number} of {total, plural, one {# file} other {# files}} · {failed, number} failed",
+      "region": "Upload in progress",
+      "showList": "Show the upload list",
+      "show": "Show",
+      "closePanel": "Close the upload panel",
+      "close": "Close",
+      "progress": "Batch progress"
+    }
+  },
+  "shared": {
+    "title": "Shared links",
+    "linkCount": "{count, plural, one {# link} other {# links}}",
+    "subtitle": "Manage access to the files you've shared outside your team. Select a link address to copy it.",
+    "loading": "Loading links…",
+    "errorTitle": "Couldn't load. Try again.",
+    "errorText": "We couldn't get the list of links from the server.",
+    "emptyTitle": "No shared links yet.",
+    "emptyText": "Create a link from the Share menu on a file, Section or Project.",
+    "tableLabel": "Shared links",
+    "column": {
+      "content": "Content",
+      "link": "Link",
+      "mode": "Mode",
+      "views": "Views",
+      "expires": "Expires",
+      "actions": "Actions"
+    },
+    "confirmLead": "The link will stop working.",
+    "confirmMeta": "{path} · {mode} · {count, plural, one {# view} other {# views}}",
+    "revoking": "Revoking…",
+    "revokeLabel": "Revoke access to {path}",
+    "revokedAnnounce": "Access to {path} revoked.",
+    "revokedToast": "Link access revoked.",
+    "revokeFailed": "Couldn't revoke the link. Try again.",
+    "deleted": {
+      "file": "File deleted",
+      "section": "Section deleted",
+      "project": "Project deleted",
+      "unknown": "Item deleted"
+    },
+    "type": {
+      "project": "Project",
+      "section": "Section",
+      "file": "File",
+      "unknown": "Link"
+    },
+    "modePublic": "Public",
+    "modePrivate": "Private",
+    "permanent": "Permanent",
+    "views": "<figure>{count, number}</figure> <unit>{count, plural, one {view} other {views}}</unit>"
+  },
+  "trash": {
+    "title": "Trash",
+    "itemCount": "{count, plural, one {# item} other {# items}}",
+    "subtitle": "Items in the Trash are <b>deleted automatically after {days, plural, one {# day} other {# days}}</b>. Restore an item to bring it back.",
+    "deniedTitle": "Access denied",
+    "deniedText": "Only admins can open the Trash.",
+    "backToMedia": "My Media",
+    "search": "Search files & Sections in the Trash…",
+    "sortGroup": "Sort",
+    "sort": {
+      "date": "Date",
+      "name": "Name",
+      "size": "Size"
+    },
+    "results": "{count, plural, one {# result} other {# results}} for \"{query}\" in the Trash.",
+    "loading": "Loading…",
+    "errorTitle": "Couldn't load. Try again.",
+    "errorText": "We couldn't get the Trash from the server.",
+    "noResultsTitle": "No results for \"{query}\" in the Trash.",
+    "noResultsText": "Try another word, or clear the search to see every item.",
+    "emptyTitle": "Trash is empty",
+    "emptyText": "Deleted Sections and files stay here for {days, plural, one {# day} other {# days}} before they're removed automatically.",
+    "groupSections": "Sections",
+    "groupFiles": "Files",
+    "sectionsTable": "Sections in the Trash",
+    "filesTable": "Files in the Trash",
+    "column": {
+      "name": "Name",
+      "project": "Project",
+      "size": "Size",
+      "remaining": "Time left",
+      "actions": "Actions"
+    },
+    "metaSection": "Section · Project {project} · {remaining}",
+    "metaFile": "File · {size} · {remaining}",
+    "remainingDays": "{count, plural, =0 {Due today} one {# day left} other {# days left}}",
+    "remainingUnknown": "time left unknown",
+    "restore": "Restore",
+    "deleteForever": "Delete forever",
+    "restoring": "Restoring…",
+    "deleting": "Deleting…",
+    "restoredAnnounce": "{name} restored from the Trash.",
+    "deletedAnnounce": "{name} deleted forever.",
+    "restoredToast": "Restored.",
+    "deletedToast": "Deleted forever.",
+    "restoreFailed": "Couldn't restore. Try again.",
+    "deleteFailed": "Couldn't delete forever. Try again.",
+    "confirm": {
+      "restoreFileTitle": "Restore this file?",
+      "restoreSectionTitle": "Restore this Section?",
+      "deleteTitle": "Delete forever?",
+      "restoreFileLead": "The file will come back from the Trash.",
+      "restoreSectionLead": "The Section will come back from the Trash.",
+      "deleteFileLead": "Delete \"{name}\" forever? This can't be undone.",
+      "deleteSectionLead": "Section \"{name}\" and ALL the files in it will be deleted forever. This can't be undone."
+    },
+    "noProject": "No project"
+  },
+  "chat": {
+    "title": "Project discussion",
+    "close": "Close project discussion",
+    "feed": "Project discussion messages",
+    "messageCount": "{count, plural, =0 {No messages} one {# message} other {# messages}}",
+    "loadFailed": "Couldn't load the discussion. Try again.",
+    "retry": "Try again",
+    "loading": "Loading the discussion…",
+    "emptyTitle": "No messages yet",
+    "emptyText": "Start talking about this project's footage. Type @ to mention a Section or file, and your team will see it here.",
+    "you": "You",
+    "sending": "sending…",
+    "sendFailed": "Your message wasn't sent. Try again.",
+    "placeholder": "Write a message… type @ to tag",
+    "files": "{count, plural, one {# file} other {# files}}",
+    "fileKind": {
+      "video": "Video",
+      "photo": "Photo",
+      "audio": "Audio",
+      "document": "Document"
+    },
+    "composer": {
+      "label": "Write a message",
+      "send": "Send",
+      "sending": "Sending message…"
+    },
+    "chips": {
+      "openProject": "Open Project {name}",
+      "mentionType": ", {type, select, PROJECT {Project} SECTION {Section} other {File}}",
+      "attachment": "Attachment: {name}",
+      "removeAttachment": "Remove attachment {name}"
+    },
+    "mention": {
+      "results": "Search results for @{query}",
+      "head": "Insert tag · {count, plural, one {# result} other {# results}}",
+      "typeSticker": "{type, select, PROJECT {PROJECT} SECTION {SECTION} other {FILE}}"
+    },
+    "system": {
+      "upload": "{name} uploaded {fileName}",
+      "someone": "Someone"
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Mark all read",
+    "empty": "No notifications yet",
+    "bellLabel": "{count, plural, =0 {Notifications} one {Notifications, # unread} other {Notifications, # unread}}",
+    "otherLabel": "Info",
+    "chat_mention": {
+      "label": "Chat",
+      "title": "New message in {projectTitle}",
+      "body": "{senderName}: {excerpt}"
+    },
+    "project_created": {
+      "label": "Project",
+      "title": "New project",
+      "body": "{projectTitle} was created"
+    },
+    "upload_complete": {
+      "label": "Upload",
+      "title": "File uploaded",
+      "body": "{fileName} was added",
+      "bodyProject": "{fileName} was added to {projectTitle}"
+    },
+    "file_shared": {
+      "label": "Share",
+      "title": "Share link created",
+      "body": "New share link for {targetKind, select, section {Section} project {Project} other {file}} {fileName}"
+    },
+    "someone": "Someone"
+  },
+  "admin": {
+    "title": "Admin Panel",
+    "subtitle": "Manage users, keep an eye on activity and look after storage.",
+    "working": "Working…",
+    "closeNotice": "Close message",
+    "column": {
+      "name": "Name",
+      "email": "Email",
+      "role": "Role",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "pending": {
+      "title": "Waiting for approval",
+      "noName": "No name",
+      "signedUp": "Signed up: {date}",
+      "requested": "Wants: {role}",
+      "notSet": "not set",
+      "answers": "{count, plural, =0 {No answers} one {# answer} other {# answers}}",
+      "noAnswers": "This person hasn't answered the onboarding questions yet.",
+      "approveAs": "Approve as:",
+      "approveAsFor": "Approve as, {name}",
+      "approve": "Approve",
+      "approveFor": "Approve {name}",
+      "reject": "Reject",
+      "rejectFor": "Reject {name}",
+      "rejectTitle": "Reject the sign-up from {email}?",
+      "rejectLead": "This person won't be able to sign in. They'll need to sign up again to be considered.",
+      "alreadyHandled": "The sign-up from {email} was already handled. The list has been refreshed.",
+      "approveFailed": "Couldn't approve {email}. {cause}",
+      "rejectFailed": "Couldn't reject {email}. {cause}",
+      "noAnswer": "No answer"
+    },
+    "users": {
+      "title": "User management",
+      "add": "+ Add user",
+      "search": "Search name or email…",
+      "searchLabel": "Search name or email",
+      "filterLabel": "Filter by role",
+      "allRoles": "All roles",
+      "loading": "Loading users…",
+      "noMatch": "No users match.",
+      "none": "No users yet.",
+      "google": "Google",
+      "roleFor": "Role of {name}",
+      "active": "Active",
+      "inactive": "Inactive",
+      "activate": "Activate",
+      "deactivate": "Deactivate",
+      "activateFor": "Activate {name}",
+      "deactivateFor": "Deactivate {name}",
+      "reset": "Reset password",
+      "resetFor": "Reset password for {name}",
+      "delete": "Delete",
+      "deleteFor": "Delete {name}",
+      "yourAccount": "Your account",
+      "superAdminAccount": "Super admin account",
+      "roleFailed": "Couldn't change the role of {name}. {cause}",
+      "activateFailed": "Couldn't activate {name}. {cause}",
+      "deactivateFailed": "Couldn't deactivate {name}. {cause}"
+    },
+    "storage": {
+      "title": "Storage overview",
+      "loadFailed": "Couldn't load storage data. Try again.",
+      "empty": "No storage data yet.",
+      "totalProjects": "Total projects",
+      "totalFiles": "Total files",
+      "usedSpace": "Used space",
+      "freeSpace": "Free space"
+    },
+    "create": {
+      "title": "Create new user",
+      "creating": "Creating…",
+      "submit": "Create user",
+      "failed": "Couldn't create the user. Try again.",
+      "name": "Name",
+      "namePlaceholder": "Full name",
+      "email": "Email",
+      "emailPlaceholder": "user@example.com",
+      "password": "Password",
+      "role": "Role"
+    },
+    "reset": {
+      "title": "Reset password",
+      "lead": "{name} ({email})",
+      "submit": "Reset password",
+      "googleNote": "This account signed up with Google and has no password yet. Once you set one, they can sign in with email and password and still sign in with Google.",
+      "inactiveNote": "This account is deactivated. Resetting the password isn't enough: select \"Activate\" in the user table so they can sign in.",
+      "modeLabel": "How to create the password",
+      "modeAuto": "Generate one (10 random characters, recommended)",
+      "modeManual": "Type one yourself",
+      "newPassword": "New password",
+      "signOutHint": "This user will be signed out everywhere.",
+      "failed": "Couldn't set the password. {cause}",
+      "doneNotice": "Password for {email} set. They've been signed out everywhere.",
+      "doneTitle": "Password set",
+      "done": "Done",
+      "newFor": "New password for <strong>{name}</strong> ({email}):",
+      "onceWarning": "This password is shown only once. Copy it now and send it to the user privately.",
+      "manualSaved": "The password you typed for {name} ({email}) is saved.",
+      "signedOut": "This user has been signed out everywhere and needs to sign in again on every device.{google, select, yes { They can still sign in with Google.} other {}}",
+      "stillInactive": "This account is still deactivated, so the user can't sign in yet. Select \"Activate\" in the user table to let them in."
+    },
+    "delete": {
+      "title": "Delete the account {email}?",
+      "lead": "The account of {name} will be deleted forever, with its sessions, devices and notifications. Only accounts without uploads, share links or chat messages can be deleted; for anything else, use \"Deactivate\". This can't be undone.",
+      "done": "Account {email} deleted.",
+      "hasActivity": "The account {email} can't be deleted because it has activity (uploads, share links or chat messages). Use \"Deactivate\" to block access and keep their data.",
+      "failed": "Couldn't delete the account {email}. {cause}",
+      "hasActivityCounts": "The account {email} can't be deleted because it has {activity}. Use \"Deactivate\" to block access and keep their data.",
+      "activity": {
+        "uploads": "{count, plural, one {# uploaded file} other {# uploaded files}}",
+        "shareLinks": "{count, plural, one {# share link} other {# share links}}",
+        "chats": "{count, plural, one {# chat message} other {# chat messages}}"
+      }
+    }
   }
 }

@@ -10,10 +10,13 @@
  * warna hanya penguat. Ikon selalu `aria-hidden`.
  */
 
+"use client";
+
 import React from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import styles from "./chat.module.css";
-import { roleChipLabel } from "@/lib/permissions";
+import { useFormat } from "@/i18n/useFormat";
 import { parseMentionTags, type MentionTagType } from "@/lib/mentions";
 
 /* ------------------------------------------------------------------ */
@@ -32,13 +35,14 @@ export type ProjectTagProps = {
  * Sebagai tautan namanya "Buka Project {nama}" (AC 3.16).
  */
 export function ProjectTag({ name, href, className }: ProjectTagProps) {
+  const t = useTranslations("chat.chips");
   const body = <span>{name}</span>;
   const cls = `spine-display-label ${styles.projectTag} ${className ?? ""}`;
   if (!href) {
     return <span className={cls}>{body}</span>;
   }
   return (
-    <Link href={href} aria-label={`Buka Project ${name}`} className={`spine-focus-ring ${cls}`}>
+    <Link href={href} aria-label={t("openProject", { name })} className={`spine-focus-ring ${cls}`}>
       {body}
     </Link>
   );
@@ -49,12 +53,6 @@ export function ProjectTag({ name, href, className }: ProjectTagProps) {
 /* ------------------------------------------------------------------ */
 
 export type MentionTargetType = "PROJECT" | "SECTION" | "FILE";
-
-const TYPE_WORD: Record<MentionTargetType, string> = {
-  PROJECT: "Project",
-  SECTION: "Section",
-  FILE: "File",
-};
 
 export type MentionChipProps = {
   name: string;
@@ -68,10 +66,11 @@ export type MentionChipProps = {
  * text never lands on a light surface.
  */
 export function MentionChip({ name, type, className }: MentionChipProps) {
+  const t = useTranslations("chat.chips");
   return (
     <span className={`${styles.mentionChip} ${className ?? ""}`}>
       @{name}
-      <span className="spine-visually-hidden">, {TYPE_WORD[type]}</span>
+      <span className="spine-visually-hidden">{t("mentionType", { type })}</span>
     </span>
   );
 }
@@ -124,16 +123,17 @@ export type AttachmentChipProps = {
 
 /** Pill with an accent paperclip icon, read as "Lampiran: {nama}". */
 export function AttachmentChip({ name, onRemove, className }: AttachmentChipProps) {
+  const t = useTranslations("chat.chips");
   return (
     <span
       className={`${styles.attChip} ${onRemove ? styles.attChipRemovable : ""} ${className ?? ""}`}
     >
       {CLIP_ICON}
-      <span className={styles.attName}>Lampiran: {name}</span>
+      <span className={styles.attName}>{t("attachment", { name })}</span>
       {onRemove ? (
         <button
           type="button"
-          aria-label={`Hapus lampiran ${name}`}
+          aria-label={t("removeAttachment", { name })}
           className={`spine-focus-ring spine-hit-area ${styles.attRemove}`}
           onClick={onRemove}
         >
@@ -163,12 +163,13 @@ export type RoleChipProps = {
  * kebenaran yang sama dengan `avatar-pill`, bukan peta baru di sini.
  */
 export function RoleChip({ role, className }: RoleChipProps) {
+  const f = useFormat();
   const admin = role === "SUPER_ADMIN" || role === "ADMIN";
   return (
     <span
       className={`spine-label ${styles.roleChip} ${admin ? styles.roleChipAdmin : ""} ${className ?? ""}`}
     >
-      {roleChipLabel(role)}
+      {f.role(role).toLocaleUpperCase(f.locale)}
     </span>
   );
 }

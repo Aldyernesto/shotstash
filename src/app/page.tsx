@@ -18,6 +18,7 @@ import fieldStyles from '@/components/form/TextField.module.css';
 import { FormAlert } from '@/components/form/FormAlert';
 import { ButtonPrimary, TextLink } from '@/components/form/buttons';
 import { EMAIL_TAKEN, LOGIN_ERROR_CODES } from '@/lib/authMessages';
+import { errorCodeOf, errorKind } from '@/lib/errorCodes';
 import { brand } from '@/lib/brand';
 import { issueMediaCookie } from '@/lib/authClient';
 // Story 1.31: email hasil reset dibawa lewat sessionStorage (bukan query param).
@@ -47,8 +48,6 @@ type AuthAlert =
   | 'googleNotVerified'
   | 'server';
 
-// Raw transport failures ("Failed to fetch" and friends).
-const NETWORK_PATTERN = /failed to fetch|load failed|networkerror|backend tidak merespon/i;
 
 
 /** Failed `login` payload: its stable `errorCode` picks the message. */
@@ -68,24 +67,23 @@ function loginAlert(code: string | null | undefined): AuthAlert {
   }
 }
 
-/** Failed `register`: password-rule or taken-email code, network, else generic. */
-function registerAlert(code: string | null | undefined, message: string | null | undefined): AuthAlert {
+/** Failed `register` payload: password-rule or taken-email code, else generic. */
+function registerAlert(code: string | null | undefined): AuthAlert {
   if (code === 'PASSWORD_TOO_SHORT') return 'passwordTooShort';
   if (code === 'PASSWORD_TOO_LONG') return 'passwordTooLong';
   if (code === EMAIL_TAKEN) return 'emailTaken';
-  if (message && NETWORK_PATTERN.test(message)) return 'network';
   return 'signupFailed';
 }
 
 /** Thrown request (transport or GraphQL error): network or rate limit when it is one. */
-function mapAuthError(
-  err: { message?: string; graphQLErrors?: { extensions?: { code?: unknown } }[] } | undefined,
-  fallback: AuthAlert,
-): AuthAlert {
-  if (err?.graphQLErrors?.some((e) => e?.extensions?.code === 'RATE_LIMITED')) return 'rateLimited';
-  const message = err?.message;
-  if (!message || NETWORK_PATTERN.test(message)) return 'network';
-  if (/too many attempts/i.test(message)) return 'rateLimited';
+function mapAuthError(err: unknown, fallback: AuthAlert): AuthAlert {
+  // By code and error structure only, never by message text.
+  const code = errorCodeOf(err);
+  if (code === 'RATE_LIMITED') return 'rateLimited';
+  if (!code) {
+    const kind = errorKind(err);
+    if (kind === 'offline' || kind === 'timeout') return 'network';
+  }
   return fallback;
 }
 
@@ -499,7 +497,7 @@ export default function LandingPage() {
       }
       // Story 1.21: "Email sudah terdaftar" memfokuskan field EMAIL —
       // jalan keluarnya ("Masuk lewat tab Login, ...") dirender di form-alert.
-      const alert = registerAlert(data?.register?.errorCode, data?.register?.message);
+      const alert = registerAlert(data?.register?.errorCode);
       setLoginMessage(alert);
       if (alert === 'emailTaken') document.getElementById('email')?.focus();
     } catch (err: any) {

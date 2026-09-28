@@ -2,13 +2,18 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, gql } from "@apollo/client";
+import { useTranslations } from "next-intl";
 import { useAuth } from "./AuthContext";
+import { useFormat } from "@/i18n/useFormat";
+import { notificationText, type NotificationTranslate } from "@/lib/notificationText";
 
 const ALL_NOTIFS = gql`query AllNotifs { notifications { id type title body data read createdAt } unreadNotificationCount }`;
 const MARK_READ_MUT = gql`mutation MarkRead { markNotificationsRead }`;
 
 export default function NotificationBell({ large = false }: { large?: boolean } = {}) {
   const { isAuthenticated } = useAuth();
+  const t = useTranslations("notifications");
+  const f = useFormat();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -36,22 +41,12 @@ export default function NotificationBell({ large = false }: { large?: boolean } 
 
   const typeStyle = (type: string) => {
     switch (type) {
-      case "upload_complete": return { icon: "▲", bg: "rgba(76,175,80,0.15)", color: "#4CAF50", label: "Upload" };
-      case "chat_mention": return { icon: "@", bg: "rgba(33,150,243,0.15)", color: "#2196F3", label: "Chat" };
-      case "file_shared": return { icon: "↗", bg: "rgba(255,152,0,0.15)", color: "#FF9800", label: "Share" };
-      case "project_created": return { icon: "+", bg: "var(--app-spine-accent-14)", color: "var(--app-accent)", label: "Project" };
-      default: return { icon: "●", bg: "rgba(255,255,255,0.1)", color: "#fff", label: "Info" };
+      case "upload_complete": return { icon: "▲", bg: "rgba(76,175,80,0.15)", color: "#4CAF50" };
+      case "chat_mention": return { icon: "@", bg: "rgba(33,150,243,0.15)", color: "#2196F3" };
+      case "file_shared": return { icon: "↗", bg: "rgba(255,152,0,0.15)", color: "#FF9800" };
+      case "project_created": return { icon: "+", bg: "var(--app-spine-accent-14)", color: "var(--app-accent)" };
+      default: return { icon: "●", bg: "rgba(255,255,255,0.1)", color: "#fff" };
     }
-  };
-
-  const timeAgo = (date: string) => {
-    const diff = Date.now() - new Date(date).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return `${Math.floor(hours / 24)}d ago`;
   };
 
   if (!isAuthenticated) return null;
@@ -63,7 +58,7 @@ export default function NotificationBell({ large = false }: { large?: boolean } 
           perilaku lama (Epic 3). */}
       <button
         onClick={() => setOpen(!open)}
-        aria-label={count > 0 ? `Notifikasi, ${count} belum dibaca` : "Notifikasi"}
+        aria-label={t("bellLabel", { count })}
         className="spine-focus-ring"
         style={{
           position: "relative", width: large ? "48px" : "40px", height: large ? "48px" : "40px",
@@ -104,10 +99,10 @@ export default function NotificationBell({ large = false }: { large?: boolean } 
             padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.06)",
             flexShrink: 0,
           }}>
-            <span style={{ fontWeight: 700, fontSize: "15px", color: "var(--color-on-surface)" }}>Notifications</span>
+            <span style={{ fontWeight: 700, fontSize: "15px", color: "var(--color-on-surface)" }}>{t("title")}</span>
             {count > 0 && (
               <button onClick={handleMark} style={{ background: "none", border: "none", color: "var(--app-accent)", fontSize: "12px", cursor: "pointer", fontWeight: 600 }}>
-                Mark all read
+                {t("markAllRead")}
               </button>
             )}
           </div>
@@ -117,10 +112,11 @@ export default function NotificationBell({ large = false }: { large?: boolean } 
             {items.length === 0 ? (
               <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--color-on-surface-variant)", fontSize: "13px", opacity: 0.6 }}>
                 <div style={{ fontSize: "32px", marginBottom: "8px" }}>{"\u{1F514}"}</div>
-                No notifications yet
+                {t("empty")}
               </div>
             ) : items.map((n: any) => {
               const s = typeStyle(n.type);
+              const text = notificationText(n, t as unknown as NotificationTranslate);
               return (
                 <div key={n.id} style={{
                   padding: "12px 18px",
@@ -141,22 +137,22 @@ export default function NotificationBell({ large = false }: { large?: boolean } 
                   {/* Content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
-                      <span style={{ fontSize: "11px", color: s.color, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>{s.label}</span>
-                      <span style={{ fontSize: "10px", color: "var(--color-on-surface-variant)", opacity: 0.5, flexShrink: 0 }}>{timeAgo(n.createdAt)}</span>
+                      <span style={{ fontSize: "11px", color: s.color, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>{text.label}</span>
+                      <span style={{ fontSize: "10px", color: "var(--color-on-surface-variant)", opacity: 0.5, flexShrink: 0 }}>{f.relative(n.createdAt)}</span>
                     </div>
                     <div style={{
                       fontWeight: n.read ? 400 : 600, fontSize: "13px",
                       color: "var(--color-on-surface)", marginTop: "2px",
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     }}>
-                      {n.title}
+                      {text.title}
                     </div>
                     <div style={{
                       fontSize: "12px", color: "var(--color-on-surface-variant)",
                       marginTop: "2px", opacity: 0.7,
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     }}>
-                      {n.body}
+                      {text.body}
                     </div>
                   </div>
                   {/* Unread indicator */}

@@ -133,18 +133,3 @@ export function roleInitials(subject: RoleLike): string {
 export function roleKey(subject: RoleLike): RoleKey | null {
   return ROLE_KEYS[roleOf(subject) ?? ""] ?? null;
 }
-
-/** @deprecated Group C only (chat role chip) until Story 3.4: use roleKey + messages. */
-const CHIP_LABELS: Record<string, string> = {
-  SUPER_ADMIN: "SUPER ADMIN",
-  ADMIN: "ADMIN",
-  FIELD_CREW: "FIELD CREW",
-  EDITOR: "EDITOR",
-  VIEWER: "VIEWER",
-};
-
-/** @deprecated Group C only (chat role chip) until Story 3.4: use roleKey + messages. */
-export function roleChipLabel(subject: RoleLike): string {
-  const role = roleOf(subject) ?? "";
-  return CHIP_LABELS[role] ?? role.replace(/_/g, " ").toUpperCase();
-}

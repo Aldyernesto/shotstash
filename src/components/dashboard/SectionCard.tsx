@@ -84,6 +84,7 @@ export default function SectionCard({
   onDragEnd,
 }: SectionCardProps) {
   const t = useTranslations("cards");
+  const tc = useTranslations("common");
   const tCount = useTranslations("count");
   const f = useFormat();
   const { number, title } = parseSectionName(name);
@@ -141,9 +142,9 @@ export default function SectionCard({
         {number ? (
           <span className={`spine-display-label ${styles.numberSticker}`}>
             <span className={styles.numberPrefix} aria-hidden="true">
-              {t("numberPrefix")}
+              {tc("numberPrefix")}
             </span>
-            <span className="spine-visually-hidden">{t("number")}</span> {number}
+            <span className="spine-visually-hidden">{tc("number")}</span> {number}
           </span>
         ) : null}
       </div>

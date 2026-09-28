@@ -3,6 +3,7 @@ import path from 'path';
 import prisma from '../lib/prisma';
 import { createNotification } from './notification.service';
 import { storageRoot } from '../lib/storageRoot';
+import { codedError } from '@/modules/errors';
 
 const projectsPath = () => path.join(storageRoot(), 'projects');
 
@@ -29,8 +30,8 @@ export async function createProject(title: string, description?: string, coverIm
 
   await fs.mkdir(dirPath, { recursive: true });
 
-  // 3. Auto-create default folders: Video, Photo, Dokumen
-  const defaultFolders = ['Video', 'Photo', 'Dokumen'];
+  // 3. Auto-create the default Sections: Video, Photo, Documents
+  const defaultFolders = ['Video', 'Photo', 'Documents'];
   for (const folderName of defaultFolders) {
     const folder = await prisma.folder.create({
       data: {
@@ -48,8 +49,8 @@ export async function createProject(title: string, description?: string, coverIm
   for (const u of users) {
     createNotification({
       userId: u.id, type: 'project_created',
-      title: 'New Project', body: `${title} has been created`,
-      data: { projectId: project.id },
+      title: 'New project', body: `${title} was created`,
+      data: { projectId: project.id, projectTitle: title },
     }).catch(() => {});
   }
 
@@ -61,7 +62,7 @@ export async function createProject(title: string, description?: string, coverIm
 
 export async function getProjectPhysicalPath(projectId: string) {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
-  if (!project) throw new Error('Project not found');
+  if (!project) throw codedError('NOT_FOUND', 'Project not found');
   
   const dirName = `${sanitizeName(project.title)}-${project.id}`;
   return path.join(projectsPath(), dirName);

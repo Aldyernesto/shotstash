@@ -44,8 +44,9 @@ import { ProjectTag, RoleChip, AttachmentChip, MentionText } from "./chips";
 import { MENTION_LIMIT, type MentionOption } from "./MentionDropdown";
 import { PillButton } from "@/components/form/buttons";
 import { useFocusTrap, useModalLayer } from "@/components/overlay/modalStack";
-import { useToast, humanizeError } from "@/components/feedback/ToastProvider";
-import { formatNumber, formatRelative } from "@/lib/format";
+import { useTranslations } from "next-intl";
+import { useToast, useHumanizeError } from "@/components/feedback/ToastProvider";
+import { useFormat } from "@/i18n/useFormat";
 import { encodeMentionTag, type MentionTagType } from "@/lib/mentions";
 
 const GET_PROJECT_CHATS = gql`
@@ -55,6 +56,7 @@ const GET_PROJECT_CHATS = gql`
       chats {
         id
         message
+        kind
         createdAt
         sender {
           id
@@ -76,6 +78,7 @@ const SEND_MESSAGE = gql`
     sendMessage(projectId: $projectId, message: $message, referencedFileId: $referencedFileId) {
       id
       message
+      kind
       createdAt
       sender {
         id
@@ -96,6 +99,7 @@ const CHAT_SUBSCRIPTION = gql`
     chatMessages(projectId: $projectId) {
       id
       message
+      kind
       createdAt
       sender {
         id
@@ -131,6 +135,8 @@ const MENTION_SEARCH = gql`
 type ChatMessage = {
   id: string;
   message: string;
+  /** Null for a person's message; "upload" for the system line of a finished upload. */
+  kind?: string | null;
   createdAt: string;
   sender?: { id?: string; name: string; role?: string | null; avatarUrl?: string | null } | null;
   referencedFile?: { id?: string; originalName: string } | null;
@@ -147,13 +153,13 @@ const CHAT_ICON = (
   </svg>
 );
 
-/** Kata jenis file untuk meta baris dropdown — BUKAN kolom mime mentah. */
-function fileKindWord(mimeType?: string | null): string {
+/** File kind for the dropdown meta (a message key), never the raw mime type. */
+function fileKind(mimeType?: string | null): "video" | "photo" | "audio" | "document" {
   const m = String(mimeType || "");
-  if (m.startsWith("video/")) return "Video";
-  if (m.startsWith("image/")) return "Foto";
-  if (m.startsWith("audio/")) return "Audio";
-  return "Dokumen";
+  if (m.startsWith("video/")) return "video";
+  if (m.startsWith("image/")) return "photo";
+  if (m.startsWith("audio/")) return "audio";
+  return "document";
 }
 
 const CHIP_TO_TAG: Record<MentionOption["type"], MentionTagType> = {
@@ -170,6 +176,9 @@ export type ChatPanelProps = {
 };
 
 export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: ChatPanelProps) {
+  const t = useTranslations("chat");
+  const f = useFormat();
+  const humanizeError = useHumanizeError();
   const [message, setMessage] = useState("");
   /** Pesan yang sedang menunggu balasan server (kartu redup "mengirim…"). */
   const [pending, setPending] = useState<{ text: string; attachment: string | null } | null>(null);
@@ -305,16 +314,16 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
         if (projectTitle && projectTitle.toLowerCase().includes(needle)) {
           options.push({ id: projectId, type: "PROJECT", name: projectTitle });
         }
-        for (const f of (res?.searchFolders ?? []) as { id: string; name: string; totalFiles?: number }[]) {
+        for (const s of (res?.searchFolders ?? []) as { id: string; name: string; totalFiles?: number }[]) {
           options.push({
-            id: f.id,
+            id: s.id,
             type: "SECTION",
-            name: f.name,
-            meta: typeof f.totalFiles === "number" ? `${formatNumber(f.totalFiles)} file` : undefined,
+            name: s.name,
+            meta: typeof s.totalFiles === "number" ? t("files", { count: s.totalFiles }) : undefined,
           });
         }
-        for (const f of (res?.searchFiles ?? []) as { id: string; originalName: string; mimeType?: string }[]) {
-          options.push({ id: f.id, type: "FILE", name: f.originalName, meta: fileKindWord(f.mimeType) });
+        for (const file of (res?.searchFiles ?? []) as { id: string; originalName: string; mimeType?: string }[]) {
+          options.push({ id: file.id, type: "FILE", name: file.originalName, meta: t(`fileKind.${fileKind(file.mimeType)}`) });
         }
         setMentionOptions(options.slice(0, MENTION_LIMIT));
       } catch {
@@ -326,7 +335,7 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
         setMentionOptions([]);
       }
     },
-    [client, projectId, projectTitle],
+    [client, projectId, projectTitle, t],
   );
 
   const closeMentions = () => {
@@ -405,7 +414,7 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
       setMessage(text);
       pushToast({
         tone: "error",
-        message: "Pesan belum terkirim. Coba lagi.",
+        message: t("sendFailed"),
         cause: humanizeError(err),
       });
     }
@@ -424,24 +433,24 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Diskusi project"
+        aria-label={t("title")}
         className={styles.panel}
       >
         <div className={styles.head}>
           <div className={styles.headMain}>
             <div style={{ minWidth: 0 }}>
-              <h2 className={`spine-display-button ${styles.title}`}>Diskusi project</h2>
+              <h2 className={`spine-display-button ${styles.title}`}>{t("title")}</h2>
               <div className={styles.sub}>
                 {projectTitle ? (
                   <ProjectTag name={projectTitle} href={`/dashboard?p=${projectId}`} />
                 ) : null}
-                <span className={`spine-footnote ${styles.count}`}>{count} pesan</span>
+                <span className={`spine-footnote ${styles.count}`}>{t("messageCount", { count })}</span>
               </div>
             </div>
           </div>
           <button
             type="button"
-            aria-label="Tutup diskusi project"
+            aria-label={t("close")}
             className={`spine-focus-ring spine-hit-area ${styles.iconBtn}`}
             onClick={onClose}
           >
@@ -455,7 +464,7 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
           className={`${styles.feed} ${feedState}`}
           role="log"
           aria-live="polite"
-          aria-label="Pesan diskusi project"
+          aria-label={t("feed")}
           aria-busy={loading || undefined}
         >
           {failedToLoad ? (
@@ -465,7 +474,7 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
                 <path d="M12 7.5v5.5M12 16.5v.01" />
               </svg>
               <div>
-                <b className={`spine-row-title ${styles.errorTitle}`}>Gagal memuat diskusi. Coba lagi.</b>
+                <b className={`spine-row-title ${styles.errorTitle}`}>{t("loadFailed")}</b>
                 <span className={`spine-footnote ${styles.errorCause}`}>{humanizeError(error)}</span>
                 <PillButton
                   variant="surface"
@@ -474,13 +483,13 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
                     refetch().catch(() => undefined);
                   }}
                 >
-                  Coba lagi
+                  {t("retry")}
                 </PillButton>
               </div>
             </div>
           ) : loading && chats.length === 0 ? (
             <>
-              <p className={`spine-body-sm ${styles.loadingText}`}>Memuat diskusi…</p>
+              <p className={`spine-body-sm ${styles.loadingText}`}>{t("loading")}</p>
               {[0, 1, 2].map((i) => (
                 <div key={i} className={styles.skeleton} aria-hidden="true">
                   <i style={{ width: "40%" }} />
@@ -494,15 +503,25 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
               <div className={styles.emptyTile} aria-hidden="true">
                 {CHAT_ICON}
               </div>
-              <h3 className={`spine-display-panel-mobile ${styles.emptyTitle}`}>Belum ada pesan</h3>
-              <p className={`spine-body ${styles.emptyText}`}>
-                Mulai diskusi soal footage project ini. Ketik @ untuk menyebut Section atau file,
-                dan tim lain akan melihatnya di sini.
-              </p>
+              <h3 className={`spine-display-panel-mobile ${styles.emptyTitle}`}>{t("emptyTitle")}</h3>
+              <p className={`spine-body ${styles.emptyText}`}>{t("emptyText")}</p>
             </div>
           ) : (
             <>
-              {chats.map((chat) => (
+              {chats.map((chat) =>
+                chat.kind === "upload" ? (
+                  <article key={chat.id} className={`${styles.msg} ${styles.msgSystem}`}>
+                    <p className={`spine-footnote ${styles.msgSystemText}`}>
+                      {chat.referencedFile?.originalName
+                        ? t("system.upload", {
+                            name: chat.sender?.name || t("system.someone"),
+                            fileName: chat.referencedFile.originalName,
+                          })
+                        : chat.message}
+                    </p>
+                    <span className={`spine-footnote ${styles.msgTime}`}>{f.relative(chat.createdAt)}</span>
+                  </article>
+                ) : (
                 <article key={chat.id} className={styles.msg}>
                   <div className={styles.msgHead}>
                     <span className={`spine-row-title ${styles.msgWho}`}>
@@ -515,7 +534,7 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
                     {/* Waktu RELATIF ("baru saja", "5 mnt", "2 jam", lalu tanggal) —
                         util Story 1.9 yang sama dengan Chat Monitor, bukan jam
                         absolut "14.55" (AC 4.1 + mock `.tm`). */}
-                    <span className={`spine-footnote ${styles.msgTime}`}>{formatRelative(chat.createdAt)}</span>
+                    <span className={`spine-footnote ${styles.msgTime}`}>{f.relative(chat.createdAt)}</span>
                   </div>
                   <p className={`spine-body ${styles.msgBody}`}>
                     <MentionText message={chat.message} />
@@ -526,14 +545,15 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
                     </div>
                   ) : null}
                 </article>
-              ))}
+                ),
+              )}
               {pending ? (
                 <article className={`${styles.msg} ${styles.msgSending}`}>
                   <div className={styles.msgHead}>
                     <span className={`spine-row-title ${styles.msgWho}`}>
-                      <span className={styles.msgName}>Kamu</span>
+                      <span className={styles.msgName}>{t("you")}</span>
                     </span>
-                    <span className={`spine-footnote ${styles.msgTime}`}>mengirim…</span>
+                    <span className={`spine-footnote ${styles.msgTime}`}>{t("sending")}</span>
                   </div>
                   <p className={`spine-body ${styles.msgBody}`}>
                     <MentionText message={pending.text} />
@@ -555,7 +575,7 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
           value={message}
           onChange={handleChange}
           onSend={() => void handleSend()}
-          placeholder="Tulis pesan… ketik @ untuk tag"
+          placeholder={t("placeholder")}
           busy={Boolean(pending)}
           disabled={failedToLoad}
           inputRef={inputRef}

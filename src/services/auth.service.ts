@@ -16,7 +16,7 @@ import {
 export { MIN_PASSWORD_LENGTH };
 
 export function passwordProblemMessage(problem: PasswordProblem): string {
-  return problem === 'PASSWORD_TOO_LONG' ? PASSWORD_TOO_LONG_MESSAGE : `Password minimal ${MIN_PASSWORD_LENGTH} karakter`;
+  return problem === 'PASSWORD_TOO_LONG' ? PASSWORD_TOO_LONG_MESSAGE : `Password must be at least ${MIN_PASSWORD_LENGTH} characters`;
 }
 
 /** Thrown when a password breaks the rule (code PASSWORD_TOO_SHORT or PASSWORD_TOO_LONG). */
@@ -168,15 +168,21 @@ export async function deactivateUser(userId: string) {
 }
 
 /** Rejects a pending account and revokes every session it has (Story 2.5). */
+/**
+ * Rejects a PENDING sign-up and removes its sessions. Returns null when the
+ * user is no longer pending (already approved or rejected): the status check
+ * and the write are one statement, so concurrent decisions cannot both win.
+ */
 export async function rejectUser(userId: string) {
-  const [user] = await prisma.$transaction([
-    prisma.user.update({
-      where: { id: userId },
+  return prisma.$transaction(async (tx) => {
+    const { count } = await tx.user.updateMany({
+      where: { id: userId, accountStatus: 'PENDING' },
       data: { accountStatus: 'REJECTED', active: false },
-    }),
-    prisma.session.deleteMany({ where: { userId } }),
-  ]);
-  return user;
+    });
+    if (count === 0) return null;
+    await tx.session.deleteMany({ where: { userId } });
+    return tx.user.findUnique({ where: { id: userId } });
+  });
 }
 
 export async function reactivateUser(userId: string) {
@@ -204,9 +210,25 @@ export async function getUsers() {
 // Admin: reset password & hapus akun
 // ============================================
 
-/** Error yang pesannya aman ditampilkan apa adanya ke admin (Bahasa Indonesia). */
+/** Stable codes of a refused admin action; the admin page renders its own copy. */
+export type AdminActionErrorCode =
+  | 'USER_NOT_FOUND'
+  | 'SUPER_ADMIN_PROTECTED'
+  | 'USER_HAS_ACTIVITY'
+  | 'PASSWORD_TOO_SHORT'
+  | 'PASSWORD_TOO_LONG';
+
+/**
+ * A refused admin action. `code` is what the client renders; `message` is an
+ * English developer string that is never shown. `details` carries message
+ * arguments (activity counts).
+ */
 export class AdminActionError extends Error {
-  constructor(message: string) {
+  constructor(
+    public code: AdminActionErrorCode,
+    message: string,
+    public details: Record<string, number> = {},
+  ) {
     super(message);
     this.name = 'AdminActionError';
   }
@@ -229,10 +251,10 @@ async function findAdminTarget(targetId: string, db: Prisma.TransactionClient = 
     where: { id: targetId },
     select: { id: true, email: true, role: true },
   });
-  if (!target) throw new AdminActionError('User tidak ditemukan.');
+  if (!target) throw new AdminActionError('USER_NOT_FOUND', 'User not found');
   // Pertahanan berlapis: akun SUPER_ADMIN tidak boleh direset/dihapus lewat panel admin.
   if (target.role === 'SUPER_ADMIN') {
-    throw new AdminActionError('Akun SUPER_ADMIN tidak bisa direset atau dihapus dari panel admin.');
+    throw new AdminActionError('SUPER_ADMIN_PROTECTED', 'A super admin account cannot be reset or deleted from the admin panel');
   }
   return target;
 }
@@ -245,7 +267,7 @@ async function findAdminTarget(targetId: string, db: Prisma.TransactionClient = 
 export async function adminSetPassword(targetId: string, newPassword?: string | null) {
   const isManual = newPassword !== undefined && newPassword !== null;
   const problem = isManual ? passwordProblem(newPassword) : null;
-  if (problem) throw new AdminActionError(passwordProblemMessage(problem));
+  if (problem) throw new AdminActionError(problem, passwordProblemMessage(problem));
 
   const target = await findAdminTarget(targetId);
   const password = isManual ? newPassword : generateReadablePassword();
@@ -282,13 +304,10 @@ export async function deleteUserAccount(targetId: string) {
     ]);
 
     if (uploads + shareLinks + chats > 0) {
-      const parts: string[] = [];
-      if (uploads > 0) parts.push(`${uploads} file upload`);
-      if (shareLinks > 0) parts.push(`${shareLinks} share link`);
-      if (chats > 0) parts.push(`${chats} pesan chat`);
       throw new AdminActionError(
-        `Akun ${target.email} tidak bisa dihapus karena punya aktivitas: ${parts.join(', ')}. ` +
-        'Gunakan "Nonaktifkan" untuk memblokir akses tanpa menghapus datanya.'
+        'USER_HAS_ACTIVITY',
+        `Account ${target.email} has activity (${uploads} uploads, ${shareLinks} share links, ${chats} chat messages); deactivate it instead`,
+        { uploads, shareLinks, chats },
       );
     }
 

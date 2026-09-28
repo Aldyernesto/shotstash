@@ -19,13 +19,13 @@
  */
 
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Dialog } from "@/components/overlay/Dialog";
 import { PillButton } from "@/components/form/buttons";
 import { FormAlert } from "@/components/form/FormAlert";
-import { formatNumber } from "@/lib/format";
 import { parseSectionName } from "@/lib/sectionNumber";
 import { acceptForFolder, useUpload } from "@/components/UploadContext";
-import { summarize, UPLOAD_REJECT } from "./uploadTypes";
+import { summarize } from "./uploadTypes";
 import UploadRow from "./UploadRow";
 import BatchProgress from "./BatchProgress";
 import { HeicActions, HeicBody } from "./HeicQuestion";
@@ -45,7 +45,23 @@ const UPLOAD_ICON = (
   </svg>
 );
 
+/** True where the primary pointer can hover (mouse); touch screens get "Tap". */
+function useHoverPointer() {
+  const [hover, setHover] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia("(hover: hover)");
+    const on = () => setHover(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return hover;
+}
+
 export default function UploadPanel() {
+  const t = useTranslations("upload");
+  const tc = useTranslations("common");
+  const hoverPointer = useHoverPointer();
   const q = useUpload();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -70,18 +86,21 @@ export default function UploadPanel() {
     if (!q.tasks.length) return "";
     if (finished) {
       return sum.failed
-        ? `${formatNumber(sum.done)} file terupload, ${formatNumber(sum.failed)} gagal`
-        : `${formatNumber(sum.done)} file terupload`;
+        ? t("panel.summaryDoneFailed", { done: sum.done, failed: sum.failed })
+        : t("panel.summaryDone", { done: sum.done });
     }
     if (q.running) {
-      return `${formatNumber(sum.done)} dari ${formatNumber(sum.total)} file selesai · ${formatNumber(
-        sum.running,
-      )} sedang diupload · ${formatNumber(sum.waiting)} menunggu`;
+      return t("panel.summaryRunning", {
+        done: sum.done,
+        total: sum.total,
+        running: sum.running,
+        waiting: sum.waiting,
+      });
     }
     // Sebelum batch dimulai ringkasan footer KOSONG: angkanya sudah ada
     // di `batch-progress` tepat di atasnya (mock 01/03b).
     return "";
-  }, [finished, q.running, q.tasks.length, sum]);
+  }, [finished, q.running, q.tasks.length, sum, t]);
 
   if (!q.panelOpen || q.minimized || !q.target) return null;
 
@@ -105,15 +124,15 @@ export default function UploadPanel() {
     await q.start();
   };
 
-  const primaryLabel = finished ? "Done" : `Upload (${formatNumber(sum.waiting)})`;
+  const primaryLabel = finished ? t("panel.done") : t("panel.uploadCount", { count: sum.waiting });
 
   return (
     <Dialog
       size="lg"
       mobilePlacement="bottom"
       mobilePreviewFirst={false}
-      title={askHeic ? "Konversi HEIC ke JPG?" : "Upload Files"}
-      closeLabel="Tutup"
+      title={askHeic ? t("heic.title") : t("panel.title")}
+      closeLabel={t("panel.close")}
       closeDisabled={q.running || askHeic}
       /* Esc tidak berefek selama batch berjalan ATAU selama pertanyaan
          HEIC belum dijawab (AC 3.12 & 3.13). */
@@ -125,8 +144,8 @@ export default function UploadPanel() {
         !askHeic && q.tasks.length > 0 ? (
           <button
             type="button"
-            aria-label="Kecilkan panel upload — upload tetap berjalan"
-            title="Kecilkan"
+            aria-label={t("panel.minimizeLabel")}
+            title={t("panel.minimize")}
             className={`spine-focus-ring ${styles.headerButton}`}
             onClick={() => q.setMinimized(true)}
           >
@@ -150,12 +169,12 @@ export default function UploadPanel() {
               className={q.running ? styles.disabled : undefined}
               onClick={() => (q.running ? undefined : q.closePanel())}
             >
-              Cancel
+              {t("panel.cancel")}
             </PillButton>
             <PillButton
               variant="accent"
               busy={q.running}
-              busyLabel="Mengupload..."
+              busyLabel={t("panel.uploading")}
               aria-disabled={(!q.tasks.length && !finished) || undefined}
               onClick={primary}
             >
@@ -176,21 +195,24 @@ export default function UploadPanel() {
       ) : (
         <>
           <p className={`spine-body ${styles.target}`}>
-            ke
-            {parsed.number ? (
-              <span className={`spine-display-label ${styles.sticker}`}>
-                <small className="spine-sticker-unit" aria-hidden="true">
-                  NO
-                </small>
-                <span className="spine-visually-hidden">Nomor </span>
-                {parsed.number}
-              </span>
-            ) : null}
-            <b className="spine-display-card">{parsed.title || "Section"}</b>
+            {t.rich("panel.to", {
+              number: parsed.number ? String(parsed.number) : "none",
+              section: parsed.title || t("panel.sectionFallback"),
+              sticker: (chunks) => (
+                <span className={`spine-display-label ${styles.sticker}`}>
+                  <small className="spine-sticker-unit" aria-hidden="true">
+                    {tc("numberPrefix")}
+                  </small>
+                  <span className="spine-visually-hidden">{tc("number")} </span>
+                  {chunks}
+                </span>
+              ),
+              name: (chunks) => <b className="spine-display-card">{chunks}</b>,
+            })}
           </p>
 
           <p className={`spine-body-sm ${styles.help}`}>
-            Seret file ke sini atau klik untuk memilih. File besar dikirim per potongan 10 MB.
+            {hoverPointer ? t("panel.helpPointer") : t("panel.helpTouch")}
           </p>
 
           <button
@@ -215,7 +237,7 @@ export default function UploadPanel() {
             }}
           >
             {UPLOAD_ICON}
-            {dragOver ? "Lepaskan file di sini" : "Klik atau seret file ke sini"}
+            {dragOver ? t("panel.dropHere") : hoverPointer ? t("panel.dropzonePointer") : t("panel.dropzoneTouch")}
           </button>
           <input
             ref={inputRef}
@@ -235,8 +257,8 @@ export default function UploadPanel() {
           {/* Slot daftar antrean bergulir + bayangan 36px di tepi bawah. */}
           {q.tasks.length > 0 ? (
             <ul className={styles.queue}>
-              {q.tasks.map((t) => (
-                <UploadRow key={t.id} task={t} onRemove={q.removeTask} />
+              {q.tasks.map((task) => (
+                <UploadRow key={task.id} task={task} onRemove={q.removeTask} />
               ))}
               <li className={styles.queueFade} aria-hidden="true" />
             </ul>
@@ -248,7 +270,7 @@ export default function UploadPanel() {
           Antrean tetap utuh dan tidak ada baris yang ditandai gagal. */}
       {q.rejection ? (
         <FormAlert tone="danger" className={styles.alert}>
-          {UPLOAD_REJECT[q.rejection]}
+          {t(`reject.${q.rejection}`)}
           {q.rejection === "missingFolder" ? (
             <>
               {" "}
@@ -261,7 +283,7 @@ export default function UploadPanel() {
                   window.dispatchEvent(new CustomEvent("mam:upload-pick-section"));
                 }}
               >
-                Pilih Section lain
+                {t("panel.pickOtherSection")}
               </PillButton>
             </>
           ) : null}

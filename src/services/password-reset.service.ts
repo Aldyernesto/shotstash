@@ -37,19 +37,23 @@ const CANCELLED_AT = new Date(0);
 export const RESET_TOKEN_BYTES = 32;
 export const RESET_TOKEN_TTL_MS = 10 * 60 * 1000;
 
+/**
+ * English developer messages. Never shown to users: the client renders its
+ * own copy from `errorCode` (and `attemptsLeft` for a wrong code).
+ */
 export const PASSWORD_RESET_MESSAGES = {
-  requested: 'Jika email terdaftar, kode sudah dikirim. Cek kotak masuk (dan folder spam) email tersebut.',
-  verified: 'Kode benar. Silakan buat password baru.',
-  completed: 'Password berhasil diubah. Silakan masuk dengan password baru.',
-  unavailable: 'Fitur reset password belum tersedia',
-  rateLimited: 'Terlalu banyak percobaan, coba lagi nanti',
-  invalidEmail: 'Masukkan alamat email yang valid.',
-  invalidCodeFormat: `Kode terdiri dari ${RESET_CODE_LENGTH} huruf/angka. Cek lagi email kamu.`,
-  invalidCode: 'Kode salah atau kedaluwarsa',
-  tokenInvalid: 'Sesi reset berakhir, ulangi dari awal',
-  passwordTooShort: `Password minimal ${MIN_PASSWORD_LENGTH} karakter`,
+  requested: 'If the email is registered, a code was sent.',
+  verified: 'Code accepted. Set a new password.',
+  completed: 'Password changed. Sign in with the new password.',
+  unavailable: 'Password reset is not available',
+  rateLimited: 'Too many attempts, try again later',
+  invalidEmail: 'Invalid email address',
+  invalidCodeFormat: `The code has ${RESET_CODE_LENGTH} letters or digits`,
+  invalidCode: 'Wrong or expired code',
+  tokenInvalid: 'Reset session ended, start again',
+  passwordTooShort: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
   passwordTooLong: PASSWORD_TOO_LONG_MESSAGE,
-  passwordMismatch: 'Konfirmasi password tidak sama',
+  passwordMismatch: 'Password confirmation does not match',
 } as const;
 
 export type PasswordResetErrorCode =
@@ -63,13 +67,18 @@ export type PasswordResetErrorCode =
   | 'PASSWORD_TOO_LONG'
   | 'PASSWORD_MISMATCH';
 
-/** Error yang pesannya aman ditampilkan apa adanya ke user (Bahasa Indonesia). */
+/**
+ * A refused reset step. `code` is what the client renders; `message` is an
+ * English developer string. `attemptsLeft` is set for a wrong code.
+ */
 export class PasswordResetError extends Error {
   readonly code: PasswordResetErrorCode;
-  constructor(code: PasswordResetErrorCode, message: string) {
+  readonly attemptsLeft: number | null;
+  constructor(code: PasswordResetErrorCode, message: string, attemptsLeft: number | null = null) {
     super(message);
     this.name = 'PasswordResetError';
     this.code = code;
+    this.attemptsLeft = attemptsLeft;
   }
 }
 
@@ -162,7 +171,7 @@ function enqueueForEmail(email: string, work: () => Promise<void>) {
   const key = email.toLowerCase();
   const previous = pendingWork.get(key) ?? Promise.resolve();
   const next = previous.then(work).catch((error) => {
-    console.error('[password-reset] gagal memproses permintaan:', (error as Error)?.message);
+    console.error('[password-reset] request failed:', (error as Error)?.message);
   });
   pendingWork.set(key, next);
   void next.finally(() => {
@@ -212,15 +221,15 @@ async function processResetRequest(email: string, ip?: string) {
   });
   const recent = recentDay.filter((r) => r.createdAt.getTime() > now.getTime() - EMAIL_WINDOW_MS);
   if (recentDay.length >= MAX_REQUESTS_PER_EMAIL_PER_DAY) {
-    console.warn(`[password-reset] dilewati: limit ${MAX_REQUESTS_PER_EMAIL_PER_DAY}x/24 jam (to=${maskEmail(user.email)})`);
+    console.warn(`[password-reset] skipped: limit ${MAX_REQUESTS_PER_EMAIL_PER_DAY} per 24 h (to=${maskEmail(user.email)})`);
     return;
   }
   if (recent.length >= MAX_REQUESTS_PER_EMAIL) {
-    console.warn(`[password-reset] dilewati: limit ${MAX_REQUESTS_PER_EMAIL}x/15 menit (to=${maskEmail(user.email)})`);
+    console.warn(`[password-reset] skipped: limit ${MAX_REQUESTS_PER_EMAIL} per 15 min (to=${maskEmail(user.email)})`);
     return;
   }
   if (recent[0] && now.getTime() - recent[0].createdAt.getTime() < RESEND_COOLDOWN_MS) {
-    console.warn(`[password-reset] dilewati: cooldown kirim ulang (to=${maskEmail(user.email)})`);
+    console.warn(`[password-reset] skipped: resend cooldown (to=${maskEmail(user.email)})`);
     return;
   }
 
@@ -235,6 +244,10 @@ async function processResetRequest(email: string, ip?: string) {
     expiresAt,
     appUrl: appUrl(),
     googleOnly: !user.passwordHash,
+    // Story 3.5: the recipient's language, else the instance default.
+    locale: user.locale,
+    timeZone: process.env.DEFAULT_TIMEZONE,
+    validMinutes: Math.round(CODE_TTL_MS / 60_000),
   });
   const created = await prisma.passwordResetRequest.create({
     data: { userId: user.id, codeHash: hashCode(user.id, code), expiresAt, requestIp: ip ?? null },
@@ -258,7 +271,7 @@ async function processResetRequest(email: string, ip?: string) {
     where: { userId: user.id, id: { not: created.id }, OR: [{ expiresAt: { gt: CANCELLED_AT } }, { resetTokenHash: { not: null } }] },
     data: { expiresAt: CANCELLED_AT, resetTokenHash: null, resetTokenExpiresAt: null },
   });
-  console.info(`[password-reset] kode dikirim (to=${maskEmail(user.email)})`);
+  console.info(`[password-reset] code sent (to=${maskEmail(user.email)})`);
 }
 
 // ============================================
@@ -320,10 +333,14 @@ export async function verifyCode(email: string, codeInput: string): Promise<{ re
     await prisma.passwordResetRequest.updateMany({ where: { id: active.id }, data: { expiresAt: CANCELLED_AT } });
     throw new PasswordResetError(
       'CODE_LOCKED',
-      `${PASSWORD_RESET_MESSAGES.invalidCode}. Kode dibatalkan setelah ${MAX_CODE_ATTEMPTS} kali salah — minta kode baru.`,
+      `${PASSWORD_RESET_MESSAGES.invalidCode}; cancelled after ${MAX_CODE_ATTEMPTS} wrong tries`,
     );
   }
-  throw new PasswordResetError('INVALID_CODE', `${PASSWORD_RESET_MESSAGES.invalidCode}. Sisa ${remaining} percobaan.`);
+  throw new PasswordResetError(
+    'INVALID_CODE',
+    `${PASSWORD_RESET_MESSAGES.invalidCode}; ${remaining} attempts left`,
+    remaining,
+  );
 }
 
 // ============================================
@@ -387,6 +404,6 @@ export async function completeReset(resetToken: string, newPassword: string, con
     return sessions.count;
   });
 
-  console.info(`[password-reset] password diubah (to=${maskEmail(request.user.email)}, sesi dicabut=${sessionsRevoked})`);
+  console.info(`[password-reset] password changed (to=${maskEmail(request.user.email)}, sessions revoked=${sessionsRevoked})`);
   return { userId, email: request.user.email, sessionsRevoked };
 }

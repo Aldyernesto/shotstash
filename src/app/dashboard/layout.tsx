@@ -21,7 +21,7 @@ import MobileFrame from "@/components/dashboard/MobileFrame";
 import { useApolloClient } from "@apollo/client";
 import { useTranslations } from "next-intl";
 import AppSelect from "@/components/AppSelect";
-import { useHumanizeError, errorKind } from "@/components/feedback/ToastProvider";
+import { useHumanizeError, errorKind, errorCodeOf } from "@/components/feedback/ToastProvider";
 import { useFormat } from "@/i18n/useFormat";
 import { SUPPORTED_LOCALES, LOCALE_NAMES } from "@/i18n/config";
 import { syncLocaleCookie } from "@/i18n/client";
@@ -76,7 +76,7 @@ export default function DashboardLayout({
         });
         const data = await res.json();
         // Logout on auth errors OR null me (session deleted)
-        if (data.errors?.some((e: any) => e.message?.includes('Unauthorized')) || !data?.data?.me) {
+        if (res.status === 401 || data.errors?.some((e: any) => e.extensions?.code === 'UNAUTHENTICATED') || !data?.data?.me) {
           localStorage.removeItem('shotstash_user');
           localStorage.removeItem('shotstash_token');
           window.location.href = '/';
@@ -240,11 +240,15 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: fd,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || data.error || 'upload failed');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // Keep the REST code and status so the error renders by code, not by text.
+        const code = typeof data?.code === 'string' ? data.code : undefined;
+        throw Object.assign(new Error(code ?? `HTTP ${res.status}`), { status: res.status, ...(code ? { code } : {}) });
+      }
       setAvatarUrl(data.url);
     } catch (err: any) {
-      setError(errorKind(err) === 'generic' ? t('uploadFailed') : humanize(err));
+      setError(!errorCodeOf(err) && errorKind(err) === 'generic' ? t('uploadFailed') : humanize(err));
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -280,7 +284,7 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
         window.location.reload();
       }
     } catch (err: any) {
-      setError(errorKind(err) === 'generic' ? t('saveFailed') : humanize(err));
+      setError(!errorCodeOf(err) && errorKind(err) === 'generic' ? t('saveFailed') : humanize(err));
     } finally {
       setSaving(false);
     }

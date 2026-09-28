@@ -14,6 +14,7 @@
  */
 
 import React, { useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { PillButton } from "@/components/form/buttons";
 import styles from "./upload.module.css";
 
@@ -40,6 +41,7 @@ export function HeicStickers() {
 }
 
 export function HeicBody({ titleId }: { titleId: string }) {
+  const t = useTranslations("upload.heic");
   const ref = useRef<HTMLParagraphElement>(null);
 
   // Fokus pindah ke judul pertanyaan saat isi panel berganti.
@@ -51,12 +53,10 @@ export function HeicBody({ titleId }: { titleId: string }) {
     <>
       <HeicStickers />
       <p id={titleId} ref={ref} tabIndex={-1} className="spine-body">
-        Beberapa file kamu berformat <b>.heic</b>. Format ini tidak bisa dibuka langsung di
-        sebagian besar browser dan aplikasi edit. Apakah ingin mengonversi otomatis ke JPG agar
-        kompatibel di mana saja?
+        {t.rich("body", { b: (chunks) => <b>{chunks}</b> })}
       </p>
       <p className={`spine-footnote ${styles.heicNote}`}>
-        Pilihan ini berlaku untuk semua file HEIC di upload ini.
+        {t("note")}
       </p>
     </>
   );
@@ -69,16 +69,17 @@ export function HeicActions({
   onConvert: () => void;
   onKeep: () => void;
 }) {
+  const t = useTranslations("upload.heic");
   return (
     <div className={styles.heicActions}>
       <PillButton variant="accent" onClick={onConvert}>
         <span aria-hidden="true" style={{ display: "grid", placeItems: "center", width: 16, height: 16 }}>
           {CHECK}
         </span>
-        Ya, konversi ke JPG
+        {t("convert")}
       </PillButton>
       <PillButton variant="surface" onClick={onKeep}>
-        Jangan, biarkan .heic
+        {t("keep")}
       </PillButton>
     </div>
   );

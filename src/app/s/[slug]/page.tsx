@@ -22,6 +22,7 @@
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import type { Metadata } from "next";
+import { getLocale, getTranslations } from "next-intl/server";
 import { brand } from "@/lib/brand";
 import { findLiveShare, recordShareView, resolveShare } from "@/lib/shareLink";
 import { shareSigner, shareUnlocked } from "@/modules/share";
@@ -53,7 +54,9 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const res = await resolveShare(slug, { limit: 0 });
+  // Locale: the `shotstash_locale` cookie, then DEFAULT_LOCALE, then English (src/i18n/request.ts).
+  const locale = await getLocale();
+  const res = await resolveShare(slug, { limit: 0, locale });
 
   // Expired, revoked, gone or PRIVATE: generic metadata. A PRIVATE link
   // never leaks names through chat previews, even for an unlocked visitor,
@@ -62,7 +65,11 @@ export async function generateMetadata({
 
   const p = res.payload;
   const title = `${p.title} | ${brand.productName}`;
-  const description = `${p.fileCount} file footage dari ${p.projectName ?? brand.productName}.`;
+  const t = await getTranslations("share");
+  const description = t("metaDescription", {
+    count: p.fileCount,
+    source: p.projectName ?? brand.productName,
+  });
   return shareMetadata(title, description);
 }
 
@@ -76,17 +83,18 @@ export default async function SharePageRoute({
   const { slug } = await params;
   const { section } = await searchParams;
   let sectionId = section ?? null;
+  const locale = await getLocale();
 
   // PRIVATE links open only with the `shotstash_share_<slug>` cookie set by
   // `POST /s/<slug>/unlock`; media URLs in the payload are signed.
   const link = await findLiveShare({ slug });
   const unlocked = link ? shareUnlocked(await cookies(), link) : false;
 
-  let resolution = await resolveShare(slug, { sectionId, unlocked, signer: shareSigner });
+  let resolution = await resolveShare(slug, { sectionId, unlocked, signer: shareSigner, locale });
   // A stale or trashed `?section=` inside a live share: ignore it and show
   // the share itself instead of answering 404 for the whole link.
   if (sectionId && resolution.state === "gone") {
-    const whole = await resolveShare(slug, { unlocked, signer: shareSigner });
+    const whole = await resolveShare(slug, { unlocked, signer: shareSigner, locale });
     if (whole.state !== "gone") {
       resolution = whole;
       sectionId = null;

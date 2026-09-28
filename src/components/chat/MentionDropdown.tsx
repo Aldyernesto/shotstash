@@ -21,6 +21,7 @@
  */
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import styles from "./chat.module.css";
 import type { MentionTargetType } from "./chips";
 
@@ -55,6 +56,7 @@ export function MentionDropdown({
   onPick,
   query,
 }: MentionDropdownProps) {
+  const t = useTranslations("chat.mention");
   const shown = options.slice(0, MENTION_LIMIT);
   if (!shown.length) return null;
 
@@ -62,11 +64,11 @@ export function MentionDropdown({
     <div
       id={listId}
       role="listbox"
-      aria-label={`Hasil pencarian untuk @${query}`}
+      aria-label={t("results", { query })}
       className={styles.drop}
     >
       <p className={`spine-label ${styles.dropHead}`}>
-        Sisipkan tag · {shown.length} hasil
+        {t("head", { count: shown.length })}
       </p>
       {shown.map((option, i) => (
         <button
@@ -84,7 +86,7 @@ export function MentionDropdown({
             onPick(option);
           }}
         >
-          <span className={`spine-display-sticker ${styles.typeTag}`}>{option.type}</span>
+          <span className={`spine-display-sticker ${styles.typeTag}`}>{t("typeSticker", { type: option.type })}</span>
           <span className={styles.dropName}>{option.name}</span>
           {option.meta ? (
             <span className={`spine-footnote ${styles.dropMeta}`}>{option.meta}</span>

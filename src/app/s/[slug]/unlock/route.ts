@@ -9,7 +9,8 @@ import { defineRoute, jsonError } from '@/lib/defineRoute';
 import { clientIp } from '@/lib/request';
 import { limitBy, rateLimitedResponse } from '@/lib/rateLimit';
 import { isHttpsRequest } from '@/lib/sessionStore';
-import { findLiveShare, resolveShare } from '@/lib/shareLink';
+import { findLiveShare, resolveShare, shareLocale } from '@/lib/shareLink';
+import { LOCALE_COOKIE } from '@/modules/i18n';
 import { mintShareAccess, shareCookieName, shareCookiePath, shareSigner, verifyAccessCode } from '@/modules/share';
 
 export const dynamic = 'force-dynamic';
@@ -34,7 +35,12 @@ export const POST = defineRoute<{ slug: string }>({
     }
 
     const sectionId = typeof body?.section === 'string' ? body.section : null;
-    const resolution = await resolveShare(params.slug, { unlocked: true, signer: shareSigner, sectionId });
+    const resolution = await resolveShare(params.slug, {
+      unlocked: true,
+      signer: shareSigner,
+      sectionId,
+      locale: shareLocale(req.cookies.get(LOCALE_COOKIE)?.value),
+    });
     const res = NextResponse.json(resolution);
     if (link.mode === 'PRIVATE') {
       const access = mintShareAccess(link.id);

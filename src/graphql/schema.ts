@@ -150,6 +150,9 @@ export const typeDefs = `#graphql
   type ProjectChat {
     id: ID!
     message: String!
+    # Null for a message a person wrote; "upload" for the system line added
+    # when a file finishes uploading (the client renders it from messages).
+    kind: String
     sender: User!
     project: Project!
     referencedFile: MediaFile
@@ -166,7 +169,8 @@ export const typeDefs = `#graphql
     folder: Folder
     project: Project
     targetType: String!
-    targetName: String!
+    # null when the target was deleted; the client shows its own label.
+    targetName: String
     accessCount: Int!
     # Story 2.3: PRIVATE access code, returned once by createShareLink, null elsewhere.
     accessCode: String
@@ -227,6 +231,13 @@ export const typeDefs = `#graphql
     message: String
     # Hanya terisi sekali saat password dibuat otomatis oleh adminSetPassword
     password: String
+    # Stable failure code (USER_NOT_FOUND, CANNOT_TARGET_SELF, SUPER_ADMIN_PROTECTED,
+    # USER_HAS_ACTIVITY, PASSWORD_TOO_SHORT, PASSWORD_TOO_LONG, INTERNAL). null on success.
+    errorCode: String
+    # USER_HAS_ACTIVITY only: what blocks the delete.
+    uploads: Int
+    shareLinks: Int
+    chats: Int
   }
 
   # Reset password mandiri via email (kode OTP).
@@ -238,6 +249,8 @@ export const typeDefs = `#graphql
     # Jenis kegagalan untuk UI: UNAVAILABLE | RATE_LIMITED | INVALID_EMAIL | INVALID_CODE | CODE_LOCKED |
     # TOKEN_INVALID | PASSWORD_TOO_SHORT | PASSWORD_TOO_LONG | PASSWORD_MISMATCH | INTERNAL. null saat sukses.
     errorCode: String
+    # INVALID_CODE only: wrong tries left before the code is cancelled.
+    attemptsLeft: Int
   }
 
   type ChunkResult {

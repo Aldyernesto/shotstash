@@ -22,7 +22,7 @@
  *     `count-chip` "{n} link"; tanpa link → satu kalimat, bukan kepala
  *     tabel kosong;
  *   - tiap baris: `copy-pill` (seluruhnya tombol salin), `status-chip` mode,
- *     chip kedaluwarsa WIB / "Permanen", "{n} kali dilihat", "dibuat {nama}"
+ *     expiry chip in the viewer zone / "Permanent", "{n} kali dilihat", "dibuat {nama}"
  *     / "dibuat kamu", `button-danger.outline` "Cabut Akses";
  *   - konfirmasi MENGGANTI isi baris (tint danger-bg + ikon + kalimat +
  *     Batal / `button-danger.solid`) — tidak ada dialog kedua; fokus awal
@@ -55,12 +55,13 @@ import { ButtonDanger, ButtonPrimary, PillButton } from "@/components/form/butto
 import { FormAlert } from "@/components/form/FormAlert";
 import { StatusChip } from "@/components/form/StatusChip";
 import { CopyPill } from "@/components/feedback/CopyPill";
-import { useToast, humanizeError } from "@/components/feedback/ToastProvider";
+import { useTranslations } from "next-intl";
+import { useToast, useHumanizeError } from "@/components/feedback/ToastProvider";
 import RepThumb from "@/components/dashboard/RepThumb";
 import type { RepFile } from "@/components/dashboard/ProjectCard";
 import { useAuth } from "@/components/AuthContext";
 import { hasPermission } from "@/lib/permissions";
-import { formatDate, formatDateTimeWIB, formatNumber, formatTimeWIB } from "@/lib/format";
+import { useFormat } from "@/i18n/useFormat";
 import { parseSectionName } from "@/lib/sectionNumber";
 import styles from "./shareModal.module.css";
 
@@ -141,19 +142,6 @@ type ActiveLink = {
   createdBy: { id: string; name: string };
 };
 
-const TITLE: Record<ShareTargetKind, string> = {
-  file: "Bagikan File",
-  section: "Bagikan Section",
-  project: "Bagikan Project",
-};
-
-/** Kata target untuk kepala & kalimat kosong bagian "Link aktif". */
-const TARGET_WORD: Record<ShareTargetKind, string> = {
-  file: "file ini",
-  section: "Section ini",
-  project: "project ini",
-};
-
 const ICON_GLOBE = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
     <circle cx="12" cy="12" r="9" />
@@ -219,7 +207,7 @@ const ICON_ALERT = (
 
 const HOURS: Record<Expiry, number | null> = { "24": 24, "168": 168, never: null };
 
-const MODE_WORD: Record<Mode, string> = { PUBLIC: "Public", PRIVATE: "Private" };
+const MODE_KEY: Record<Mode, "public" | "private"> = { PUBLIC: "public", PRIVATE: "private" };
 
 export default function ShareModal({
   kind,
@@ -234,6 +222,11 @@ export default function ShareModal({
   file,
   onClose,
 }: ShareModalProps) {
+  const t = useTranslations("shareModal");
+  const tc = useTranslations("common");
+  const tCount = useTranslations("count");
+  const f = useFormat();
+  const humanize = useHumanizeError();
   const [mode, setMode] = useState<Mode>("PUBLIC");
   const [expiry, setExpiry] = useState<Expiry>("24");
   const [result, setResult] = useState<{
@@ -335,7 +328,7 @@ export default function ShareModal({
       await revokeShareLink({ variables: { id: link.id } });
       await linksQuery.refetch();
       setConfirmId(null);
-      setAnnounce("Link dicabut.");
+      setAnnounce(t("revoked"));
       // Barisnya sudah tidak ada — fokus mendarat di kepala bagian supaya
       // tetap di dalam modal.
       headingRef.current?.focus({ preventScroll: true });
@@ -344,8 +337,8 @@ export default function ShareModal({
       // pesan mentah server tidak pernah menjadi isi toast.
       pushToast({
         tone: "error",
-        message: "Gagal mencabut akses link. Coba lagi.",
-        cause: humanizeError(err),
+        message: t("revokeFailed"),
+        cause: humanize(err),
       });
     } finally {
       setRevoking(false);
@@ -361,23 +354,23 @@ export default function ShareModal({
   const shown = kind === "section" ? parseSectionName(name).title : name;
 
   // Baris identitas — format per varian, persis mock:
-  //   Section : "Section · 72 file · {Project}"
-  //   Project : "Project · 2.600 file · 14 Section"
-  //   File    : "{jenis} · {ukuran} · {Section induk}"
+  //   Section : "Section · 72 files · {Project}"
+  //   Project : "Project · 2,600 files · 14 Sections"
+  //   File    : "{kind} · {size} · {parent Section}"
   const metaParts = (
     kind === "project"
       ? [
-          "Project",
-          typeof fileCount === "number" ? `${formatNumber(fileCount)} file` : null,
-          typeof sectionCount === "number" ? `${formatNumber(sectionCount)} Section` : null,
+          t("level.project"),
+          typeof fileCount === "number" ? tCount("files", { count: fileCount }) : null,
+          typeof sectionCount === "number" ? t("sectionCount", { count: sectionCount }) : null,
         ]
       : kind === "section"
         ? [
-            "Section",
-            typeof fileCount === "number" ? `${formatNumber(fileCount)} file` : null,
+            t("level.section"),
+            typeof fileCount === "number" ? tCount("files", { count: fileCount }) : null,
             parentName || null,
           ]
-        : [kindLabel || "File", sizeText || null, parentName || null]
+        : [kindLabel || t("level.file"), sizeText || null, parentName || null]
   ).filter(Boolean) as string[];
 
   const submit = async () => {
@@ -417,7 +410,7 @@ export default function ShareModal({
     }
   };
 
-  const heading = adminView ? `Link aktif untuk ${TARGET_WORD[kind]}` : "Link aktif milikmu";
+  const heading = adminView ? t(`activeFor.${kind}`) : t("activeMine");
   const linksLoading = linksQuery.loading && !linksQuery.data;
   const linksFailed = Boolean(linksQuery.error) && !linksQuery.data;
 
@@ -429,7 +422,7 @@ export default function ShareModal({
         </span>
         {/* Tanpa link: kepala tetap, TANPA count-chip (mock 04). */}
         {!linksLoading && !linksFailed && links.length > 0 ? (
-          <span className={`spine-chip ${styles.countChip}`}>{formatNumber(links.length)} link</span>
+          <span className={`spine-chip ${styles.countChip}`}>{t("linkCount", { count: links.length })}</span>
         ) : null}
       </div>
       <p className="spine-visually-hidden" role="status">
@@ -437,10 +430,10 @@ export default function ShareModal({
       </p>
 
       {linksLoading ? (
-        <p className={`spine-footnote ${styles.activeNote}`}>Memuat link…</p>
+        <p className={`spine-footnote ${styles.activeNote}`}>{t("linksLoading")}</p>
       ) : linksFailed ? (
         <p className={`spine-footnote ${styles.activeNote}`} role="alert">
-          Gagal memuat link aktif.{" "}
+          {t("linksFailed")}{" "}
           <button
             type="button"
             className={`spine-focus-ring ${styles.activeRetry}`}
@@ -448,11 +441,11 @@ export default function ShareModal({
               linksQuery.refetch().catch(() => undefined);
             }}
           >
-            Coba lagi
+            {tc("retry")}
           </button>
         </p>
       ) : links.length === 0 ? (
-        <p className={`spine-footnote ${styles.activeNote}`}>Belum ada link untuk {TARGET_WORD[kind]}.</p>
+        <p className={`spine-footnote ${styles.activeNote}`}>{t(`noLinks.${kind}`)}</p>
       ) : (
         <ul className={styles.linkList}>
           {links.map((link) => {
@@ -475,10 +468,10 @@ export default function ShareModal({
                       </span>
                       <div>
                         <b id={`${uid}-cf-t`} className={styles.confirmTitle}>
-                          Cabut akses link ini?
+                          {tc("revokeLinkTitle")}
                         </b>
                         <span id={`${uid}-cf-s`} className={styles.confirmText}>
-                          Link <b>/s/{link.slug}</b> tidak akan bisa diakses lagi.
+                          {t.rich("confirmText", { path: `/s/${link.slug}`, b: (chunks) => <b>{chunks}</b> })}
                         </span>
                       </div>
                     </div>
@@ -490,7 +483,7 @@ export default function ShareModal({
                         aria-disabled={revoking || undefined}
                         onClick={cancelConfirm}
                       >
-                        Batal
+                        {tc("cancel")}
                       </PillButton>
                       <ButtonDanger
                         variant="solid"
@@ -500,13 +493,13 @@ export default function ShareModal({
                         onClick={() => void runRevoke(link)}
                       >
                         {revoking ? (
-                          "Mencabut…"
+                          t("revoking")
                         ) : (
                           <>
                             <span className={styles.btnIcon} aria-hidden="true">
                               {ICON_REVOKE}
                             </span>
-                            Cabut Akses
+                            {tc("revokeLink")}
                           </>
                         )}
                       </ButtonDanger>
@@ -519,7 +512,7 @@ export default function ShareModal({
                       <ButtonDanger
                         variant="outline"
                         className={styles.linkRevoke}
-                        aria-label={`Cabut akses /s/${link.slug}`}
+                        aria-label={t("revokeLabel", { path: `/s/${link.slug}` })}
                         ref={(el: HTMLButtonElement | null) => {
                           if (el) revokeBtnRefs.current.set(link.id, el);
                           else revokeBtnRefs.current.delete(link.id);
@@ -529,34 +522,36 @@ export default function ShareModal({
                         <span className={styles.btnIcon} aria-hidden="true">
                           {ICON_REVOKE}
                         </span>
-                        Cabut Akses
+                        {tc("revokeLink")}
                       </ButtonDanger>
                     </div>
                     <div className={`spine-footnote ${styles.linkMeta}`}>
                       {/* Tag "BARU" (pill hitam invarian) di awal baris meta — mock 02 `.l2 .newt`. */}
                       {freshIds.has(link.id) ? (
-                        <span className={`spine-display-sticker ${styles.newTag}`}>BARU</span>
+                        <span className={`spine-display-sticker ${styles.newTag}`}>{t("newTag")}</span>
                       ) : null}
                       <StatusChip
                         tone="neutral"
                         icon={link.mode === "PUBLIC" ? ICON_GLOBE : ICON_LOCK}
                         className={styles.linkChip}
                       >
-                        {MODE_WORD[link.mode]}
+                        {t(`mode.${MODE_KEY[link.mode]}`)}
                       </StatusChip>
                       <StatusChip
                         tone="neutral"
                         icon={link.expiresAt ? ICON_CLOCK : ICON_INFINITY}
                         className={styles.linkChip}
                       >
-                        {/* Jam dihitung DI PERANGKAT, selalu bersufiks WIB. */}
-                        {link.expiresAt ? `s.d. ${formatDateTimeWIB(link.expiresAt)}` : "Permanen"}
+                        {/* Time in the viewer's zone, always with a zone label. */}
+                        {link.expiresAt ? t("until", { dateTime: f.dateTime(link.expiresAt) }) : t("permanent")}
                       </StatusChip>
                       <span>
-                        <b>{formatNumber(link.accessCount)}</b> kali dilihat
+                        {t.rich("views", { count: link.accessCount, b: (chunks) => <b>{chunks}</b> })}
                       </span>
                       <span>
-                        dibuat <b>{mine ? "kamu" : link.createdBy?.name}</b>
+                        {mine
+                          ? t.rich("createdByYou", { b: (chunks) => <b>{chunks}</b> })
+                          : t.rich("createdBy", { name: link.createdBy?.name ?? "", b: (chunks) => <b>{chunks}</b> })}
                       </span>
                     </div>
                   </>
@@ -575,8 +570,8 @@ export default function ShareModal({
       mobilePlacement="bottom"
       mobilePreviewFirst={false}
       stickyFooter
-      title={TITLE[kind]}
-      closeLabel="Tutup"
+      title={t(`title.${kind}`)}
+      closeLabel={tc("close")}
       onClose={onClose}
       preview={{
         thumb: (
@@ -594,25 +589,25 @@ export default function ShareModal({
         result ? (
           <div className={`${styles.footer} ${styles.footerOne}`}>
             <PillButton variant="surface" onClick={onClose}>
-              Selesai
+              {t("done")}
             </PillButton>
           </div>
         ) : (
           <div className={styles.footer}>
             <PillButton variant="surface" aria-disabled={busy || undefined} onClick={() => (busy ? undefined : onClose())}>
-              Batal
+              {tc("cancel")}
             </PillButton>
             <PillButton
               variant="accent"
               busy={busy}
-              busyLabel="Membuat..."
+              busyLabel={t("creating")}
               aria-describedby={failed ? alertId : undefined}
               onClick={submit}
             >
               <span className={styles.btnIcon} aria-hidden="true">
                 {ICON_LINK}
               </span>
-              Buat Tautan
+              {t("create")}
             </PillButton>
           </div>
         )
@@ -626,13 +621,13 @@ export default function ShareModal({
               {ICON_OK}
             </span>
             <span className={styles.okText}>
-              <b className={`spine-row-title ${styles.okTitle}`}>Tautan siap dibagikan</b>
+              <b className={`spine-row-title ${styles.okTitle}`}>{t("readyTitle")}</b>
               <span className={`spine-footnote ${styles.okSub}`}>
-                {MODE_WORD[result.mode]}
+                {t(`mode.${MODE_KEY[result.mode]}`)}
                 {" · "}
                 {result.expiresAt
-                  ? `berlaku sampai ${formatDate(result.expiresAt)}, ${formatTimeWIB(result.expiresAt)}`
-                  : "berlaku sampai dicabut lewat Share atau halaman Shared"}
+                  ? t("readyUntil", { date: f.date(result.expiresAt), time: f.time(result.expiresAt) })
+                  : t("readyUntilRevoked")}
               </span>
             </span>
           </div>
@@ -646,13 +641,13 @@ export default function ShareModal({
                 <span className={styles.btnIcon} aria-hidden="true">
                   {ICON_COPY}
                 </span>
-                Salin Tautan
+                {t("copyLink")}
               </ButtonPrimary>
             )}
           />
           {result.accessCode ? (
             <div className={styles.codeBox} role="note">
-              <span className={`spine-label ${styles.codeLabel}`}>Kode akses</span>
+              <span className={`spine-label ${styles.codeLabel}`}>{t("accessCode")}</span>
               <span className={styles.codeRow}>
                 <code className={styles.codeValue}>{result.accessCode}</code>
                 <PillButton
@@ -661,18 +656,18 @@ export default function ShareModal({
                   onClick={() => {
                     navigator.clipboard
                       ?.writeText(result.accessCode ?? "")
-                      .then(() => pushToast({ tone: "success", message: "Kode akses disalin." }))
+                      .then(() => pushToast({ tone: "success", message: t("codeCopied") }))
                       .catch(() => undefined);
                   }}
                 >
                   <span className={styles.btnIcon} aria-hidden="true">
                     {ICON_COPY}
                   </span>
-                  Salin Kode
+                  {t("copyCode")}
                 </PillButton>
               </span>
               <span className={`spine-footnote ${styles.codeNote}`}>
-                Kode ini hanya tampil sekali. Kirim terpisah dari tautannya; penerima memasukkannya untuk membuka link.
+                {t("codeNote")}
               </span>
             </div>
           ) : null}
@@ -681,10 +676,10 @@ export default function ShareModal({
         <>
           <div className={styles.group}>
             <span className={`spine-label ${styles.legend}`} id={`${expiryNoteId}-m`}>
-              Mode akses
+              {t("modeLabel")}
             </span>
             <RadioCardGroup<Mode>
-              label="Mode akses"
+              label={t("modeLabel")}
               layout="row"
               stackOnMobile
               value={mode}
@@ -692,14 +687,14 @@ export default function ShareModal({
               options={[
                 {
                   value: "PUBLIC",
-                  title: "Public",
-                  note: "Siapa pun yang punya link bisa membuka.",
+                  title: t("mode.public"),
+                  note: t("modePublicNote"),
                   icon: ICON_GLOBE,
                 },
                 {
                   value: "PRIVATE",
-                  title: "Private",
-                  note: "Hanya yang punya kode akses.",
+                  title: t("mode.private"),
+                  note: t("modePrivateNote"),
                   icon: ICON_LOCK,
                 },
               ]}
@@ -707,45 +702,42 @@ export default function ShareModal({
           </div>
 
           <div className={styles.group}>
-            <span className={`spine-label ${styles.legend}`}>Kedaluwarsa</span>
+            <span className={`spine-label ${styles.legend}`}>{t("expiryLabel")}</span>
             <RadioCardGroup<Expiry>
-              label="Kedaluwarsa"
+              label={t("expiryLabel")}
               layout="row"
               compact
               value={expiry}
               onChange={setExpiry}
               describedBy={expiryNoteId}
               options={[
-                { value: "24", title: "24 jam" },
-                { value: "168", title: "7 hari" },
-                { value: "never", title: "Permanen" },
+                { value: "24", title: t("expiry24h") },
+                { value: "168", title: t("expiry7d") },
+                { value: "never", title: t("expiryNever") },
               ]}
             />
-            {/* Kalimat jam absolut WIB, dihitung DI PERANGKAT; perubahannya
-                diumumkan polite tanpa memindahkan fokus. */}
+            {/* Absolute expiry time in the viewer's own zone (with its label),
+                computed on the device; changes are announced politely without
+                moving focus. */}
             <p id={expiryNoteId} className={`spine-footnote ${styles.expiry}`} role="status">
               <span className={styles.expiryIcon} aria-hidden="true">
                 {expiresAtPreview ? ICON_CLOCK : ICON_INFINITY}
               </span>
               <span>
-                {expiresAtPreview ? (
-                  <>
-                    Link berlaku sampai{" "}
-                    <b className={styles.expiryStrong}>
-                      {formatDate(expiresAtPreview)}, {formatTimeWIB(expiresAtPreview)}
-                    </b>
-                    .
-                  </>
-                ) : (
-                  "Link berlaku sampai dicabut lewat Share atau halaman Shared."
-                )}
+                {expiresAtPreview
+                  ? t.rich("validUntil", {
+                      date: f.date(expiresAtPreview),
+                      time: f.time(expiresAtPreview),
+                      b: (chunks) => <b className={styles.expiryStrong}>{chunks}</b>,
+                    })
+                  : t("validUntilRevoked")}
               </span>
             </p>
           </div>
 
           {failed ? (
             <FormAlert id={alertId} tone="danger" className={styles.alert}>
-              Gagal membuat tautan. Periksa koneksimu lalu coba lagi.
+              {t("createFailed")}
             </FormAlert>
           ) : null}
         </>

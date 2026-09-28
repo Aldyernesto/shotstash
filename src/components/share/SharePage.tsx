@@ -31,8 +31,9 @@ import TagPill from "@/components/tag-pill/TagPill";
 import { ButtonPrimary, PillButton } from "@/components/form/buttons";
 import { ErrorBox } from "@/components/dashboard/states";
 import VideoPlayer, { type VideoPlayerHandle } from "@/components/media/VideoPlayer";
-import { KIND_WORD, SHARE_PAGE_SIZE, type ShareFile, type ShareSection, type SharePayload } from "@/lib/shareTypes";
-import { formatDate, formatNumber, formatTimeWIB } from "@/lib/format";
+import { useLocale, useTimeZone, useTranslations } from "next-intl";
+import { SHARE_PAGE_SIZE, type ShareFile, type ShareSection, type SharePayload } from "@/lib/shareTypes";
+import { formatDate, formatTime } from "@/lib/format";
 import ShareInvalid, { type ShareInvalidKind } from "./ShareInvalid";
 import styles from "./sharePage.module.css";
 
@@ -78,12 +79,13 @@ const ICON_PLAY = (
 /* ------------------------------------------------------------------ */
 
 function NumberSticker({ value, className }: { value: string; className?: string }) {
+  const t = useTranslations("common");
   return (
     <span className={`spine-display-label ${styles.sticker} ${className ?? ""}`}>
       <small className="spine-sticker-unit" aria-hidden="true">
-        NO
+        {t("numberPrefix")}
       </small>
-      <span className="spine-visually-hidden">Nomor </span>
+      <span className="spine-visually-hidden">{t("number")} </span>
       {value}
     </span>
   );
@@ -102,7 +104,8 @@ function PublicFileCard({
 }) {
   const href = file.downloadUrl ?? undefined;
   const inline = file.inlineUrl ?? undefined;
-  const label = [file.name, KIND_WORD[file.kind].toLowerCase(), file.sizeText].join(", ");
+  const t = useTranslations("share");
+  const label = t("fileLabel", { name: file.name, kind: t(`kindLower.${file.kind}`), size: file.sizeText });
   return (
     <article className={styles.fileCell}>
       <div className={styles.photo}>
@@ -113,7 +116,7 @@ function PublicFileCard({
         {file.kind === "video" ? (
           <span className={`spine-tag-mobile ${styles.videoMarker}`}>
             {ICON_PLAY}
-            {file.duration ?? "Video"}
+            {file.duration ?? t("kind.video")}
           </span>
         ) : null}
       </div>
@@ -146,7 +149,7 @@ function PublicFileCard({
         <a
           className={`spine-focus-ring spine-hit-area ${styles.downloadButton}`}
           href={href}
-          aria-label={`Unduh ${file.name}`}
+          aria-label={t("downloadFile", { name: file.name })}
           download
         >
           {ICON_DOWNLOAD}
@@ -171,6 +174,8 @@ function PublicSectionCard({
   onZip: (id: string, title: string) => void;
   zipBusy: string | null;
 }) {
+  const t = useTranslations("share");
+  const tCount = useTranslations("count");
   const [a, b, c] = section.repThumbs;
   const bg = (url: string | null | undefined) =>
     url ? { backgroundImage: `url(${url})` } : undefined;
@@ -189,18 +194,18 @@ function PublicSectionCard({
       <a
         className={`spine-focus-ring ${styles.openLink}`}
         href={`/s/${slug}?section=${section.id}`}
-        aria-label={`Buka isi Section ${section.title}, ${formatNumber(section.fileCount)} file`}
+        aria-label={t("openSection", { title: section.title, files: tCount("files", { count: section.fileCount }) })}
       >
-        <span className="spine-visually-hidden">Buka</span>
+        <span className="spine-visually-hidden">{t("open")}</span>
       </a>
       <div className={styles.sectionFoot}>
         <span className={`spine-chip ${styles.chip}`}>
-          {formatNumber(section.fileCount)} file
+          {tCount("files", { count: section.fileCount })}
         </span>
         <button
           type="button"
           className={`spine-focus-ring spine-hit-area ${styles.downloadButton}`}
-          aria-label={`Download ZIP ${section.title}`}
+          aria-label={t("downloadZipOf", { title: section.title })}
           aria-busy={zipBusy === section.id || undefined}
           onClick={() => onZip(section.id, section.title)}
         >
@@ -215,23 +220,31 @@ function PublicSectionCard({
 /* halaman                                                             */
 /* ------------------------------------------------------------------ */
 
-const FILE_SORT_LABELS: { value: string; label: string }[] = [
-  { value: "nama", label: "Nama" },
-  { value: "tanggal", label: "Tanggal ▼" },
-  { value: "ukuran", label: "Ukuran" },
-  { value: "tipe", label: "Tipe" },
-];
+/** Sort keys are fixed identifiers (URL values); their labels come from messages. */
+const FILE_SORT_KEYS = [
+  { value: "name", key: "name" },
+  { value: "date", key: "dateDesc" },
+  { value: "size", key: "size" },
+  { value: "type", key: "type" },
+] as const;
 
-const SECTION_SORT_LABELS: { value: string; label: string }[] = [
-  { value: "nomor", label: "Nomor ▲" },
-  { value: "nama", label: "Nama" },
-  { value: "jumlah", label: "Jumlah file" },
-];
+const SECTION_SORT_KEYS = [
+  { value: "number", key: "numberAsc" },
+  { value: "name", key: "name" },
+  { value: "count", key: "fileCount" },
+] as const;
 
 export default function SharePage({ payload }: { payload: SharePayload }) {
+  const t = useTranslations("share");
+  const tc = useTranslations("common");
+  const tCount = useTranslations("count");
+  const tContent = useTranslations("content");
+  const locale = useLocale();
+  // The provider's zone (DEFAULT_TIMEZONE): server and browser render the same text.
+  const timeZone = useTimeZone();
   const [files, setFiles] = useState<ShareFile[]>(payload.files);
   const [sections, setSections] = useState<ShareSection[]>(payload.sections);
-  const [sort, setSort] = useState<string>(payload.kind === "project" && !payload.section ? "nomor" : "tanggal");
+  const [sort, setSort] = useState<string>(payload.kind === "project" && !payload.section ? "number" : "date");
   const [loadingMore, setLoadingMore] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [zipBusy, setZipBusy] = useState<string | null>(null);
@@ -330,7 +343,6 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
   const pagesSections = payload.kind === "project" && !payload.section;
   const shown = pagesSections ? sections.length : files.length;
   const total = pagesSections ? payload.sectionCount ?? 0 : payload.fileCount;
-  const unit = pagesSections ? "Section" : "file";
   const remaining = Math.max(0, total - shown);
 
   /** Link mati di tengah kunjungan → pindah ke keadaan Story 3.11. */
@@ -391,12 +403,12 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
       const body = await fetchPage(shown, sort, false);
       if (body) {
         const added = pagesSections ? body.sections.length : body.files.length;
-        setLive(`${formatNumber(added)} ${unit} lagi ditampilkan.`);
+        setLive(pagesSections ? t("moreSectionsShown", { count: added }) : t("moreFilesShown", { count: added }));
       }
     } catch {
       // Fokus TIDAK dipindah: pengguna keyboard tetap di tombol yang
       // baru ditekan, dan baris yang sudah tampil tetap tampil.
-      setPageError("Gagal memuat file berikutnya. Coba lagi.");
+      setPageError(t("loadMoreFailed"));
     } finally {
       setLoadingMore(false);
     }
@@ -410,7 +422,7 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
     try {
       await fetchPage(0, next, true);
     } catch {
-      setPageError("Gagal mengurutkan ulang. Coba lagi.");
+      setPageError(t("sortFailed"));
     } finally {
       setLoadingMore(false);
     }
@@ -444,22 +456,22 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
           setDead(kind);
           return;
         }
-        setZipError("Server sedang bermasalah.");
+        setZipError(t("zipErrors.server"));
         return;
       }
       if (!body?.zipUrl) {
         setZipError(
           body?.cause === "EMPTY"
-            ? "Tidak ada file untuk diunduh di link ini."
+            ? t("zipErrors.empty")
             : body?.cause === "UNREADABLE"
-              ? "Berkasnya tidak bisa dibaca di penyimpanan."
-              : "Berkasnya sudah tidak ada lagi.",
+              ? t("zipErrors.unreadable")
+              : t("zipErrors.missing"),
         );
         return;
       }
       window.location.href = body.zipUrl;
     } catch {
-      setZipError("Sambungan ke server terputus.");
+      setZipError(t("zipErrors.offline"));
     } finally {
       setZipBusy(null);
     }
@@ -469,9 +481,25 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
 
   const headline = payload.section ? payload.section.title : payload.title;
   const stickerNumber = payload.section ? payload.section.number : payload.number;
+  const sectionLabel = payload.sectionLabel
+    ? payload.sectionLabel.number
+      ? t("sectionNumbered", { number: payload.sectionLabel.number, title: payload.sectionLabel.title })
+      : payload.sectionLabel.title
+    : null;
+  const breakdownParts = payload.breakdown
+    ? [
+        payload.breakdown.photos ? tContent("photos", { count: payload.breakdown.photos }) : null,
+        payload.breakdown.videos ? tContent("videos", { count: payload.breakdown.videos }) : null,
+        payload.breakdown.documents ? tContent("documents", { count: payload.breakdown.documents }) : null,
+      ].filter((x): x is string => !!x)
+    : [];
+  const breakdown = breakdownParts.length
+    ? t("breakdown", { parts: new Intl.ListFormat(locale, { type: "conjunction" }).format(breakdownParts) })
+    : null;
+  const fmtOpts = { locale, timeZone };
 
   return (
-    <main className={styles.page} lang="id">
+    <main className={styles.page}>
       <div className={styles.topbar}>
         {/* Logo tidak bisa diklik — identitas, bukan navigasi. */}
         <Logo size="login" />
@@ -482,7 +510,7 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
         <div className={styles.stage}>
           <div className={styles.copy}>
             <div className={styles.tagrow}>
-              <TagPill>Arsip premium</TagPill>
+              <TagPill>{tc("archiveTag")}</TagPill>
               {stickerNumber ? <NumberSticker value={stickerNumber} /> : null}
             </div>
             <h1
@@ -515,11 +543,14 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
 
         <div className={styles.card}>
           <p className={`spine-label ${styles.kick}`}>
-            Project · <b>{payload.projectName ?? brand.productName}</b>
-            {payload.sectionLabel ? (
+            {t.rich("kickProject", {
+              name: payload.projectName ?? brand.productName,
+              b: (chunks) => <b>{chunks}</b>,
+            })}
+            {sectionLabel ? (
               <>
                 <br />
-                Section · <b>{payload.sectionLabel}</b>
+                {t.rich("kickSection", { label: sectionLabel, b: (chunks) => <b>{chunks}</b> })}
               </>
             ) : null}
           </p>
@@ -527,34 +558,34 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
             <span className={`spine-chip ${styles.chip}`}>
               {ICON_FILES}
               {payload.kind === "file"
-                ? KIND_WORD[single!.kind]
+                ? t(`kind.${single!.kind}`)
                 : payload.kind === "project" && !payload.section
-                  ? `${formatNumber(payload.sectionCount ?? 0)} Section`
-                  : `${formatNumber(payload.fileCount)} file`}
+                  ? t("sectionCount", { count: payload.sectionCount ?? 0 })
+                  : tCount("files", { count: payload.fileCount })}
             </span>
             {payload.kind === "project" && !payload.section ? (
-              <span className={`spine-chip ${styles.chip}`}>{formatNumber(payload.fileCount)} file</span>
+              <span className={`spine-chip ${styles.chip}`}>{tCount("files", { count: payload.fileCount })}</span>
             ) : null}
             <span className={`spine-chip ${styles.chip}`}>{payload.totalSizeText}</span>
             <span className={`spine-chip ${styles.chip}`}>{payload.dateText}</span>
           </div>
-          {payload.breakdown ? (
-            <p className={`spine-body-sm ${styles.breakdown}`}>{payload.breakdown}</p>
+          {breakdown ? (
+            <p className={`spine-body-sm ${styles.breakdown}`}>{breakdown}</p>
           ) : null}
           <ButtonPrimary
             type="button"
             arrow={false}
             className={styles.zipButton}
             busy={zipBusy === "main"}
-            busyLabel="Menyiapkan..."
+            busyLabel={t("preparing")}
             onClick={() => downloadZip(null, "main")}
           >
-            {payload.kind === "file" ? "Download" : "Download ZIP"}
+            {payload.kind === "file" ? t("download") : t("downloadZip")}
           </ButtonPrimary>
           {zipError ? (
             <ErrorBox
               className={styles.cardError}
-              title="Gagal menyiapkan unduhan. Coba lagi."
+              title={t("zipFailed")}
               text={zipError}
               onRetry={() => downloadZip(null, "main")}
             />
@@ -562,16 +593,13 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
           <p className={`spine-footnote ${styles.expiry}`}>
             {payload.expiresAt ? ICON_CLOCK : ICON_INFINITY}
             <span>
-              {payload.expiresAt ? (
-                <>
-                  Link berlaku sampai{" "}
-                  <b>
-                    {formatDate(payload.expiresAt)}, {formatTimeWIB(payload.expiresAt)}
-                  </b>
-                </>
-              ) : (
-                "Link tanpa batas waktu"
-              )}
+              {payload.expiresAt
+                ? t.rich("validUntil", {
+                    date: formatDate(payload.expiresAt, fmtOpts),
+                    time: formatTime(payload.expiresAt, fmtOpts),
+                    b: (chunks) => <b>{chunks}</b>,
+                  })
+                : t("noExpiry")}
             </span>
           </p>
         </div>
@@ -628,7 +656,7 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
           <p className={`spine-body-sm ${styles.inlineCaption}`}>
             {single.name}
             <span>
-              {KIND_WORD[single.kind]} · {single.sizeText} · {payload.dateText}
+              {t(`kind.${single.kind}`)} · {single.sizeText} · {payload.dateText}
             </span>
           </p>
         </div>
@@ -636,13 +664,12 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
         <>
           <div className={styles.lhead}>
             <p className={`spine-label ${styles.lt}`}>
-              {pagesSections ? "Isi project · " : "Isi Section · "}
-              <b>
-                {formatNumber(total)} {unit}
-              </b>
+              {pagesSections
+                ? t.rich("projectContents", { count: total, b: (chunks) => <b>{chunks}</b> })
+                : t.rich("sectionContents", { count: total, b: (chunks) => <b>{chunks}</b> })}
             </p>
-            <div className={styles.sortPills} role="group" aria-label="Urutkan">
-              {(pagesSections ? SECTION_SORT_LABELS : FILE_SORT_LABELS).map((p) => (
+            <div className={styles.sortPills} role="group" aria-label={t("sortGroup")}>
+              {(pagesSections ? SECTION_SORT_KEYS : FILE_SORT_KEYS).map((p) => (
                 <button
                   key={p.value}
                   type="button"
@@ -652,7 +679,7 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
                   }`}
                   onClick={() => changeSort(p.value)}
                 >
-                  {p.label}
+                  {t(`sort.${p.key}`)}
                 </button>
               ))}
             </div>
@@ -680,16 +707,20 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
           {remaining > 0 || pageError ? (
             <div className={styles.moreRow}>
               <p className={`spine-body-sm ${styles.moreCount}`}>
-                Menampilkan {formatNumber(shown)} dari {formatNumber(total)} {unit}.
+                {pagesSections
+                  ? t("showingSections", { shown, total })
+                  : t("showingFiles", { shown, total })}
               </p>
               {remaining > 0 ? (
                 <PillButton
                   variant="surface"
                   busy={loadingMore}
-                  busyLabel="Memuat..."
+                  busyLabel={t("loading")}
                   onClick={loadMore}
                 >
-                  Tampilkan {formatNumber(remaining)} {unit} lagi
+                  {pagesSections
+                    ? t("showMoreSections", { count: remaining })
+                    : t("showMoreFiles", { count: remaining })}
                 </PillButton>
               ) : null}
               {pageError ? (
@@ -706,7 +737,7 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
 
       <footer className={`spine-footnote ${styles.foot}`}>
         <Logo size="mobile" />
-        Self-hosted media cloud for creators
+        {brand.tagline}
       </footer>
     </main>
   );

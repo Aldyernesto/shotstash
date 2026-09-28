@@ -11,12 +11,12 @@
  *    Project · Section. Baris tanpa nilai TETAP DIRENDER dengan "—"
  *    (bukan dihapus), didampingi teks tersembunyi-visual "Tidak ada"
  *    supaya pembaca layar membaca "Diambil, Tidak ada", bukan "strip".
- *  - "Diambil" berasal dari EXIF kamera yang TIDAK menyimpan zona waktu:
- *    ditulis APA ADANYA + "(waktu kamera)", tidak pernah dikonversi ke
- *    WIB. Nilai yang tidak bisa diurai diperlakukan sama dengan kosong —
- *    tidak pernah ditampilkan mentah dan tidak pernah ditebak, dan
- *    keterangan "(waktu kamera)" tidak ikut dirender saat kosong.
- *  - "Diunggah" memakai WIB dengan format Indonesia.
+ *  - "Captured" comes from camera EXIF, which stores no time zone: it is
+ *    written as is plus "(camera time)" and never converted. A value that
+ *    cannot be parsed is treated as empty (never shown raw, never guessed),
+ *    and the "(camera time)" label is not rendered when empty.
+ *  - "Uploaded" uses the viewer's locale and browser time zone, with a
+ *    zone label (useFormat().dateTime).
  *  - Metadata kosong TIDAK PERNAH memunculkan pesan error di layar;
  *    kegagalan membacanya dicatat ke konsol.
  *
@@ -25,8 +25,9 @@
  */
 
 import React, { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import styles from "./viewerInfo.module.css";
-import { formatDateTimeWIB, formatDimensions, formatExifCameraTime, formatFileSize } from "@/lib/format";
+import { useFormat } from "@/i18n/useFormat";
 import { parseSectionName } from "@/lib/sectionNumber";
 
 export type ViewerInfoFile = {
@@ -78,13 +79,17 @@ const FilmIcon = (
   </svg>
 );
 
-/** Nilai kosong: "—" + teks tersembunyi-visual "Tidak ada". */
-const NONE = (
-  <>
-    <span aria-hidden="true">—</span>
-    <span className="spine-visually-hidden">Tidak ada</span>
-  </>
-);
+/** Empty value: a dash plus visually hidden "None" for screen readers. */
+function NoneValue() {
+  const t = useTranslations("viewer.info");
+  return (
+    <>
+      <span aria-hidden="true">—</span>
+      <span className="spine-visually-hidden">{t("none")}</span>
+    </>
+  );
+}
+const NONE = <NoneValue />;
 
 function typeLabel(mime: string, name: string, duration?: string | null): React.ReactNode {
   const ext = (name.split(".").pop() || "").toUpperCase();
@@ -98,19 +103,22 @@ function typeLabel(mime: string, name: string, duration?: string | null): React.
  * hanya tanda baca) diperlakukan sebagai TIDAK ADA — tidak ditebak dan
  * tidak ditampilkan mentah.
  */
-function capturedValue(raw?: string | null): React.ReactNode {
+function capturedValue(raw: string | null | undefined, cameraTime: (raw: string) => string): React.ReactNode {
   const text = typeof raw === "string" ? raw.trim() : "";
   if (!text || !/\d/.test(text)) {
     if (raw) {
       // Bukan ke layar: kegagalan membaca metadata dicatat ke konsol.
-      console.warn("[viewer-info] nilai EXIF 'Diambil' tidak bisa diurai:", raw);
+      console.warn("[viewer-info] unparseable EXIF capture time:", raw);
     }
     return NONE;
   }
-  return formatExifCameraTime(text);
+  return cameraTime(text);
 }
 
 export function ViewerInfo({ variant, file, projectTitle, sectionName, onClose }: ViewerInfoProps) {
+  const t = useTranslations("viewer.info");
+  const tc = useTranslations("common");
+  const f = useFormat();
   const isVideo = file.mimeType.startsWith("video/");
   /** Lembar HP punya DUA tinggi: intip 300px dan penuh (maks 85%). */
   const [height, setHeight] = useState<"peek" | "full">("peek");
@@ -129,15 +137,15 @@ export function ViewerInfo({ variant, file, projectTitle, sectionName, onClose }
   // karena itulah yang dicari editor (klip 9:16 untuk Reels), bukan angkanya.
   const dimensions =
     file.width && file.height
-      ? formatDimensions(file.width, file.height)
+      ? f.dimensions(file.width, file.height)
       : NONE;
 
   const rows: [string, React.ReactNode][] = [
-    ["Tipe", typeLabel(file.mimeType, file.originalName, file.duration)],
-    ["Ukuran", file.size != null ? formatFileSize(Number(file.size)) : NONE],
-    ["Dimensi", dimensions],
-    ["Diambil", capturedValue(file.capturedAtRaw)],
-    ["Diunggah", file.createdAt ? formatDateTimeWIB(file.createdAt) : NONE],
+    [t("type"), typeLabel(file.mimeType, file.originalName, file.duration)],
+    [t("size"), file.size != null ? f.fileSize(Number(file.size)) : NONE],
+    [t("dimensions"), dimensions],
+    [t("captured"), capturedValue(file.capturedAtRaw, f.cameraTime)],
+    [t("uploaded"), file.createdAt ? f.dateTime(file.createdAt) : NONE],
   ];
 
   const section = sectionName ? parseSectionName(sectionName) : null;
@@ -157,17 +165,17 @@ export function ViewerInfo({ variant, file, projectTitle, sectionName, onClose }
       </dl>
       <hr className={styles.rule} />
       <dl className={styles.dl}>
-        <dt>Project</dt>
+        <dt>{t("project")}</dt>
         <dd>{projectTitle || NONE}</dd>
-        <dt>Section</dt>
+        <dt>{t("section")}</dt>
         <dd>
           {section ? (
             <span className={styles.location}>
               {section.number ? (
                 /* The number sticker stays an accent block with white text in BOTH themes. */
                 <span className={`spine-display-label ${styles.numberSticker}`}>
-                  <span aria-hidden="true">NO</span>
-                  <span className="spine-visually-hidden">Nomor</span> {section.number}
+                  <span aria-hidden="true">{tc("numberPrefix")}</span>
+                  <span className="spine-visually-hidden">{tc("number")}</span> {section.number}
                 </span>
               ) : null}
               <b className={styles.sectionName}>{section.title}</b>
@@ -183,16 +191,16 @@ export function ViewerInfo({ variant, file, projectTitle, sectionName, onClose }
   const head = (
     <div className={styles.head}>
       <span className={`spine-label ${styles.headLabel}`}>
-        Info file
+        {t("title")}
         <span className={styles.kindChip}>
           {isVideo ? FilmIcon : PhotoIcon}
-          {isVideo ? "Video" : "Foto"}
+          {isVideo ? t("kindVideo") : t("kindPhoto")}
         </span>
       </span>
       <button
         type="button"
         className={`spine-focus-ring ${styles.close}`}
-        aria-label="Tutup info"
+        aria-label={t("close")}
         onClick={onClose}
       >
         {CloseIcon}
@@ -202,7 +210,7 @@ export function ViewerInfo({ variant, file, projectTitle, sectionName, onClose }
 
   if (variant === "panel") {
     return (
-      <section aria-label="Info file" className={styles.panel}>
+      <section aria-label={t("title")} className={styles.panel}>
         {head}
         {body}
       </section>
@@ -215,7 +223,7 @@ export function ViewerInfo({ variant, file, projectTitle, sectionName, onClose }
       {height === "full" ? <div className={styles.dim} aria-hidden="true" /> : null}
       <section
         ref={sheetRef}
-        aria-label="Info file"
+        aria-label={t("title")}
         className={`${styles.sheet} ${height === "peek" ? styles.peek : styles.full}`}
         onTouchStart={(e) => {
           touch.current = e.touches[0].clientY;
@@ -239,7 +247,7 @@ export function ViewerInfo({ variant, file, projectTitle, sectionName, onClose }
         <button
           type="button"
           className={`spine-focus-ring spine-hit-area ${styles.grab}`}
-          aria-label={height === "peek" ? "Perbesar info" : "Perkecil info"}
+          aria-label={height === "peek" ? t("expand") : t("collapse")}
           onClick={() => setHeight((h) => (h === "peek" ? "full" : "peek"))}
         >
           <i aria-hidden="true" />
@@ -253,7 +261,7 @@ export function ViewerInfo({ variant, file, projectTitle, sectionName, onClose }
             onClick={() => setHeight("full")}
           >
             {ChevronUpIcon}
-            Tampilkan semua info
+            {t("showAll")}
           </button>
         ) : null}
       </section>

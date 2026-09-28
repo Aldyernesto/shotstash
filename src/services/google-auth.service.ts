@@ -10,21 +10,49 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 const ALLOWED_AUDIENCES = [GOOGLE_CLIENT_ID].filter(Boolean);
 
-export async function googleAuth(idToken: string) {
-  if (!googleClient) throw new Error('Google Sign-In not configured');
+function invalidToken() {
+  return new GraphQLError('Invalid Google token', { extensions: { code: 'INVALID_TOKEN' } });
+}
 
-  const ticket = await googleClient.verifyIdToken({ idToken, audience: ALLOWED_AUDIENCES });
+/**
+ * True when verifyIdToken failed because it could not reach Google (the
+ * certificate fetch): gaxios errors carry `response` / `config`, system
+ * errors a string `code` (ECONNRESET, ENOTFOUND), fetch failures are a
+ * TypeError or an abort. Token problems (malformed, expired, wrong audience,
+ * bad signature) are plain Errors without any of these.
+ */
+function isFetchFailure(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { name?: unknown; code?: unknown; response?: unknown; config?: unknown };
+  if (e.response !== undefined || e.config !== undefined) return true;
+  if (typeof e.code === 'string') return true;
+  return err instanceof TypeError || e.name === 'AbortError' || e.name === 'GaxiosError' || e.name === 'FetchError';
+}
+
+export async function googleAuth(idToken: string) {
+  if (!googleClient) {
+    throw new GraphQLError('Google Sign-In not configured', { extensions: { code: 'GOOGLE_NOT_CONFIGURED' } });
+  }
+
+  let ticket;
+  try {
+    ticket = await googleClient.verifyIdToken({ idToken, audience: ALLOWED_AUDIENCES });
+  } catch (err) {
+    // A network or certificate failure is a server error, not a bad token.
+    if (isFetchFailure(err)) throw err;
+    throw invalidToken();
+  }
   const payload = ticket.getPayload();
   // Story 2.5: an email the provider has not verified never links to (or
   // creates) an account, otherwise anyone could claim an existing address.
   const decision = googleEmailDecision(payload);
   if (!decision.ok) {
-    if (decision.code === 'INVALID_TOKEN') throw new Error('Invalid Google token');
+    if (decision.code === 'INVALID_TOKEN') throw invalidToken();
     throw new GraphQLError('Google has not verified this email address', {
       extensions: { code: 'EMAIL_NOT_VERIFIED' },
     });
   }
-  if (!payload?.email) throw new Error('Invalid Google token');
+  if (!payload?.email) throw invalidToken();
 
   let user = await prisma.user.findUnique({ where: { email: payload.email } });
 

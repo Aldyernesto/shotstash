@@ -57,13 +57,13 @@ export async function sendEmail(message: EmailMessage): Promise<SendEmailResult>
 
   if (isLogTransport()) {
     lastLoggedEmail = { ...message, from, at: new Date() };
-    console.info(`[email] transport=log: pesan disimpan, tidak dikirim (to=${maskEmail(message.to)})`);
+    console.info(`[email] transport=log: message kept, not sent (to=${maskEmail(message.to)})`);
     return { ok: true };
   }
 
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) {
-    console.error('[email] gagal: RESEND_API_KEY belum di-set');
+    console.error('[email] failed: RESEND_API_KEY is not set');
     return { ok: false, error: 'not_configured' };
   }
 
@@ -93,7 +93,7 @@ export async function sendEmail(message: EmailMessage): Promise<SendEmailResult>
       } catch {
         // body bukan JSON
       }
-      console.error(`[email] gagal kirim via Resend: status=${res.status}${errorName ? ` error=${errorName}` : ''} to=${maskEmail(message.to)}`);
+      console.error(`[email] Resend send failed: status=${res.status}${errorName ? ` error=${errorName}` : ''} to=${maskEmail(message.to)}`);
       return { ok: false, error: errorName || `http_${res.status}` };
     }
 
@@ -101,7 +101,7 @@ export async function sendEmail(message: EmailMessage): Promise<SendEmailResult>
     return { ok: true, id: typeof data.id === 'string' ? data.id : undefined };
   } catch (error) {
     const name = (error as Error)?.name || 'Error';
-    console.error(`[email] gagal kirim via Resend: ${name} to=${maskEmail(message.to)}`);
+    console.error(`[email] Resend send failed: ${name} to=${maskEmail(message.to)}`);
     return { ok: false, error: name };
   }
 }

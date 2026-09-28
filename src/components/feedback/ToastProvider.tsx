@@ -45,6 +45,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
+import { errorCodeOf, errorDetailsOf, errorKind } from "@/lib/errorCodes";
 import styles from "./toast.module.css";
 
 export type ToastTone = "success" | "error";
@@ -189,49 +190,28 @@ export function useToast() {
   );
 }
 
-export type ErrorKind = "offline" | "session" | "notFound" | "timeout" | "server" | "generic";
+export { errorKind, errorCodeOf, type ErrorKind } from "@/lib/errorCodes";
 
 /**
- * Classifies a network/server failure so it can be shown as ONE plain
- * sentence. "Failed to fetch", "HTTP 502", "Unauthorized" are never shown
- * as they are (EXPERIENCE.md, network / server errors). Pure.
+ * `(err) => sentence` in the active locale. A coded server error (REST
+ * `{ code }`, GraphQL `extensions.code`, admin payload `errorCode`) renders
+ * `errors.codes.<CODE>` with the values it carries; anything else is
+ * described by its kind (offline, session, ...). Raw server text is never
+ * shown. A code without a message in the active locale (and any unknown
+ * code, which `errorCodeOf` ignores) falls back to the kind sentence, which
+ * reads "Something went wrong" when nothing else is known.
  */
-export function errorKind(err: unknown): ErrorKind {
-  const raw = String(
-    (err as { message?: string } | null | undefined)?.message ?? err ?? "",
-  ).toLowerCase();
-  if (!raw) return "generic";
-  if (raw.includes("unauthorized") || raw.includes("401") || raw.includes("403")) return "session";
-  if (raw.includes("failed to fetch") || raw.includes("networkerror") || raw.includes("network error")) {
-    return "offline";
-  }
-  if (raw.includes("404") || raw.includes("not found")) return "notFound";
-  if (raw.includes("timeout") || raw.includes("aborted")) return "timeout";
-  if (/\b5\d\d\b/.test(raw)) return "server";
-  return "generic";
-}
-
-/* Previous Indonesian sentences, kept exactly for the screens not yet
-   translated (Story 3.4 moves them to useHumanizeError and removes this). */
-const LEGACY_SENTENCE: Record<ErrorKind, string> = {
-  offline: "Sambungan ke server terputus.", // i18n-ignore
-  session: "Sesi kamu sudah tidak berlaku.", // i18n-ignore
-  notFound: "Datanya tidak ditemukan lagi.", // i18n-ignore
-  timeout: "Server terlalu lama menjawab.", // i18n-ignore
-  server: "Server sedang bermasalah.", // i18n-ignore
-  generic: "Sambungan bermasalah.", // i18n-ignore
-};
-
-/**
- * @deprecated Untranslated screens only (Story 3.4): returns the previous
- * Indonesian sentence unchanged. Components use `useHumanizeError()`.
- */
-export function humanizeError(err: unknown): string {
-  return LEGACY_SENTENCE[errorKind(err)];
-}
-
-/** `(err) => sentence` in the active locale, from the `errors` messages. */
 export function useHumanizeError(): (err: unknown) => string {
   const t = useTranslations("errors");
-  return useCallback((err: unknown) => t(errorKind(err)), [t]);
+  return useCallback(
+    (err: unknown) => {
+      const code = errorCodeOf(err);
+      if (code) {
+        const key = `codes.${code}` as Parameters<typeof t>[0];
+        if (t.has(key)) return t(key, errorDetailsOf(err) as never);
+      }
+      return t(errorKind(err));
+    },
+    [t],
+  );
 }

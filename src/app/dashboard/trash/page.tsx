@@ -24,12 +24,13 @@ import { canPurgeTrash, canViewTrash } from "@/lib/permissions";
 import RepThumb from "@/components/dashboard/RepThumb";
 import StatusMark from "@/components/auth/StatusMark";
 import { ConfirmDialog } from "@/components/overlay/Dialog";
-import { useToast, humanizeError } from "@/components/feedback/ToastProvider";
+import { useTranslations } from "next-intl";
+import { useToast, useHumanizeError } from "@/components/feedback/ToastProvider";
 import { ButtonDanger, PillButton } from "@/components/form/buttons";
 import { EmptyState, SkeletonRow, ErrorBox } from "@/components/dashboard/states";
 import TagPill from "@/components/tag-pill/TagPill";
 import { parseSectionName } from "@/lib/sectionNumber";
-import { formatFileSize, formatCount, formatNumber } from "@/lib/format";
+import { useFormat } from "@/i18n/useFormat";
 
 const GET_ALL_TRASHED = gql`
   query GetAllTrashed {
@@ -117,11 +118,7 @@ const ICON_TRASH = (
   </svg>
 );
 
-const SORT_FIELDS = [
-  { field: "date" as const, label: "Tanggal" },
-  { field: "name" as const, label: "Nama" },
-  { field: "size" as const, label: "Ukuran" },
-];
+const SORT_FIELDS = [{ field: "date" as const }, { field: "name" as const }, { field: "size" as const }];
 
 type SortField = (typeof SORT_FIELDS)[number]["field"];
 
@@ -194,6 +191,12 @@ export default function TrashPage() {
     skip: !allowed,
   });
   const { pushToast } = useToast();
+  const t = useTranslations("trash");
+  const tc = useTranslations("common");
+  const f = useFormat();
+  const humanize = useHumanizeError();
+  const remainingText = (days: number | null) =>
+    days === null ? t("remainingUnknown") : t("remainingDays", { count: days });
 
   const [restoreFile] = useMutation(RESTORE_FILE);
   const [permanentDelete] = useMutation(PERMANENT_DELETE);
@@ -214,11 +217,11 @@ export default function TrashPage() {
       .filter((f) => !q || f.originalName.toLowerCase().includes(q))
       .slice()
       .sort((a, b) => {
-        if (sortBy === "name") return a.originalName.localeCompare(b.originalName, "id");
+        if (sortBy === "name") return a.originalName.localeCompare(b.originalName, f.locale);
         if (sortBy === "size") return Number(b.size) - Number(a.size);
         return new Date(b.trashedAt || 0).getTime() - new Date(a.trashedAt || 0).getTime();
       });
-  }, [data, q, sortBy]);
+  }, [data, q, sortBy, f.locale]);
 
   const folders: TrashedFolder[] = useMemo(() => {
     const raw: TrashedFolder[] = data?.allTrashedFolders ?? [];
@@ -226,10 +229,10 @@ export default function TrashPage() {
       .filter((f) => !q || f.name.toLowerCase().includes(q))
       .slice()
       .sort((a, b) => {
-        if (sortBy === "name") return a.name.localeCompare(b.name, "id");
+        if (sortBy === "name") return a.name.localeCompare(b.name, f.locale);
         return new Date(b.trashedAt || 0).getTime() - new Date(a.trashedAt || 0).getTime();
       });
-  }, [data, q, sortBy]);
+  }, [data, q, sortBy, f.locale]);
 
   /* Layar tanpa izin — hanya tercapai lewat URL langsung; menu Trash
      memang tidak dirender untuk role lain. */
@@ -237,12 +240,12 @@ export default function TrashPage() {
     return (
       <div className={styles.denyWrap}>
         <StatusMark variant="locked" />
-        <h1 className={`${styles.denyTitle} spine-display-title`}>Akses ditolak</h1>
+        <h1 className={`${styles.denyTitle} spine-display-title`}>{t("deniedTitle")}</h1>
         <p className={`${styles.denyText} spine-body-lead`}>
-          Hanya admin yang bisa membuka Trash.
+          {t("deniedText")}
         </p>
         <Link href="/dashboard" className={`${styles.denyLink} spine-button spine-focus-ring`}>
-          ← My Media
+          ← {t("backToMedia")}
         </Link>
       </div>
     );
@@ -269,24 +272,19 @@ export default function TrashPage() {
       await refetch();
       setPending(null);
       setAnnounce(
-        p.kind === "restore"
-          ? `${p.name} dikembalikan dari Trash.`
-          : `${p.name} dihapus permanen.`,
+        p.kind === "restore" ? t("restoredAnnounce", { name: p.name }) : t("deletedAnnounce", { name: p.name }),
       );
       pushToast({
         tone: "success",
-        message: p.kind === "restore" ? "Berhasil dikembalikan." : "Dihapus permanen.",
+        message: p.kind === "restore" ? t("restoredToast") : t("deletedToast"),
       });
     } catch (err) {
-      console.error("Aksi Trash gagal", err);
+      console.error("Trash action failed", err);
       setPending(null);
       pushToast({
         tone: "error",
-        message:
-          p.kind === "restore"
-            ? "Gagal mengembalikan. Coba lagi."
-            : "Gagal menghapus permanen. Coba lagi.",
-        cause: humanizeError(err),
+        message: p.kind === "restore" ? t("restoreFailed") : t("deleteFailed"),
+        cause: humanize(err),
       });
     } finally {
       setBusy(false);
@@ -297,33 +295,32 @@ export default function TrashPage() {
     ? ""
     : pending.kind === "restore"
       ? pending.target === "file"
-        ? "Restore file ini?"
-        : "Restore Section ini?"
-      : "Hapus permanen?";
+        ? t("confirm.restoreFileTitle")
+        : t("confirm.restoreSectionTitle")
+      : t("confirm.deleteTitle");
 
   const confirmLead = !pending
     ? null
     : pending.kind === "restore"
       ? pending.target === "file"
-        ? "File akan dikembalikan dari Trash."
-        : "Section akan dikembalikan dari Trash."
+        ? t("confirm.restoreFileLead")
+        : t("confirm.restoreSectionLead")
       : pending.target === "file"
-        ? `Hapus permanen "${pending.name}"? Tindakan ini tidak bisa dibatalkan.`
-        : `Section "${pending.name}" beserta SEMUA file di dalamnya akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.`;
+        ? t("confirm.deleteFileLead", { name: pending.name })
+        : t("confirm.deleteSectionLead", { name: pending.name });
 
   return (
     <div className={styles.container}>
       <div className={styles.pageHead}>
         <Link href="/dashboard" className={`${styles.backPill} spine-hit-area spine-focus-ring spine-link`}>
-          ← My Media
+          ← {t("backToMedia")}
         </Link>
         <h1 className={`${styles.pageTitle} spine-display-page`}>
-          <span className={styles.pageTitleText}>Trash</span>
-          {rawTotal > 0 ? <TagPill>{formatCount(rawTotal, "item")}</TagPill> : null}
+          <span className={styles.pageTitleText}>{t("title")}</span>
+          {rawTotal > 0 ? <TagPill>{t("itemCount", { count: rawTotal })}</TagPill> : null}
         </h1>
         <p className={`${styles.pageSub} spine-body-sub`}>
-          Item di Trash <b>terhapus otomatis setelah {RETENTION_DAYS} hari</b>. Restore untuk
-          mengembalikannya.
+          {t.rich("subtitle", { days: RETENTION_DAYS, b: (chunks) => <b>{chunks}</b> })}
         </p>
       </div>
 
@@ -335,14 +332,14 @@ export default function TrashPage() {
           <input
             type="search"
             className={`${styles.searchInput} spine-body`}
-            placeholder="Cari file &amp; Section di Trash…"
-            aria-label="Cari file &amp; Section di Trash…"
+            placeholder={t("search")}
+            aria-label={t("search")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        <div className={styles.sortPills} role="group" aria-label="Urutkan">
-          {SORT_FIELDS.map(({ field, label }) => (
+        <div className={styles.sortPills} role="group" aria-label={t("sortGroup")}>
+          {SORT_FIELDS.map(({ field }) => (
             <button
               key={field}
               type="button"
@@ -350,7 +347,7 @@ export default function TrashPage() {
               className={`${styles.sortPill} ${sortBy === field ? styles.sortPillActive : ""} spine-sort spine-focus-ring`}
               onClick={() => setSortBy(field)}
             >
-              {label}
+              {t(`sort.${field}`)}
             </button>
           ))}
         </div>
@@ -361,32 +358,32 @@ export default function TrashPage() {
       </p>
       {/* Hasil pencarian diumumkan polite, terpisah dari hasil aksi. */}
       <p className="spine-visually-hidden" role="status">
-        {q ? `${formatNumber(total)} hasil untuk "${query.trim()}" di Trash.` : ""}
+        {q ? t("results", { count: total, query: query.trim() }) : ""}
       </p>
 
       {loading && !data ? (
         <div className={styles.loadingBlock}>
-          <p className={`${styles.loadingText} spine-body`}>Memuat…</p>
+          <p className={`${styles.loadingText} spine-body`}>{t("loading")}</p>
           <SkeletonRow rows={3} variant="card" />
         </div>
       ) : error ? (
         <ErrorBox
-          title="Gagal memuat. Coba lagi."
-          text="Isi Trash tidak bisa diambil dari server."
+          title={t("errorTitle")}
+          text={t("errorText")}
           onRetry={() => void refetch()}
         />
       ) : total === 0 ? (
         q ? (
           <EmptyState
             variant="none"
-            title={`Tidak ada hasil untuk "${query.trim()}" di Trash.`}
-            text="Coba kata lain, atau kosongkan kolom cari untuk melihat semua item."
+            title={t("noResultsTitle", { query: query.trim() })}
+            text={t("noResultsText")}
           />
         ) : (
           <EmptyState
             variant="ghost"
-            title="Trash kosong"
-            text={`Section dan file yang dihapus tersimpan di sini selama ${RETENTION_DAYS} hari sebelum terhapus otomatis.`}
+            title={t("emptyTitle")}
+            text={t("emptyText", { days: RETENTION_DAYS })}
           />
         )
       ) : (
@@ -394,24 +391,24 @@ export default function TrashPage() {
           {folders.length > 0 ? (
             <section className={styles.group}>
               <div className={styles.groupHead}>
-                <h2 className={`${styles.groupTitle} spine-display-panel-mobile`}>Section</h2>
+                <h2 className={`${styles.groupTitle} spine-display-panel-mobile`}>{t("groupSections")}</h2>
                 <span className={`${styles.countChip} spine-chip`}>
-                  {formatNumber(folders.length)}
+                  {f.number(folders.length)}
                 </span>
               </div>
-              <div className={styles.table} role="table" aria-label="Section di Trash">
+              <div className={styles.table} role="table" aria-label={t("sectionsTable")}>
                 <div className={styles.headRow} role="row">
                   <span role="columnheader" className={`${styles.headCell} spine-label`}>
-                    Nama
+                    {t("column.name")}
                   </span>
                   <span role="columnheader" className={`${styles.headCell} spine-label`}>
-                    Project
+                    {t("column.project")}
                   </span>
                   <span role="columnheader" className={`${styles.headCell} spine-label`}>
-                    Sisa waktu
+                    {t("column.remaining")}
                   </span>
                   <span role="columnheader" className="spine-visually-hidden">
-                    Aksi
+                    {t("column.actions")}
                   </span>
                 </div>
                 {folders.map((f) => {
@@ -426,9 +423,9 @@ export default function TrashPage() {
                           {number ? (
                             <span className={`spine-display-label ${styles.numberSticker}`}>
                               <span className={styles.numberPrefix} aria-hidden="true">
-                                NO
+                                {tc("numberPrefix")}
                               </span>
-                              <span className="spine-visually-hidden">Nomor</span> {number}
+                              <span className="spine-visually-hidden">{tc("number")}</span> {number}
                             </span>
                           ) : null}
                           <b className={`${styles.rowName} spine-row-title`} title={title}>
@@ -437,7 +434,7 @@ export default function TrashPage() {
                         </span>
                       </div>
                       <div className={`${styles.cell} ${styles.cellPlain} spine-body`} role="cell">
-                        {f.project?.title || "—"}
+                        {f.project?.title || t("noProject")}
                       </div>
                       <div className={styles.cell} role="cell">
                         <RemainingChip days={left} />
@@ -452,7 +449,7 @@ export default function TrashPage() {
                               target: "section",
                               id: f.id,
                               name: title,
-                              meta: `Section · Project ${f.project?.title || "—"} · ${remainingText(left)}`,
+                              meta: t("metaSection", { project: f.project?.title || t("noProject"), remaining: remainingText(left) }),
                               thumb,
                             })
                           }
@@ -460,7 +457,7 @@ export default function TrashPage() {
                           <span className={styles.actionIcon} aria-hidden="true">
                             {ICON_RESTORE}
                           </span>
-                          Restore
+                          {t("restore")}
                         </PillButton>
                         {canPurge ? (
                         <ButtonDanger
@@ -472,7 +469,7 @@ export default function TrashPage() {
                               target: "section",
                               id: f.id,
                               name: title,
-                              meta: `Section · Project ${f.project?.title || "—"} · ${remainingText(left)}`,
+                              meta: t("metaSection", { project: f.project?.title || t("noProject"), remaining: remainingText(left) }),
                               thumb,
                             })
                           }
@@ -480,7 +477,7 @@ export default function TrashPage() {
                           <span className={styles.actionIcon} aria-hidden="true">
                             {ICON_TRASH}
                           </span>
-                          Delete Forever
+                          {t("deleteForever")}
                         </ButtonDanger>
                         ) : null}
                       </div>
@@ -494,42 +491,42 @@ export default function TrashPage() {
           {files.length > 0 ? (
             <section className={styles.group}>
               <div className={styles.groupHead}>
-                <h2 className={`${styles.groupTitle} spine-display-panel-mobile`}>File</h2>
+                <h2 className={`${styles.groupTitle} spine-display-panel-mobile`}>{t("groupFiles")}</h2>
                 <span className={`${styles.countChip} spine-chip`}>
-                  {formatNumber(files.length)}
+                  {f.number(files.length)}
                 </span>
               </div>
-              <div className={styles.table} role="table" aria-label="File di Trash">
+              <div className={styles.table} role="table" aria-label={t("filesTable")}>
                 <div className={styles.headRow} role="row">
                   <span role="columnheader" className={`${styles.headCell} spine-label`}>
-                    Nama
+                    {t("column.name")}
                   </span>
                   <span role="columnheader" className={`${styles.headCell} spine-label`}>
-                    Ukuran
+                    {t("column.size")}
                   </span>
                   <span role="columnheader" className={`${styles.headCell} spine-label`}>
-                    Sisa waktu
+                    {t("column.remaining")}
                   </span>
                   <span role="columnheader" className="spine-visually-hidden">
-                    Aksi
+                    {t("column.actions")}
                   </span>
                 </div>
-                {files.map((f) => {
-                  const left = daysLeft(f.trashedAt);
-                  const size = formatFileSize(Number(f.size));
+                {files.map((file) => {
+                  const left = daysLeft(file.trashedAt);
+                  const size = f.fileSize(Number(file.size));
                   const thumb = (
                     <RepThumb
                       variant="file"
-                      file={{ kind: fileKind(f.mimeType), extension: fileExtension(f.originalName) }}
+                      file={{ kind: fileKind(file.mimeType), extension: fileExtension(file.originalName) }}
                     />
                   );
                   return (
-                    <div key={f.id} className={styles.row} role="row">
+                    <div key={file.id} className={styles.row} role="row">
                       <div className={`${styles.cell} ${styles.cellContent}`} role="cell">
                         {thumb}
                         <span className={styles.titleLine}>
-                          <b className={`${styles.rowName} spine-row-title`} title={f.originalName}>
-                            {f.originalName}
+                          <b className={`${styles.rowName} spine-row-title`} title={file.originalName}>
+                            {file.originalName}
                           </b>
                         </span>
                       </div>
@@ -547,9 +544,9 @@ export default function TrashPage() {
                             setPending({
                               kind: "restore",
                               target: "file",
-                              id: f.id,
-                              name: f.originalName,
-                              meta: `File · ${size} · ${remainingText(left)}`,
+                              id: file.id,
+                              name: file.originalName,
+                              meta: t("metaFile", { size, remaining: remainingText(left) }),
                               thumb,
                             })
                           }
@@ -557,7 +554,7 @@ export default function TrashPage() {
                           <span className={styles.actionIcon} aria-hidden="true">
                             {ICON_RESTORE}
                           </span>
-                          Restore
+                          {t("restore")}
                         </PillButton>
                         {canPurge ? (
                         <ButtonDanger
@@ -567,9 +564,9 @@ export default function TrashPage() {
                             setPending({
                               kind: "delete",
                               target: "file",
-                              id: f.id,
-                              name: f.originalName,
-                              meta: `File · ${size} · ${remainingText(left)}`,
+                              id: file.id,
+                              name: file.originalName,
+                              meta: t("metaFile", { size, remaining: remainingText(left) }),
                               thumb,
                             })
                           }
@@ -577,7 +574,7 @@ export default function TrashPage() {
                           <span className={styles.actionIcon} aria-hidden="true">
                             {ICON_TRASH}
                           </span>
-                          Delete Forever
+                          {t("deleteForever")}
                         </ButtonDanger>
                         ) : null}
                       </div>
@@ -600,8 +597,8 @@ export default function TrashPage() {
           /* Delete Forever = peringatan (`alertdialog`); Restore bukan —
              mock `key-trash.html` 05 merendernya sebagai `dialog` biasa. */
           alert={pending.kind !== "restore"}
-          confirmLabel={pending.kind === "restore" ? "Restore" : "Delete Forever"}
-          busyLabel={pending.kind === "restore" ? "Mengembalikan…" : "Menghapus…"}
+          confirmLabel={pending.kind === "restore" ? t("restore") : t("deleteForever")}
+          busyLabel={pending.kind === "restore" ? t("restoring") : t("deleting")}
           busy={busy}
           preview={{ thumb: pending.thumb, name: pending.name, meta: pending.meta }}
           onConfirm={() => void runAction()}
@@ -612,24 +609,22 @@ export default function TrashPage() {
   );
 }
 
-function remainingText(days: number | null): string {
-  if (days === null) return "sisa waktu tidak diketahui";
-  return `${formatNumber(days)} hari lagi`;
-}
-
 /**
  * `remaining-chip` — sisa retensi 30 hari. Pada ≤ 3 hari chip berubah
  * menjadi tint danger + ikon peringatan + teks tebal: arti TIDAK pernah
  * dibawa warna saja. Ikon `aria-hidden`; kalimatnya terbaca utuh.
  */
 function RemainingChip({ days }: { days: number | null }) {
+  const t = useTranslations("trash");
   const urgent = days !== null && days <= URGENT_DAYS;
   return (
     <span className={`${styles.remainingChip} ${urgent ? styles.remainingUrgent : ""}`}>
       <span className={styles.remainingIcon} aria-hidden="true">
         {urgent ? ICON_WARN : ICON_CLOCK}
       </span>
-      <span className="spine-chip">{remainingText(days)}</span>
+      <span className="spine-chip">
+        {days === null ? t("remainingUnknown") : t("remainingDays", { count: days })}
+      </span>
     </span>
   );
 }

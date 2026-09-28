@@ -188,6 +188,8 @@ model ProjectChat {
   sender           User        @relation(fields: [senderId], references: [id], onDelete: Cascade)
   referencedFileId String?
   referencedFile   MediaFile?  @relation(fields: [referencedFileId], references: [id], onDelete: SetNull)
+  /// Null for a message a person wrote; "upload" for the system line added when a file finishes uploading.
+  kind             String?
   createdAt        DateTime    @default(now())
 
   @@index([projectId])

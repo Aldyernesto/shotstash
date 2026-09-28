@@ -106,13 +106,6 @@ test('dimensions: orientation codes; English words come from messages', () => {
   assert.equal(fmt.formatExifCameraTime('2026:09:28 10:00:00', t('format.cameraTime')), '2026:09:28 10:00:00 (camera time)');
 });
 
-test('deprecated shims keep their previous output for untranslated screens', () => {
-  assert.equal(fmt.formatTimeWIB(at), '17:00 WIB');
-  assert.equal(fmt.formatDateTimeWIB(at), '28 Sep 2026 · 17:00 WIB');
-  assert.equal(fmt.formatDimensions(2160, 3840), '2160 × 3840 px · Potret (9:16)');
-  assert.equal(fmt.formatExifCameraTime('2026:09:28 10:00:00'), '2026:09:28 10:00:00 (waktu kamera)');
-});
-
 test('built-in English relative words equal the messages', () => {
   const now = new Date(at.getTime());
   const ago = (s) => new Date(now.getTime() - s * 1000);
@@ -174,7 +167,11 @@ test('leftover check: compact JSON, ambiguous short words, gql and i18n-ignore',
     { line: 1, word: 'ini' },
   ]);
   assert.deepEqual(check.checkSource('const a = "Ask Dan or Di";', words, 'a.ts'), []);
-  assert.deepEqual(check.checkSource('const a = "foto dan video";', words, 'a.ts'), [{ line: 1, word: 'dan' }]);
+  assert.deepEqual(check.checkSource('const a = "foto dan video";', words, 'a.ts'), [
+    { line: 1, word: 'foto' },
+    { line: 1, word: 'dan' },
+  ]);
+  assert.deepEqual(check.checkSource('const a = "Dokumen";', words, 'a.ts'), [{ line: 1, word: 'dokumen' }]);
   assert.deepEqual(check.checkSource('const q = gql`query { simpan }`;', words, 'a.ts'), []);
   assert.deepEqual(check.checkSource('const a = "Tutup"; // i18n-ignore', words, 'a.ts'), []);
   assert.ok(check.resolveFileArgs(['no/such/file.ts']).error);

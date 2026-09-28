@@ -1,42 +1,16 @@
 {
-  "description": "Files translated to messages so far (Stories 3.1 to 3.3). no-literal-string is an error here and `npm run i18n:check` must pass on them. Story 3.5 widens this to all of src.",
-  "files": [
-    "src/i18n/**",
-    "src/modules/i18n/**",
-    "src/lib/format.ts",
-    "src/lib/permissions.ts",
-    "src/lib/contentSummary.ts",
-    "src/lib/passwordRule.ts",
-    "src/lib/authMessages.ts",
-    "src/app/layout.tsx",
-    "src/app/page.tsx",
-    "src/app/pending/page.tsx",
-    "src/app/onboarding/page.tsx",
-    "src/app/forgot-password/**",
-    "src/app/setup/**",
-    "src/components/auth/**",
-    "src/components/form/**",
-    "src/components/hero/**",
-    "src/components/PasswordInput.tsx",
-    "src/components/AppSelect.tsx",
-    "src/components/ThemeToggle.tsx",
-    "src/components/AuthContext.tsx",
-    "src/app/dashboard/layout.tsx",
-    "src/app/dashboard/page.tsx",
-    "src/components/dashboard/ListView.tsx",
-    "src/components/dashboard/ActionMenu.tsx",
-    "src/components/dashboard/BulkBar.tsx",
-    "src/components/dashboard/DesktopFrame.tsx",
-    "src/components/dashboard/MobileFrame.tsx",
-    "src/components/dashboard/navDestinations.tsx",
-    "src/components/dashboard/ProjectCard.tsx",
-    "src/components/dashboard/SectionCard.tsx",
-    "src/components/dashboard/FileCard.tsx",
-    "src/components/dashboard/SelectCheck.tsx",
-    "src/components/dashboard/MoreButton.tsx",
-    "src/components/dashboard/AccountMenu.tsx",
-    "src/components/dashboard/states/**",
-    "src/components/overlay/**",
-    "src/components/feedback/**"
+  "description": "Story 3.5: the whole src/ tree is translated. no-literal-string is an error for every file matched by `files`, and `npm run i18n:check` checks them plus messages/*.json. `exceptions` lists technical text that is never shown to users: each entry skips only the string or template literals of `file` whose text matches `pattern` (a JavaScript regular expression). Nothing user-visible may be listed here.",
+  "files": ["src/**"],
+  "exceptions": [
+    {
+      "file": "src/graphql/schema.ts",
+      "pattern": "^#graphql",
+      "reason": "GraphQL type definitions (SDL). Their # comments document the schema for developers and are never sent to users."
+    },
+    {
+      "file": "src/components/dashboard/project3d/renderer.ts",
+      "pattern": "^\\s*(attribute|precision|uniform|varying)\\b",
+      "reason": "GLSL shader source compiled by WebGL. Its // comments are for developers and never rendered."
+    }
   ]
 }

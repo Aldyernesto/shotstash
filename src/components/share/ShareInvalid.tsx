@@ -18,6 +18,7 @@
  */
 
 import React, { useState } from "react";
+import { useTranslations } from "next-intl";
 import Logo from "@/components/Logo";
 import { brand } from "@/lib/brand";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -35,31 +36,14 @@ export type ShareInvalidKind =
   | "file-gone"
   | "private";
 
-const COPY: Record<ShareInvalidKind, { title: string; text: string }> = {
-  expired: {
-    title: "Link sudah kedaluwarsa",
-    text: "Link ini sudah tidak berlaku. Minta link baru ke tim Shotstash yang membagikannya.",
-  },
-  "not-found": {
-    title: "Link tidak ditemukan",
-    text: "Periksa lagi link yang kamu terima, atau minta link baru ke tim Shotstash.",
-  },
-  "project-gone": {
-    title: "Project sudah tidak tersedia",
-    text: "Project ini sudah dihapus atau dipindahkan.",
-  },
-  "section-gone": {
-    title: "Section sudah tidak tersedia",
-    text: "Section ini sudah dihapus atau dipindahkan.",
-  },
-  "file-gone": {
-    title: "File sudah tidak tersedia",
-    text: "File ini sudah dihapus atau dipindahkan.",
-  },
-  private: {
-    title: "Link privat",
-    text: "Masukkan kode akses dari orang yang membagikan link ini.",
-  },
+/** Message keys (`shareInvalid.<key>.title|text`) per state. */
+const COPY_KEY: Record<ShareInvalidKind, "expired" | "notFound" | "projectGone" | "sectionGone" | "fileGone" | "private"> = {
+  expired: "expired",
+  "not-found": "notFound",
+  "project-gone": "projectGone",
+  "section-gone": "sectionGone",
+  "file-gone": "fileGone",
+  private: "private",
 };
 
 export default function ShareInvalid({
@@ -74,6 +58,8 @@ export default function ShareInvalid({
   sectionId?: string | null;
   onUnlocked?: (payload: SharePayload) => void;
 }) {
+  const t = useTranslations("shareInvalid");
+  const tc = useTranslations("common");
   const canUnlock = kind === "private" && !!slug;
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -100,28 +86,30 @@ export default function ShareInvalid({
         else window.location.reload();
         return;
       }
-      if (res.status === 429) {
+      // Rendered by the stable `code` of the answer, never by its text.
+      if (body?.code === "RATE_LIMITED" || res.status === 429) {
         const minutes = Math.max(1, Math.ceil((body?.retryAfter ?? 60) / 60));
-        setError(`Terlalu banyak percobaan. Coba lagi dalam ${minutes} menit.`);
-      } else if (res.status === 401) {
-        setError("Kode akses salah.");
+        setError(t("rateLimited", { minutes }));
+      } else if (body?.code === "INVALID_CODE") {
+        setError(t("wrongCode"));
       } else if (res.ok) {
         // The link died between page load and unlock: reload to show why.
         window.location.reload();
       } else {
-        setError("Link ini sudah tidak berlaku.");
+        setError(t("inactive"));
       }
     } catch {
-      setError("Sambungan ke server terputus. Coba lagi.");
+      setError(t("offline"));
     } finally {
       setBusy(false);
     }
   };
 
-  const copy = COPY[kind];
+  const key = COPY_KEY[kind];
+  const productName = brand.productName;
 
   return (
-    <main className={styles.page} lang="id">
+    <main className={styles.page}>
       <div className={styles.topbar}>
         <Logo size="login" />
         <ThemeToggle />
@@ -132,7 +120,7 @@ export default function ShareInvalid({
           <div className={styles.copy}>
             {/* `tag-pill` DIREDUPKAN — panggung tanpa judul dan tanpa nomor. */}
             <div className={`${styles.tagrow} ${styles.tagDim}`}>
-              <TagPill>Arsip premium</TagPill>
+              <TagPill>{tc("archiveTag")}</TagPill>
             </div>
           </div>
           {/* Objek `project-empty` tanpa label: slot pill dibiarkan KOSONG. */}
@@ -148,12 +136,12 @@ export default function ShareInvalid({
 
         <div className={styles.card}>
           <p className={`spine-label ${styles.kick}`}>{brand.productName}</p>
-          <h1 className={`spine-display-panel-mobile ${styles.cardTitle}`}>{copy.title}</h1>
-          <p className={`spine-body ${styles.cardText}`}>{copy.text}</p>
+          <h1 className={`spine-display-panel-mobile ${styles.cardTitle}`}>{t(`${key}.title`)}</h1>
+          <p className={`spine-body ${styles.cardText}`}>{t(`${key}.text`, { productName })}</p>
           {canUnlock ? (
-            <form onSubmit={unlock} noValidate>
+            <form className={styles.unlockForm} onSubmit={unlock} noValidate>
               <TextField
-                label="Kode akses"
+                label={t("codeLabel")}
                 name="accessCode"
                 autoComplete="one-time-code"
                 autoCapitalize="characters"
@@ -164,8 +152,8 @@ export default function ShareInvalid({
                 error={error}
                 required
               />
-              <ButtonPrimary type="submit" busy={busy} busyLabel="Memeriksa..." disabled={!code.trim()}>
-                Buka link
+              <ButtonPrimary type="submit" busy={busy} busyLabel={t("checking")} disabled={!code.trim()}>
+                {t("open")}
               </ButtonPrimary>
             </form>
           ) : null}

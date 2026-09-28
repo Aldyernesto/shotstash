@@ -311,8 +311,29 @@ ok((await gql(pend.data.register.token, '{ me { accountStatus } }')).data?.me?.a
 // reject revokes sessions: a later approval does not revive the old token
 const pendId = (await gql(pend.data.register.token, '{ me { id } }')).data.me.id;
 ok((await gql(sa.token, `mutation { rejectUser(userId:"${pendId}") { id accountStatus } }`)).data?.rejectUser?.accountStatus === 'REJECTED', 'SA rejects pending account');
-ok((await gql(sa.token, `mutation { approveUser(userId:"${pendId}", role:VIEWER) { id accountStatus } }`)).data?.approveUser?.accountStatus === 'ACTIVE', 'SA approves it afterwards');
-ok(code(await gql(pend.data.register.token, '{ projects { id } }')) === 'UNAUTHENTICATED', 'reject -> approve: old token UNAUTHENTICATED');
+// Only PENDING sign-ups can be decided: approving a rejected one is refused.
+ok(code(await gql(sa.token, `mutation { approveUser(userId:"${pendId}", role:VIEWER) { id accountStatus } }`)) === 'ALREADY_HANDLED', 'approve after reject ALREADY_HANDLED');
+ok(code(await gql(pend.data.register.token, '{ projects { id } }')) === 'UNAUTHENTICATED', 'rejected account: old token UNAUTHENTICATED');
+{
+  // Two fresh PENDING sign-ups straight in the database (a public register
+  // would spend the login limit).
+  const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await db.connect();
+  const ids = [randomUUID(), randomUUID()];
+  for (const [i, id] of ids.entries()) {
+    await db.query(
+      `INSERT INTO users (id, name, email, "passwordHash", role, "accountStatus", active, "updatedAt")
+       VALUES ($1, $2, $3, NULL, 'VIEWER', 'PENDING', false, now())`,
+      [id, `Pending ${i} ${RUN}`, `pending-${i}-${RUN}@example.com`],
+    );
+  }
+  await db.end();
+  const approve = (id) => gql(sa.token, `mutation { approveUser(userId:"${id}", role:VIEWER) { id accountStatus } }`);
+  ok((await approve(ids[0])).data?.approveUser?.accountStatus === 'ACTIVE', 'SA approves a pending sign-up');
+  ok(code(await approve(ids[0])) === 'ALREADY_HANDLED', 'approve twice: second ALREADY_HANDLED');
+  ok((await approve(ids[1])).data?.approveUser?.accountStatus === 'ACTIVE', 'SA approves another pending sign-up');
+  ok(code(await gql(sa.token, `mutation { rejectUser(userId:"${ids[1]}") { id accountStatus } }`)) === 'ALREADY_HANDLED', 'reject after approve ALREADY_HANDLED');
+}
 const longMsg = await gql(editor.token, `mutation { sendMessage(projectId:"${project.id}", message:"${'x'.repeat(5001)}") { id } }`);
 ok(code(longMsg) === 'MESSAGE_TOO_LONG', 'chat message over 5000 characters MESSAGE_TOO_LONG');
 

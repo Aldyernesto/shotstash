@@ -28,6 +28,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { useTranslations } from "next-intl";
 import styles from "./videoControls.module.css";
 import { formatClock } from "@/lib/format";
 
@@ -106,6 +107,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
   { src, poster, label, playSize = "lg", autoPlay = false, className, onPrevFile, onNextFile, onMetadata, onSourceError },
   ref,
 ) {
+  const t = useTranslations("viewer.video");
   const wrapRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const scrubRef = useRef<HTMLDivElement>(null);
@@ -408,7 +410,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
               <i className={styles.arc} />
             </span>
             <span className={styles.bufferLabel} role="status">
-              Memuat video…
+              {t("loading")}
             </span>
           </>
         ) : (
@@ -416,7 +418,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
             type="button"
             className={styles.big}
             data-icon={playing ? "pause" : "play"}
-            aria-label={playing ? "Jeda" : "Putar"}
+            aria-label={playing ? t("pause") : t("play")}
             onClick={togglePlay}
           >
             {playing ? PauseIcon : PlayIcon}
@@ -428,11 +430,11 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
             ref={scrubRef}
             role="slider"
             tabIndex={0}
-            aria-label="Posisi video"
+            aria-label={t("position")}
             aria-valuemin={0}
             aria-valuemax={Math.round(duration)}
             aria-valuenow={Math.round(current)}
-            aria-valuetext={`${clockNow} dari ${clockTotal}`}
+            aria-valuetext={t("positionValue", { now: clockNow, total: clockTotal })}
             className={`spine-focus-ring--double ${styles.scrub}`}
             onPointerDown={(e) => {
               (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
@@ -462,7 +464,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
               <button
                 type="button"
                 className={styles.btn}
-                aria-label={muted ? "Nyalakan suara" : "Bisukan"}
+                aria-label={muted ? t("unmute") : t("mute")}
                 onClick={toggleMute}
               >
                 {muted ? MutedIcon : VolumeIcon}
@@ -470,7 +472,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
               <button
                 type="button"
                 className={styles.btn}
-                aria-label={fullscreen ? "Keluar layar penuh" : "Layar penuh"}
+                aria-label={fullscreen ? t("exitFullscreen") : t("fullscreen")}
                 onClick={toggleFullscreen}
               >
                 {fullscreen ? ExitFullscreenIcon : FullscreenIcon}

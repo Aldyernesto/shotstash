@@ -179,7 +179,8 @@
   vertical-align: -3px;
 }
 
-.copyButton .btnIcon {
+.copyButton .btnIcon,
+.footer .btnIcon {
   margin-right: 8px;
 }
 

@@ -55,16 +55,23 @@ import React, {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { useTranslations } from "next-intl";
 import { gql, useMutation } from "@apollo/client";
 import { readDropAsTrees, type DropNode } from "@/lib/dropTree";
 import { useToast } from "@/components/feedback/ToastProvider";
 import {
   classifyUploadError,
-  humanizeTaskError,
-  UPLOAD_REJECT,
   type UploadRejectCode,
   type UploadTask,
 } from "@/components/upload/uploadTypes";
+import { useUploadFailureText } from "@/components/upload/useUploadFailureText";
+
+/** A failed HTTP answer as an error that carries its REST body `{ code, ... }` and status. */
+function httpError(status: number, body: unknown): Error {
+  const fields = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const code = typeof fields.code === "string" ? fields.code : undefined;
+  return Object.assign(new Error(code ?? `HTTP ${status}`), { status, ...(code ? { code } : {}) });
+}
 
 const INITIATE_UPLOAD = gql`
   mutation InitiateUpload($input: InitiateUploadInput!) {
@@ -147,6 +154,8 @@ const nextId = () => `t${++taskSeq}`;
 
 export function UploadProvider({ children }: { children: ReactNode }) {
   const { pushToast } = useToast();
+  const t = useTranslations("upload");
+  const failureText = useUploadFailureText();
   // Portal live region baru dipasang SETELAH mount. `typeof document !==
   // "undefined"` adalah cabang server/klien: render pertama di klien sudah
   // berbeda dari HTML server dan seluruh pohon dashboard gagal hidrasi.
@@ -211,8 +220,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   /** Seret folder → sub-Section baru, lalu file-filenya masuk antrean. */
   const addDrop = useCallback(
     async (dt: DataTransfer) => {
-      const t = targetRef.current;
-      if (!t) return;
+      const dest = targetRef.current;
+      if (!dest) return;
       const trees = await readDropAsTrees(dt);
       const queued: UploadTask[] = [];
 
@@ -233,16 +242,16 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         let newId = parentId;
         try {
           const res = await createFolder({
-            variables: { projectId: t.projectId, name: node.name, parentId },
+            variables: { projectId: dest.projectId, name: node.name, parentId },
           });
           if (res.data?.createFolder?.id) newId = res.data.createFolder.id;
         } catch (err) {
-          console.error(`Gagal membuat sub-Section "${node.name}":`, err);
+          console.error(`Could not create sub-Section "${node.name}":`, err);
         }
         for (const child of node.children) await walk(child, newId, node.name);
       };
 
-      for (const tree of trees) await walk(tree, t.folderId);
+      for (const tree of trees) await walk(tree, dest.folderId);
       if (queued.length) setTasks((prev) => [...prev, ...queued]);
     },
     [createFolder],
@@ -250,8 +259,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
 
   const uploadOne = useCallback(
     async (task: UploadTask) => {
-      const t = targetRef.current;
-      if (!t) return;
+      const dest = targetRef.current;
+      if (!dest) return;
       try {
         patch(task.id, { status: "uploading", progress: 0, error: undefined });
 
@@ -268,8 +277,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
             input: {
               filename: task.file.name,
               totalSize: task.file.size,
-              projectId: t.projectId,
-              folderId: task.targetFolderId || t.folderId,
+              projectId: dest.projectId,
+              folderId: task.targetFolderId || dest.folderId,
               clientLatencyMs: latencyMs,
             },
           },
@@ -291,7 +300,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
                 body: task.file,
                 headers: { "Content-Type": "application/octet-stream" },
               });
-              if (!putRes.ok) throw new Error(`R2 upload failed: ${putRes.status}`);
+              if (!putRes.ok) throw httpError(putRes.status, null);
               lastErr = null;
               break;
             } catch (err) {
@@ -302,7 +311,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
           if (lastErr) throw lastErr;
           await completeUpload({ variables: { sessionId, r2Key, convertHeic: convert } });
           patch(task.id, { status: "success", progress: 100 });
-          setLive(`${task.file.name} selesai.`);
+          setLive(t("live.fileDone", { name: task.file.name }));
           return;
         }
 
@@ -326,8 +335,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
                 body: formData,
               });
               if (!res.ok) {
-                const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-                throw new Error(errData.message || errData.error || `Chunk ${i} failed`);
+                const errData = await res.json().catch(() => null);
+                throw httpError(res.status, errData);
               }
               lastErr = null;
               break;
@@ -345,24 +354,28 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         patch(task.id, { status: "merging" });
         await completeUpload({ variables: { sessionId, convertHeic: convert } });
         patch(task.id, { status: "success", progress: 100 });
-        setLive(`${task.file.name} selesai.`);
+        setLive(t("live.fileDone", { name: task.file.name }));
       } catch (err) {
-        const code = classifyUploadError(err);
+        const failure = classifyUploadError(err);
         // Baris gagal TETAP tersimpan di antrean.
-        patch(task.id, { status: "error", error: humanizeTaskError(err) });
-        setLive(`${task.file.name} gagal.`);
-        if (code === "session") {
+        patch(task.id, { status: "error", error: failure });
+        setLive(t("live.fileFailed", { name: task.file.name }));
+        if (failure.reason === "session") {
           // Sesi dicabut di tengah batch: file berikutnya berhenti
           // dijalankan dan aplikasi TIDAK crash.
           abortRef.current = true;
           setAborted(true);
-          pushToast({ tone: "error", message: "Upload berhenti.", cause: UPLOAD_REJECT.session });
+          pushToast({ tone: "error", message: t("toast.stopped"), cause: failureText(failure) });
         } else {
-          pushToast({ tone: "error", message: `${task.file.name} gagal diupload.`, cause: humanizeTaskError(err) });
+          pushToast({
+            tone: "error",
+            message: t("toast.fileFailed", { name: task.file.name }),
+            cause: failureText(failure),
+          });
         }
       }
     },
-    [completeUpload, initiateUpload, patch, pushToast],
+    [completeUpload, initiateUpload, patch, pushToast, t, failureText],
   );
 
   const start = useCallback(async (): Promise<UploadRejectCode | null> => {
@@ -389,7 +402,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     setAborted(false);
     abortRef.current = false;
     setRunning(true);
-    setLive(`Upload ${pending.length} file dimulai.`);
+    setLive(t("live.batchStarted", { count: pending.length }));
 
     const queue = [...pending];
     const workers = Array.from({ length: Math.min(3, queue.length) }, async () => {
@@ -401,9 +414,9 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     });
     await Promise.all(workers);
     setRunning(false);
-    setLive("Batch upload selesai.");
+    setLive(t("live.batchDone"));
     return null;
-  }, [running, uploadOne]);
+  }, [running, uploadOne, t]);
 
   const open = useCallback(
     (next: UploadTarget, seed?: { files?: File[]; tasks?: UploadSeed[] }) => {

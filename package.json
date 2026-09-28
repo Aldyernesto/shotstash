@@ -25,7 +25,7 @@
     "build:folder-shell": "node scripts/build-folder-shell-geometry.mjs",
     "check:folder-shell": "node scripts/check-folder-shell.mjs",
     "start": "NODE_ENV=production tsx server.ts",
-    "lint": "eslint --max-warnings 288",
+    "lint": "eslint --max-warnings 287",
     "check:tokens": "node scripts/check-design-tokens.mjs",
     "check:legacy": "node scripts/check-legacy-allowlist.mjs",
     "brand:css": "tsx scripts/gen-brand-css.ts",
@@ -37,7 +37,6 @@
     "e2e:setup": "node scripts/e2e-setup.mjs",
     "typecheck": "tsc --noEmit",
     "i18n:check": "node scripts/i18n-check.mjs",
-    "i18n:check:all": "node scripts/i18n-check.mjs --all",
     "test": "node --test \"scripts/**/*.test.mjs\""
   },
   "dependencies": {

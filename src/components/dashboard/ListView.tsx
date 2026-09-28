@@ -545,9 +545,9 @@ export default function ListView(props: ListViewProps) {
                     {number ? (
                       <span className={`spine-display-label ${styles.numberSticker}`}>
                         <span className={styles.numberPrefix} aria-hidden="true">
-                          {tCards("numberPrefix")}
+                          {tCommon("numberPrefix")}
                         </span>
-                        <span className="spine-visually-hidden">{tCards("number")}</span> {number}
+                        <span className="spine-visually-hidden">{tCommon("number")}</span> {number}
                       </span>
                     ) : null}
                     <b className={`spine-display-card ${styles.rowTitle}`} title={title}>

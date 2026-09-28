@@ -23,13 +23,14 @@ import styles from "./page.module.css";
 import { gql, useQuery, useMutation } from "@apollo/client";
 import RepThumb, { type RepThumbVariant } from "@/components/dashboard/RepThumb";
 import { CopyPill } from "@/components/feedback/CopyPill";
-import { useToast, humanizeError } from "@/components/feedback/ToastProvider";
+import { useTranslations } from "next-intl";
+import { useToast, useHumanizeError } from "@/components/feedback/ToastProvider";
 import { ConfirmDialog } from "@/components/overlay/Dialog";
 import { ButtonDanger } from "@/components/form/buttons";
 import { StatusChip } from "@/components/form/StatusChip";
 import { EmptyState, SkeletonRow, ErrorBox } from "@/components/dashboard/states";
 import TagPill from "@/components/tag-pill/TagPill";
-import { formatCount, formatDate, formatTimeWIB } from "@/lib/format";
+import { useFormat } from "@/i18n/useFormat";
 
 const GET_SHARE_LINKS = gql`
   query GetShareLinks {
@@ -62,7 +63,8 @@ type ShareLinkRow = {
   accessCount: number;
   createdAt: string;
   targetType: string;
-  targetName: string;
+  /** Null when the target was deleted. */
+  targetName: string | null;
 };
 
 /* Ikon garis — semuanya `aria-hidden`, arti selalu ada di teksnya. */
@@ -90,12 +92,11 @@ const ICON_REVOKE = (
   </svg>
 );
 
-/** Istilah app: "Folder" adalah nama lama Section (Glosarium EXPERIENCE.md). */
-const TYPE_LABEL: Record<string, string> = {
-  project: "Project",
-  folder: "Section",
-  file: "File",
-  unknown: "Tautan",
+/** App terms: "folder" is the old name of a Section. Keys of `shared.type`. */
+const TYPE_KEY: Record<string, "project" | "section" | "file"> = {
+  project: "project",
+  folder: "section",
+  file: "file",
 };
 
 const THUMB_VARIANT: Record<string, RepThumbVariant> = {
@@ -118,20 +119,15 @@ const REP_PLACEHOLDER = [
   { id: "ph-3", kind: "image" },
 ];
 
-/** Nama yang datang dari resolver saat targetnya sudah tidak ada. */
-const GONE_NAMES: Record<string, string> = {
-  "File sudah dihapus": "File sudah dihapus",
-  "Folder sudah dihapus": "Section sudah dihapus",
-  "Project sudah dihapus": "Project sudah dihapus",
-  "Tidak ditemukan": "Target sudah dihapus",
-};
-
 export default function SharedLinksPage() {
   const { data, loading, error, refetch } = useQuery(GET_SHARE_LINKS, {
     fetchPolicy: "cache-and-network",
   });
   const [revokeShareLink] = useMutation(REVOKE_SHARE_LINK);
   const { pushToast } = useToast();
+  const t = useTranslations("shared");
+  const tc = useTranslations("common");
+  const humanize = useHumanizeError();
 
   /** Baris yang sedang dikonfirmasi pencabutannya (null = tidak ada dialog). */
   const [pending, setPending] = useState<ShareLinkRow | null>(null);
@@ -149,15 +145,15 @@ export default function SharedLinksPage() {
       await revokeShareLink({ variables: { id: row.id } });
       await refetch();
       setPending(null);
-      setAnnounce(`Akses tautan /s/${row.slug} dicabut.`);
-      pushToast({ tone: "success", message: "Akses link dicabut." });
+      setAnnounce(t("revokedAnnounce", { path: `/s/${row.slug}` }));
+      pushToast({ tone: "success", message: t("revokedToast") });
     } catch (err) {
-      console.error("Gagal mencabut akses link", err);
+      console.error("Revoke share link failed", err);
       setPending(null);
       pushToast({
         tone: "error",
-        message: "Gagal mencabut akses link. Coba lagi.",
-        cause: humanizeError(err),
+        message: t("revokeFailed"),
+        cause: humanize(err),
       });
     } finally {
       setBusy(false);
@@ -170,12 +166,11 @@ export default function SharedLinksPage() {
     <div className={styles.container}>
       <div className={styles.pageHead}>
         <h1 className={`${styles.pageTitle} spine-display-page`}>
-          <span className={styles.pageTitleText}>Tautan Dibagikan</span>
-          {count > 0 ? <TagPill>{formatCount(count, "tautan")}</TagPill> : null}
+          <span className={styles.pageTitleText}>{t("title")}</span>
+          {count > 0 ? <TagPill>{t("linkCount", { count })}</TagPill> : null}
         </h1>
         <p className={`${styles.pageSub} spine-body-sub`}>
-          Kelola akses file yang sudah kamu bagikan ke pihak luar. Klik alamat tautan untuk
-          menyalinnya.
+          {t("subtitle")}
         </p>
       </div>
 
@@ -185,41 +180,41 @@ export default function SharedLinksPage() {
 
       {loading && !data ? (
         <div className={styles.loadingBlock}>
-          <p className={`${styles.loadingText} spine-body`}>Memuat data link…</p>
+          <p className={`${styles.loadingText} spine-body`}>{t("loading")}</p>
           <SkeletonRow rows={3} variant="card" />
         </div>
       ) : error ? (
         <ErrorBox
-          title="Gagal memuat. Coba lagi."
-          text="Daftar tautan tidak bisa diambil dari server."
+          title={t("errorTitle")}
+          text={t("errorText")}
           onRetry={() => void refetch()}
         />
       ) : count === 0 ? (
         <EmptyState
           variant="ghost"
-          title="Belum ada tautan yang dibagikan."
-          text="Buat tautan lewat menu Share di file, Section, atau Project."
+          title={t("emptyTitle")}
+          text={t("emptyText")}
         />
       ) : (
-        <div className={styles.table} role="table" aria-label="Tautan dibagikan">
+        <div className={styles.table} role="table" aria-label={t("tableLabel")}>
           <div className={styles.headRow} role="row">
             <span role="columnheader" className={`${styles.headCell} spine-label`}>
-              Konten
+              {t("column.content")}
             </span>
             <span role="columnheader" className={`${styles.headCell} spine-label`}>
-              Tautan
+              {t("column.link")}
             </span>
             <span role="columnheader" className={`${styles.headCell} spine-label`}>
-              Mode
+              {t("column.mode")}
             </span>
             <span role="columnheader" className={`${styles.headCell} spine-label`}>
-              Dilihat
+              {t("column.views")}
             </span>
             <span role="columnheader" className={`${styles.headCell} spine-label`}>
-              Kedaluwarsa
+              {t("column.expires")}
             </span>
             <span role="columnheader" className="spine-visually-hidden">
-              Aksi
+              {t("column.actions")}
             </span>
           </div>
 
@@ -231,11 +226,11 @@ export default function SharedLinksPage() {
 
       {pending ? (
         <ConfirmDialog
-          title="Cabut akses link ini?"
-          lead="Link tidak akan bisa diakses lagi."
+          title={tc("revokeLinkTitle")}
+          lead={t("confirmLead")}
           tone="permanent"
-          confirmLabel="Cabut Akses"
-          busyLabel="Mencabut…"
+          confirmLabel={tc("revokeLink")}
+          busyLabel={t("revoking")}
           busy={busy}
           icon={<span className={styles.confirmIcon}>{ICON_REVOKE}</span>}
           preview={{
@@ -247,11 +242,12 @@ export default function SharedLinksPage() {
                 size="sm"
               />
             ),
-            name: displayName(pending.targetName),
-            meta: `/s/${pending.slug} · ${modeLabel(pending.mode)} · dilihat ${formatCount(
-              pending.accessCount,
-              "kali",
-            )}`,
+            name: displayName(pending, t),
+            meta: t("confirmMeta", {
+              path: `/s/${pending.slug}`,
+              mode: modeLabel(pending.mode, t),
+              count: pending.accessCount,
+            }),
           }}
           onConfirm={() => void runRevoke()}
           onClose={() => (busy ? undefined : setPending(null))}
@@ -261,16 +257,21 @@ export default function SharedLinksPage() {
   );
 }
 
-function isGone(name: string): boolean {
-  return Object.prototype.hasOwnProperty.call(GONE_NAMES, name);
+type SharedT = ReturnType<typeof useTranslations<"shared">>;
+
+/** The resolver answers a null name once the target is deleted. */
+function isGone(name: string | null): boolean {
+  return name === null;
 }
 
-function displayName(name: string): string {
-  return GONE_NAMES[name] ?? name;
+function displayName(link: ShareLinkRow, t: SharedT): string {
+  if (link.targetName !== null) return link.targetName;
+  const key = TYPE_KEY[link.targetType];
+  return key ? t(`deleted.${key}`) : t("deleted.unknown");
 }
 
-function modeLabel(mode: string): string {
-  return mode === "PUBLIC" ? "Public" : "Private";
+function modeLabel(mode: string, t: SharedT): string {
+  return mode === "PUBLIC" ? t("modePublic") : t("modePrivate");
 }
 
 /**
@@ -280,9 +281,13 @@ function modeLabel(mode: string): string {
  * (kolom jadi baris ber-label) — DOM-nya satu, hanya CSS-nya beralih.
  */
 function LinkRow({ link, onRevoke }: { link: ShareLinkRow; onRevoke: () => void }) {
+  const t = useTranslations("shared");
+  const tc = useTranslations("common");
+  const f = useFormat();
   const gone = isGone(link.targetName);
-  const name = displayName(link.targetName);
-  const type = TYPE_LABEL[link.targetType] ?? TYPE_LABEL.unknown;
+  const name = displayName(link, t);
+  const typeKey = TYPE_KEY[link.targetType];
+  const type = typeKey ? t(`type.${typeKey}`) : t("type.unknown");
   const isPublic = link.mode === "PUBLIC";
 
   return (
@@ -314,23 +319,26 @@ function LinkRow({ link, onRevoke }: { link: ShareLinkRow; onRevoke: () => void 
       <div className={styles.facts} role="presentation">
         <div className={`${styles.cell} ${styles.cellFact}`} role="cell">
           <StatusChip tone="neutral" icon={isPublic ? ICON_GLOBE : ICON_LOCK}>
-            {modeLabel(link.mode)}
+            {modeLabel(link.mode, t)}
           </StatusChip>
         </div>
 
         <div className={`${styles.cell} ${styles.cellFact}`} role="cell">
           <span className={styles.views}>
-            <b className="spine-row-title">{link.accessCount}</b>
-            <small className={`${styles.viewsUnit} spine-footnote`}>kali</small>
+            {t.rich("views", {
+              count: link.accessCount,
+              figure: (chunks) => <b className="spine-row-title">{chunks}</b>,
+              unit: (chunks) => <small className={`${styles.viewsUnit} spine-footnote`}>{chunks}</small>,
+            })}
           </span>
         </div>
 
         <div className={`${styles.cell} ${styles.cellFact}`} role="cell">
         {link.expiresAt ? (
           <span className={styles.expiry}>
-            <b className={`${styles.expiryDate} spine-body`}>{formatDate(link.expiresAt)}</b>
+            <b className={`${styles.expiryDate} spine-body`}>{f.date(link.expiresAt)}</b>
             <small className={`${styles.expiryTime} spine-footnote`}>
-              {formatTimeWIB(link.expiresAt)}
+              {f.time(link.expiresAt)}
             </small>
           </span>
         ) : (
@@ -338,7 +346,7 @@ function LinkRow({ link, onRevoke }: { link: ShareLinkRow; onRevoke: () => void 
             <span className={styles.permanentIcon} aria-hidden="true">
               {ICON_INFINITY}
             </span>
-            Permanen
+            {t("permanent")}
           </span>
         )}
         </div>
@@ -349,12 +357,12 @@ function LinkRow({ link, onRevoke }: { link: ShareLinkRow; onRevoke: () => void 
           variant="outline"
           className={styles.revokeBtn}
           onClick={onRevoke}
-          aria-label={`Cabut akses tautan /s/${link.slug}`}
+          aria-label={t("revokeLabel", { path: `/s/${link.slug}` })}
         >
           <span className={styles.revokeIcon} aria-hidden="true">
             {ICON_REVOKE}
           </span>
-          Cabut Akses
+          {tc("revokeLink")}
         </ButtonDanger>
       </div>
     </div>

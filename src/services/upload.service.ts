@@ -15,6 +15,7 @@ import { generateThumbnail, needsThumbnail } from './thumbnail.service';
 import { createNotification } from './notification.service';
 import { maybeConvertHeicToJpg } from './heic-convert.service';
 import { storageRoot } from '@/lib/storageRoot';
+import { codedError } from '@/modules/errors';
 
 // ============================================
 // Configuration
@@ -86,8 +87,8 @@ export async function uploadChunk(data: {
     where: { id: data.sessionId },
   });
 
-  if (!session) throw new Error('Upload session tidak ditemukan');
-  if (session.status !== 'IN_PROGRESS') throw new Error('Upload session sudah selesai atau gagal');
+  if (!session) throw codedError('UPLOAD_SESSION_NOT_FOUND', 'Upload session not found');
+  if (session.status !== 'IN_PROGRESS') throw codedError('UPLOAD_SESSION_CLOSED', 'Upload session already completed or failed');
 
   // Simpan chunk ke temp directory di NAS
   const chunkPath = path.join(
@@ -134,7 +135,7 @@ export async function completeUpload(sessionId: string, _r2Key?: string | null, 
     where: { id: sessionId },
   });
 
-  if (!session) throw new Error('Upload session tidak ditemukan');
+  if (!session) throw codedError('UPLOAD_SESSION_NOT_FOUND', 'Upload session not found');
 
   const tempDir = path.join(STORAGE_PATHS.tempUploads, sessionId);
 
@@ -180,7 +181,7 @@ export async function completeUpload(sessionId: string, _r2Key?: string | null, 
       where: { id: sessionId },
       data: { status: 'FAILED' },
     });
-    throw new Error('MD5 checksum mismatch — file corrupt selama upload');
+    throw codedError('CHECKSUM_MISMATCH', 'MD5 checksum mismatch: the file was corrupted during upload');
   }
 
   // Auto-convert HEIC/HEIF → JPEG before recording (unless caller opted out)
@@ -238,11 +239,12 @@ export async function completeUpload(sessionId: string, _r2Key?: string | null, 
     data: { status: 'COMPLETED' },
   });
 
-  // System Bot ngirim notifikasi ke Project Chat
-  const botMessage = `File ${session.filename} berhasil di-upload dan selesai dirakit!`;
+  // System line in project discussion: kind "upload", rendered by the
+  // client from messages; `message` is the stored English fallback.
   const chat = await prisma.projectChat.create({
     data: {
-      message: botMessage,
+      kind: 'upload',
+      message: `Uploaded ${session.filename}.`,
       projectId: session.projectId,
       senderId: session.uploadedById, // or bot ID if a bot user exists
       referencedFileId: mediaFile.id,
@@ -258,17 +260,16 @@ export async function completeUpload(sessionId: string, _r2Key?: string | null, 
   pubsub.publish(`CHAT_MESSAGES_${session.projectId}`, { chatMessages: safeChat }).catch(() => {});
 
   // Notify project members
+  // English title/body are the stored fallback; the bell renders from type + data.
+  const projectTitle = mediaFile.project?.title ?? '';
   const projectMembers = await prisma.user.findMany({ select: { id: true }});
-  console.log('[notif] members found:', projectMembers.length);
   for (const member of projectMembers) {
-    console.log('[notif] creating for:', member.id);
     try {
       await createNotification({
         userId: member.id, type: 'upload_complete',
-        title: 'File Uploaded', body: `${session.filename} added to project`,
-        data: { projectId: session.projectId, fileId: mediaFile.id },
+        title: 'File uploaded', body: `${session.filename} was added to ${projectTitle || 'the project'}`,
+        data: { projectId: session.projectId, fileId: mediaFile.id, fileName: session.filename, projectTitle },
       });
-      console.log('[notif] created for:', member.id);
     } catch (err: any) {
       console.error('[notif] error:', err.message, err.stack);
     }

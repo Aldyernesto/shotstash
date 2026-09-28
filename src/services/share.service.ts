@@ -5,6 +5,7 @@ import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { createNotification } from './notification.service';
 import { generateAccessCode, hashAccessCode } from '@/modules/share';
+import { codedError } from '@/modules/errors';
 
 type ShareMode = 'PUBLIC' | 'PRIVATE';
 
@@ -29,7 +30,7 @@ export async function createShareLink(data: {
   createdById: string;
 }) {
   const targets = [data.fileId, data.folderId, data.projectId].filter(Boolean);
-  if (targets.length !== 1) throw new Error('Exactly one target is required: fileId, folderId or projectId');
+  if (targets.length !== 1) throw codedError('INVALID_SHARE_TARGET', 'Exactly one target is required: fileId, folderId or projectId');
 
   const slug = generateSlug();
 
@@ -57,11 +58,14 @@ export async function createShareLink(data: {
   const url = `${BASE_URL}/s/${slug}`;
 
   // Only the creator is notified: other users may not be allowed to see the target.
-  const name = data.fileId ? (shareLink.file?.originalName || 'a file') : 'a folder';
+  const targetKind = data.fileId ? 'file' : data.folderId ? 'section' : 'project';
+  const fileName =
+    shareLink.file?.originalName ?? shareLink.folder?.name ?? shareLink.projectRef?.title ?? '';
   createNotification({
     userId: data.createdById, type: 'file_shared',
-    title: 'File Shared', body: `New share link created for ${name}`,
-    data: { slug, fileId: data.fileId || '' },
+    // English fallback; the bell renders from type + data.
+    title: 'Share link created', body: `New share link for ${fileName || `a ${targetKind}`}`,
+    data: { slug, fileId: data.fileId || '', fileName, targetKind },
   }).catch(() => {});
 
   return { ...shareLink, url, accessCode };

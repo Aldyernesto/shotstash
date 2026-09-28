@@ -5,7 +5,8 @@
  */
 import { NextResponse } from 'next/server';
 import { defineRoute } from '@/lib/defineRoute';
-import { SHARE_PAGE_SIZE, findLiveShare, resolveShare, resolveSharePage, type ShareSort } from '@/lib/shareLink';
+import { SHARE_PAGE_SIZE, findLiveShare, resolveShare, resolveSharePage, shareLocale } from '@/lib/shareLink';
+import { LOCALE_COOKIE } from '@/modules/i18n';
 import { shareSigner, shareUnlocked } from '@/modules/share';
 
 export const dynamic = 'force-dynamic';
@@ -17,12 +18,14 @@ export const GET = defineRoute<{ slug: string }>({
     const offset = Math.max(0, Number(url.searchParams.get('offset') ?? 0) || 0);
     const limit = Math.min(60, Math.max(1, Number(url.searchParams.get('limit') ?? SHARE_PAGE_SIZE) || SHARE_PAGE_SIZE));
     const sectionId = url.searchParams.get('section');
-    const sort = url.searchParams.get('sort') as ShareSort | null;
+    const sort = url.searchParams.get('sort');
+    // Anonymous visitor: cookie, then DEFAULT_LOCALE, then English (names sort in it).
+    const locale = shareLocale(req.cookies.get(LOCALE_COOKIE)?.value);
 
     const link = await findLiveShare({ slug: params.slug });
     const unlocked = link ? shareUnlocked(req.cookies, link) : false;
     const page = link
-      ? await resolveSharePage(params.slug, { unlocked, signer: shareSigner, sectionId, sort, offset, limit })
+      ? await resolveSharePage(params.slug, { unlocked, signer: shareSigner, sectionId, sort, locale, offset, limit })
       : null;
     if (page) return NextResponse.json(page);
 

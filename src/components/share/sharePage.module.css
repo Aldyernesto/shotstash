@@ -273,6 +273,15 @@
   color: var(--app-spine-muted);
 }
 
+/* Access-code form: one column with the same spacing as the auth forms
+   (forgot-password `.stack`). */
+.unlockForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 16px 0 0;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -893,4 +902,8 @@
 .tagDim > span {
   background: var(--app-spine-pocket-top);
   color: var(--app-spine-nav-idle);
+}
+
+.unlockForm > button {
+  align-self: flex-start;
 }

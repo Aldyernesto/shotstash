@@ -21,8 +21,8 @@
  */
 
 import React, { useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { useUpload } from "@/components/UploadContext";
-import { formatNumber } from "@/lib/format";
 import { parseSectionName } from "@/lib/sectionNumber";
 import { summarize } from "./uploadTypes";
 import styles from "./upload.module.css";
@@ -48,6 +48,7 @@ const ICON_X = (
 );
 
 export default function UploadDock() {
+  const t = useTranslations("upload.dock");
   const q = useUpload();
   const ref = useRef<HTMLDivElement>(null);
   const warned = useRef(false);
@@ -59,8 +60,8 @@ export default function UploadDock() {
     if (empty && !warned.current) {
       warned.current = true;
       console.warn(
-        "[upload-dock] Antrean kosong saat dock seharusnya tampil — dock tidak dirender. " +
-          "Upload yang terputus karena reload diperlakukan sebagai batch yang berakhir.",
+        "[upload-dock] Queue is empty while the dock should show, so it is not rendered. " +
+          "An upload cut off by a reload is treated as a finished batch.",
       );
     }
   }, [empty]);
@@ -89,23 +90,23 @@ export default function UploadDock() {
   if (!visible || empty) return null;
 
   const s = summarize(q.tasks);
-  const section = parseSectionName(q.target!.folderName || "").title || "Section";
+  const section = parseSectionName(q.target!.folderName || "").title || t("sectionFallback");
   const stopped = !q.running && s.running === 0 && s.waiting === 0;
   const donePct = (s.done / s.total) * 100;
   const failPct = (s.failed / s.total) * 100;
 
   // Kegagalan DITULIS sebagai teks, tidak pernah hanya segmen berwarna.
-  const title = stopped && !s.failed ? `Upload selesai · ${section}` : `Mengupload ke ${section}`;
+  const title = stopped && !s.failed ? t("titleDone", { section }) : t("titleRunning", { section });
   const sub = stopped
     ? s.failed
-      ? `${formatNumber(s.done)} dari ${formatNumber(s.total)} file masuk · ${formatNumber(s.failed)} gagal`
-      : `${formatNumber(s.done)} dari ${formatNumber(s.total)} file masuk`
+      ? t("subDoneFailed", { done: s.done, total: s.total, failed: s.failed })
+      : t("subDone", { done: s.done, total: s.total })
     : s.failed
-      ? `${formatNumber(s.done)} dari ${formatNumber(s.total)} file · ${formatNumber(s.failed)} gagal`
-      : `${formatNumber(s.done)} dari ${formatNumber(s.total)} file · ${formatNumber(s.running)} sedang diupload`;
+      ? t("subRunningFailed", { done: s.done, total: s.total, failed: s.failed })
+      : t("subRunning", { done: s.done, total: s.total, running: s.running });
 
   return (
-    <div className={styles.dock} ref={ref} role="region" aria-label="Upload berjalan">
+    <div className={styles.dock} ref={ref} role="region" aria-label={t("region")}>
       <div className={styles.dockHead}>
         <span className={styles.dockIcon} aria-hidden="true">
           {ICON_UPLOAD}
@@ -117,8 +118,8 @@ export default function UploadDock() {
         <span className={styles.dockButtons}>
           <button
             type="button"
-            aria-label="Tampilkan daftar upload"
-            title="Tampilkan"
+            aria-label={t("showList")}
+            title={t("show")}
             className={`spine-focus-ring ${styles.dockButton}`}
             onClick={() => q.setMinimized(false)}
           >
@@ -130,8 +131,8 @@ export default function UploadDock() {
           {stopped ? (
             <button
               type="button"
-              aria-label="Tutup panel upload"
-              title="Tutup"
+              aria-label={t("closePanel")}
+              title={t("close")}
               className={`spine-focus-ring ${styles.dockButton}`}
               onClick={q.finish}
             >
@@ -143,7 +144,7 @@ export default function UploadDock() {
       <div
         className={`${styles.track} ${styles.dockTrack}`}
         role="progressbar"
-        aria-label="Progres batch"
+        aria-label={t("progress")}
         aria-valuenow={s.done}
         aria-valuemin={0}
         aria-valuemax={s.total}

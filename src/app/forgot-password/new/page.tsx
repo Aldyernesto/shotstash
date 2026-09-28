@@ -75,7 +75,7 @@ function NewPasswordForm() {
   const [unavailable, setUnavailable] = useState(false);
   // Token kedaluwarsa/dipakai → kartu khusus, sesi sudah dibuang dari storage.
   const [expired, setExpired] = useState(false);
-  // "Sesi reset berlaku sampai HH:MM WIB" — null saat hidrasi (fallback durasi).
+  // "Reset session valid until 17:00 GMT+7" (viewer zone); null while hydrating (duration fallback).
   const [expiryMs, setExpiryMs] = useState<number | null>(null);
   const submittingRef = useRef(false);
   // Pengaman navigasi keluar (review hunter G3): begitu sesi dihapus — sukses

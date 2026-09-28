@@ -187,6 +187,24 @@
   opacity: 0.72;
 }
 
+/* System line (a finished upload): one quiet row, no card. */
+.msgSystem {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 16px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.msgSystemText {
+  margin: 0;
+  min-width: 0;
+  color: var(--app-spine-meta);
+  overflow-wrap: anywhere;
+}
+
 /* ---------- memuat / kosong / gagal ---------- */
 
 /* Siluet DIAM — tanpa shimmer (AC 3.17). */

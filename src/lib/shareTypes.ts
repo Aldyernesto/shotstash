@@ -45,14 +45,14 @@ export type SharePayload = {
   /** Signed URL of the ZIP for the whole payload (valid 24 h), null when nothing can be signed. */
   zipUrl: string | null;
   projectName: string | null;
-  /** Varian file: nama Section induk untuk kicker. */
-  sectionLabel: string | null;
+  /** File variant: the parent Section for the kicker (number and title). */
+  sectionLabel: { number: string | null; title: string } | null;
   fileCount: number;
   sectionCount: number | null;
   totalSizeText: string;
   dateText: string;
-  /** "Berisi 60 foto, 12 video, dan 2 dokumen." */
-  breakdown: string | null;
+  /** Counts per kind for "Contains 60 photos, 12 videos and 2 documents."; null when empty. */
+  breakdown: { photos: number; videos: number; documents: number } | null;
   expiresAt: string | null;
   /** 1-3 thumbnail Kartu perwakilan panggung. */
   stageThumbs: (string | null)[];
@@ -76,16 +76,25 @@ export type ShareResolution =
 /** Jumlah baris per halaman grid ([ASSUMPTION] EXPERIENCE.md). */
 export const SHARE_PAGE_SIZE = 12;
 
-/** `sort-pills` halaman share — diurutkan DI SERVER supaya paging benar. */
-export type ShareSort = "tanggal" | "nama" | "ukuran" | "tipe" | "nomor" | "jumlah";
+/** Share page sort ids (the public `?sort=` contract), sorted on the server so paging stays right. */
+export type ShareSort = "date" | "name" | "size" | "type" | "number" | "count";
 
-export const FILE_SORTS: ShareSort[] = ["nama", "tanggal", "ukuran", "tipe"];
-export const SECTION_SORTS: ShareSort[] = ["nomor", "nama", "jumlah"];
+export const FILE_SORTS: ShareSort[] = ["name", "date", "size", "type"];
+export const SECTION_SORTS: ShareSort[] = ["number", "name", "count"];
 
-/** Kata jenis manusiawi — BUKAN kolom mime. */
-export const KIND_WORD: Record<ShareFileKind, string> = {
-  image: "Foto",
-  video: "Video",
-  audio: "Audio",
-  document: "Dokumen",
+/** Sort ids of earlier releases, still accepted in `?sort=` links. */
+const LEGACY_SORTS: Record<string, ShareSort> = {
+  tanggal: "date", // i18n-ignore: old URL id
+  nama: "name", // i18n-ignore: old URL id
+  ukuran: "size", // i18n-ignore: old URL id
+  tipe: "type", // i18n-ignore: old URL id
+  nomor: "number", // i18n-ignore: old URL id
+  jumlah: "count", // i18n-ignore: old URL id
 };
+
+/** A `?sort=` value as a sort id: current ids pass, old ids map to their new name, anything else is null. */
+export function normalizeShareSort(raw: string | null | undefined): ShareSort | null {
+  if (!raw) return null;
+  if ((FILE_SORTS as string[]).includes(raw) || (SECTION_SORTS as string[]).includes(raw)) return raw as ShareSort;
+  return Object.prototype.hasOwnProperty.call(LEGACY_SORTS, raw) ? LEGACY_SORTS[raw] : null;
+}

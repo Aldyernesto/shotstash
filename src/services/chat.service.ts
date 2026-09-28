@@ -25,16 +25,20 @@ export async function sendMessage(senderId: string, projectId: string, message: 
       where: { active: true, accountStatus: 'ACTIVE', id: { not: senderId } },
       select: { id: true, name: true, email: true, role: true, active: true, accountStatus: true, readOnly: true },
     });
-    const senderName = chat.sender?.name || 'Someone';
+    // Never the email: without a name the bell shows a translated "Someone".
+    const senderName = chat.sender?.name?.trim() || '';
+    const projectTitle = chat.project?.title || '';
+    const excerpt = message.slice(0, 80);
     for (const u of candidates) {
       if (!handles.some((h) => handleMatchesUser(h, u))) continue;
       if (!can(u, 'project.view')) continue;
       createNotification({
         userId: u.id,
         type: 'chat_mention',
-        title: `New message in ${chat.project?.title || 'Project'}`,
-        body: `${senderName}: ${message.slice(0, 80)}`,
-        data: { projectId, chatId: chat.id },
+        // English fallback; the bell renders from type + data.
+        title: `New message in ${projectTitle || 'a project'}`,
+        body: `${senderName || 'Someone'}: ${excerpt}`,
+        data: { projectId, chatId: chat.id, projectTitle, excerpt, ...(senderName ? { senderName } : {}) },
       }).catch(() => {});
     }
   }

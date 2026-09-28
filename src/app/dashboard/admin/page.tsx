@@ -22,8 +22,10 @@ import { RadioCardGroup, InfoNote, OneTimeSecret } from "@/components/overlay/fi
 import { FormAlert } from "@/components/form/FormAlert";
 import TextField from "@/components/form/TextField";
 import fieldStyles from "@/components/form/TextField.module.css";
-import { humanizeError } from "@/components/feedback/ToastProvider";
-import { formatNumber, formatFileSize, formatCount } from "@/lib/format";
+import { useTranslations } from "next-intl";
+import { useHumanizeError } from "@/components/feedback/ToastProvider";
+import { useFormat } from "@/i18n/useFormat";
+import { errorCodeOf } from "@/lib/errorCodes";
 
 /** Chevron `select-pill` — elemen SVG supaya warnanya ikut tema. */
 const CHEVRON = (
@@ -52,6 +54,7 @@ const ADMIN_SET_PASSWORD = gql`
       success
       message
       password
+      errorCode
     }
   }
 `;
@@ -60,7 +63,10 @@ const DELETE_USER = gql`
   mutation DeleteUser($id: ID!) {
     deleteUser(id: $id) {
       success
-      message
+      errorCode
+      uploads
+      shareLinks
+      chats
     }
   }
 `;
@@ -89,6 +95,7 @@ const REGISTER = gql`
       success
       user { id name email role active }
       message
+      errorCode
     }
   }
 `;
@@ -143,14 +150,20 @@ type User = {
 };
 
 type Notice = { type: "success" | "error"; text: string };
-type ResetResult = { message: string; password: string | null; googleOnly: boolean };
+type ResetResult = { password: string | null; googleOnly: boolean };
 
-import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_LONG_MESSAGE, passwordProblem } from "@/lib/passwordRule";
+import { MAX_PASSWORD_BYTES, MIN_PASSWORD_LENGTH, passwordProblem } from "@/lib/passwordRule";
 
-const ROLE_LABEL_MAP: Record<string,string> = { EDITOR: 'Editor', FIELD_CREW: 'Field Crew', VIEWER: 'Viewer', ADMIN: 'Admin', SUPER_ADMIN: 'Super Admin' };
+/** Server codes that mean "another admin already handled this sign-up". */
+const ALREADY_HANDLED_CODES = ["USER_NOT_FOUND", "ALREADY_HANDLED"];
 
 export default function AdminPanel() {
   const { user, isLoading } = useAuth();
+  const t = useTranslations("admin");
+  const tc = useTranslations("common");
+  const tPw = useTranslations("password");
+  const f = useFormat();
+  const humanize = useHumanizeError();
   const router = useRouter();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newUserName, setNewUserName] = useState("");
@@ -192,11 +205,8 @@ export default function AdminPanel() {
   /** Pendaftar yang sedang dikonfirmasi penolakannya (`dialog` Story 3.1). */
   const [rejectTarget, setRejectTarget] = useState<any | null>(null);
 
-  /** Pesan server yang berarti "pendaftar ini sudah diproses admin lain". */
-  const isAlreadyHandled = (err: unknown) => {
-    const m = (err instanceof Error ? err.message : String(err ?? "")).toLowerCase();
-    return m.includes("not found") || m.includes("tidak ditemukan") || m.includes("already") || m.includes("sudah");
-  };
+  /** Server code meaning "another admin already handled this sign-up". */
+  const isAlreadyHandled = (err: unknown) => ALREADY_HANDLED_CODES.includes(errorCodeOf(err) ?? "");
 
   const runApproval = async (
     u: any,
@@ -213,11 +223,14 @@ export default function AdminPanel() {
       await Promise.all([refetchPending(), refetch()]);
     } catch (err) {
       if (isAlreadyHandled(err)) {
-        setApprovalNotice(`Pendaftaran ${u.email} sudah diproses. Daftar diperbarui.`);
+        setApprovalNotice(t("pending.alreadyHandled", { email: u.email }));
         refetchPending().catch(() => undefined);
       } else {
-        const what = kind === "approve" ? "menyetujui" : "menolak";
-        setApprovalNotice(`Gagal ${what} ${u.email}. Coba lagi. ${humanizeError(err)}`);
+        setApprovalNotice(
+          kind === "approve"
+            ? t("pending.approveFailed", { email: u.email, cause: humanize(err) })
+            : t("pending.rejectFailed", { email: u.email, cause: humanize(err) }),
+        );
       }
     } finally {
       // Tombol kembali ke labelnya semula; `aria-busy`/`aria-disabled`
@@ -235,10 +248,7 @@ export default function AdminPanel() {
       return Array.isArray(arr) ? arr.filter((qa: any) => qa && (qa.answer ?? '') !== '') : [];
     } catch { return []; }
   };
-  const fmtDate = (raw: any) => {
-    try { return new Date(raw).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
-    catch { return ''; }
-  };
+  const fmtDate = (raw: any) => f.dateTime(raw);
 
 
   const {
@@ -264,10 +274,12 @@ export default function AdminPanel() {
         setCreateError("");
         refetch();
       } else {
-        setCreateError(data.register.message || "Gagal membuat user");
+        setCreateError(
+          data.register.errorCode ? humanize({ errorCode: data.register.errorCode }) : t("create.failed"),
+        );
       }
     },
-    onError: (err) => setCreateError(err.message),
+    onError: (err) => setCreateError(humanize(err)),
   });
 
   const [updateRole] = useMutation(UPDATE_USER_ROLE, {
@@ -346,7 +358,7 @@ export default function AdminPanel() {
     } catch (err) {
       // Kembali ke nilai sebelumnya; barisnya tetap ada.
       setRoleDraft((d) => ({ ...d, [u.id]: previous }));
-      setTableNotice(`Gagal mengubah role ${u.name}. Coba lagi. ${humanizeError(err)}`);
+      setTableNotice(t("users.roleFailed", { name: u.name, cause: humanize(err) }));
     }
   };
 
@@ -364,8 +376,11 @@ export default function AdminPanel() {
     } catch (err) {
       // Tidak ada perubahan optimistik yang dibiarkan menempel: nilai
       // baris memang hanya berasal dari server, jadi cukup beri tahu.
-      const what = u.active ? 'menonaktifkan' : 'mengaktifkan';
-      setTableNotice(`Gagal ${what} ${u.name}. Coba lagi. ${humanizeError(err)}`);
+      setTableNotice(
+        u.active
+          ? t("users.deactivateFailed", { name: u.name, cause: humanize(err) })
+          : t("users.activateFailed", { name: u.name, cause: humanize(err) }),
+      );
     } finally {
       setRowBusy((b) => ({ ...b, [u.id]: false }));
     }
@@ -401,11 +416,11 @@ export default function AdminPanel() {
     setResetFormError(null);
     const pwProblem = resetMode === "manual" ? passwordProblem(resetPassword) : null;
     if (pwProblem === "PASSWORD_TOO_LONG") {
-      setResetError(PASSWORD_TOO_LONG_MESSAGE);
+      setResetError(tPw("tooLong", { max: MAX_PASSWORD_BYTES }));
       return;
     }
     if (pwProblem) {
-      setResetError(`Password minimal ${MIN_PASSWORD_LENGTH} karakter`);
+      setResetError(tPw("tooShort", { min: MIN_PASSWORD_LENGTH }));
       return;
     }
     const target = resetTarget;
@@ -416,40 +431,40 @@ export default function AdminPanel() {
       });
       const result = res?.adminSetPassword;
       if (result?.success) {
-        const message = result.message || "Password berhasil diatur. Semua sesi login user ini sudah di-logout.";
-        setNotice({ type: "success", text: message });
+        setNotice({ type: "success", text: t("reset.doneNotice", { email: target.email }) });
         refetch();
-        if (!stillCurrent()) return; // modal sudah berganti target — jangan tampilkan hasil di user lain
+        if (!stillCurrent()) return; // the modal moved to another user: never show this result there
         setResetPassword("");
-        setResetResult({ message, password: result.password ?? null, googleOnly: !target.hasPassword });
+        setResetResult({ password: result.password ?? null, googleOnly: !target.hasPassword });
       } else if (stillCurrent()) {
         // Dialog TETAP terbuka dengan pilihan & isian utuh; tidak ada
         // `one-time-secret` yang dirender karena tidak ada password yang
         // benar-benar dibuat.
-        setResetFormError(`Gagal mengatur password. Coba lagi. ${humanizeError(result?.message)}`);
+        setResetFormError(t("reset.failed", { cause: humanize({ errorCode: result?.errorCode ?? "INTERNAL" }) }));
       }
     } catch (err) {
       if (stillCurrent()) {
-        setResetFormError(`Gagal mengatur password. Coba lagi. ${humanizeError(err)}`);
+        setResetFormError(t("reset.failed", { cause: humanize(err) }));
       }
     }
   };
 
-  /** Kalimat gagal hapus: menyebut rincian dari server lalu menawarkan
-      "Nonaktifkan" sebagai jalan keluar (AC 3.21). */
-  const activityBlockedText = (target: User, reason: unknown) => {
-    const raw = typeof reason === "string" ? reason : (reason as { message?: string } | null)?.message;
-    const detail = (raw || "").trim();
-    // Server SUDAH mengirim kalimat utuh persis bentuk AC ("…tidak bisa
-    // dihapus karena punya aktivitas: 958 file upload… Gunakan
-    // \"Nonaktifkan\"…"). Kalau begitu dipakai APA ADANYA — membungkusnya
-    // lagi hanya menggandakan kalimatnya.
-    if (/tidak bisa dihapus karena punya aktivitas/i.test(detail)) return detail;
-    const looksLikeActivity = /aktivitas|activity|upload|share|chat|relasi|foreign key|constraint/i.test(detail);
-    if (detail && looksLikeActivity) {
-      return `Akun ${target.email} tidak bisa dihapus karena punya aktivitas: ${detail}. Gunakan "Nonaktifkan" untuk memblokir akses tanpa menghapus datanya.`;
+  /** Failed delete: an account with activity gets the way out ("Deactivate"). By code only. */
+  const deleteFailedText = (
+    target: User,
+    reason: unknown,
+    activity?: { uploads?: number | null; shareLinks?: number | null; chats?: number | null },
+  ) => {
+    if (errorCodeOf(reason) !== "USER_HAS_ACTIVITY") {
+      return t("delete.failed", { email: target.email, cause: humanize(reason) });
     }
-    return `Akun ${target.email} tidak bisa dihapus. ${humanizeError(reason)} Gunakan "Nonaktifkan" untuk memblokir akses tanpa menghapus datanya.`;
+    // Only the non-zero parts, joined the locale's way ("3 uploads and 1 share link").
+    const parts = (["uploads", "shareLinks", "chats"] as const)
+      .filter((k) => (activity?.[k] ?? 0) > 0)
+      .map((k) => t(`delete.activity.${k}`, { count: activity?.[k] ?? 0 }));
+    if (!parts.length) return t("delete.hasActivity", { email: target.email });
+    const list = new Intl.ListFormat(f.locale, { style: "long", type: "conjunction" }).format(parts);
+    return t("delete.hasActivityCounts", { email: target.email, activity: list });
   };
 
   const handleConfirmDelete = async () => {
@@ -461,25 +476,28 @@ export default function AdminPanel() {
       const { data: res } = await deleteUserMutation({ variables: { id: target.id } });
       const result = res?.deleteUser;
       if (result?.success) {
-        setNotice({ type: "success", text: `Akun ${target.email} berhasil dihapus.` });
+        setNotice({ type: "success", text: t("delete.done", { email: target.email }) });
         refetch();
         refetchPending();
       } else {
         // Server menolak karena akun punya jejak (upload, share link, chat).
         // Kalimatnya menawarkan JALAN KELUAR, bukan sekadar menolak.
-        setNotice({ type: "error", text: activityBlockedText(target, result?.message) });
+        setNotice({
+          type: "error",
+          text: deleteFailedText(target, { errorCode: result?.errorCode ?? "INTERNAL" }, result ?? undefined),
+        });
       }
     } catch (err) {
-      setNotice({ type: "error", text: activityBlockedText(target, err) });
+      setNotice({ type: "error", text: deleteFailedText(target, err) });
     }
   };
 
   return (
     <div className={styles.adminContainer}>
       <div className={styles.pageHead}>
-        <h1 className={`spine-display-page ${styles.pageTitle}`}>Admin Panel</h1>
+        <h1 className={`spine-display-page ${styles.pageTitle}`}>{t("title")}</h1>
         <p className={`spine-body-sub ${styles.pageSub}`}>
-          Kelola user, pantau lalu lintas, dan atur penyimpanan platform.
+          {t("subtitle")}
         </p>
       </div>
 
@@ -488,9 +506,9 @@ export default function AdminPanel() {
         <section className={`${styles.panel} ${styles.panelWait}`} aria-labelledby="admin-pending-title">
           <div className={styles.panelHead}>
             <h2 id="admin-pending-title" className={`spine-display-panel ${styles.panelTitle}`}>
-              Menunggu Persetujuan
+              {t("pending.title")}
               <span className={`spine-display-sticker ${styles.countSticker}`}>
-                {formatNumber(pendingUsers.length)}
+                {f.number(pendingUsers.length)}
               </span>
             </h2>
           </div>
@@ -507,7 +525,7 @@ export default function AdminPanel() {
               const selRole = approveRole[u.id] || u.requestedRole || 'EDITOR';
               const initials = ((u.name || u.email || '?').slice(0, 2)).toUpperCase();
               const busy = approvalBusy[u.id];
-              const name = u.name || 'Tanpa nama';
+              const name = u.name || t("pending.noName");
               return (
                 <article key={u.id} className={styles.approvalCard} aria-label={name}>
                   <div className={styles.apHead}>
@@ -517,15 +535,15 @@ export default function AdminPanel() {
                         <b className={`spine-row-title ${styles.apName}`}>{name}</b>
                         <span className={`spine-body-sm ${styles.apEmail}`}>{u.email}</span>
                         {u.createdAt && (
-                          <span className={`spine-footnote ${styles.apDate}`}>Daftar: {fmtDate(u.createdAt)}</span>
+                          <span className={`spine-footnote ${styles.apDate}`}>{t("pending.signedUp", { date: fmtDate(u.createdAt) })}</span>
                         )}
                       </div>
                     </div>
                     <div className={styles.apReq}>
                       <span className={`spine-label ${styles.tagPill}`}>
-                        Minta: {ROLE_LABEL_MAP[u.requestedRole] || u.requestedRole || 'Belum diisi'}
+                        {t("pending.requested", { role: u.requestedRole ? f.role(u.requestedRole) : t("pending.notSet") })}
                       </span>
-                      <span className={`spine-footnote ${styles.apCount}`}>{formatCount(answers.length, 'jawaban')}</span>
+                      <span className={`spine-footnote ${styles.apCount}`}>{t("pending.answers", { count: answers.length })}</span>
                     </div>
                   </div>
 
@@ -534,31 +552,30 @@ export default function AdminPanel() {
                       {answers.map((qa: any, i: number) => (
                         <div key={i}>
                           <span className={`spine-footnote ${styles.apQ}`}>{qa.question}</span>
-                          <span className={`spine-body-sm ${styles.apA}`}>{qa.answer || '—'}</span>
+                          <span className={`spine-body-sm ${styles.apA}`}>{qa.answer || t("pending.noAnswer")}</span>
                         </div>
                       ))}
                     </div>
                   ) : (
                     <p className={`spine-body-sm ${styles.apNoAnswers}`}>
-                      Pelamar belum mengisi jawaban onboarding.
+                      {t("pending.noAnswers")}
                     </p>
                   )}
 
                   <div className={styles.apDecision}>
                     <span className={`spine-body-sm ${styles.apDecisionLabel}`} id={`ap-role-${u.id}`}>
-                      Setujui sebagai:
+                      {t("pending.approveAs")}
                     </span>
                     <span className={styles.selectWrap}>
                       <select
                         className={`spine-focus-ring ${styles.selectPill}`}
-                        aria-label={`Setujui sebagai, ${name}`}
+                        aria-label={t("pending.approveAsFor", { name })}
                         value={selRole}
                         onChange={(e) => setApproveRole((v) => ({ ...v, [u.id]: e.target.value }))}
                       >
-                        <option value="EDITOR">Editor</option>
-                        <option value="FIELD_CREW">Field Crew</option>
-                        <option value="VIEWER">Viewer</option>
-                        <option value="ADMIN">Admin</option>
+                        {["EDITOR", "FIELD_CREW", "VIEWER", "ADMIN"].map((r) => (
+                          <option key={r} value={r}>{f.role(r)}</option>
+                        ))}
                       </select>
                       {CHEVRON}
                     </span>
@@ -566,24 +583,24 @@ export default function AdminPanel() {
                     <PillButton
                       variant="accent"
                       busy={busy === 'approve'}
-                      busyLabel="Memproses..."
-                      aria-label={`Setujui ${name}`}
+                      busyLabel={t("working")}
+                      aria-label={t("pending.approveFor", { name })}
                       onClick={() =>
                         runApproval(u, 'approve', () =>
                           approveUser({ variables: { userId: u.id, role: selRole } }),
                         )
                       }
                     >
-                      Setujui
+                      {t("pending.approve")}
                     </PillButton>
                     <ButtonDanger
                       variant="outline"
                       aria-busy={busy === 'reject' || undefined}
                       aria-disabled={busy === 'reject' || undefined}
-                      aria-label={`Tolak ${name}`}
+                      aria-label={t("pending.rejectFor", { name })}
                       onClick={() => setRejectTarget(u)}
                     >
-                      {busy === 'reject' ? 'Memproses...' : 'Tolak'}
+                      {busy === 'reject' ? t("working") : t("pending.reject")}
                     </ButtonDanger>
                   </div>
                 </article>
@@ -596,13 +613,13 @@ export default function AdminPanel() {
       <section className={styles.panel} aria-labelledby="admin-users-title">
         <div className={styles.panelHead}>
           <h2 id="admin-users-title" className={`spine-display-panel ${styles.panelTitle}`}>
-            User Management
+            {t("users.title")}
             <span className={`spine-display-sticker ${styles.countSticker}`}>
-              {formatNumber(users.length)}
+              {f.number(users.length)}
             </span>
           </h2>
           <PillButton variant="accent" onClick={() => setShowCreateModal(true)}>
-            + Add User
+            {t("users.add")}
           </PillButton>
         </div>
 
@@ -611,7 +628,7 @@ export default function AdminPanel() {
         {notice && (
           <NoticeBar
             tone={notice.type === "error" ? "danger" : "ok"}
-            closeLabel="Tutup pesan"
+            closeLabel={t("closeNotice")}
             onClose={() => setNotice(null)}
           >
             {notice.text}
@@ -629,24 +646,22 @@ export default function AdminPanel() {
           <input
             type="search"
             className={`spine-focus-ring ${styles.searchPill}`}
-            placeholder="Cari nama atau email…"
-            aria-label="Cari nama atau email"
+            placeholder={t("users.search")}
+            aria-label={t("users.searchLabel")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
           <span className={styles.selectWrap}>
             <select
               className={`spine-focus-ring ${styles.selectPill} ${styles.filterPill}`}
-              aria-label="Saring menurut role"
+              aria-label={t("users.filterLabel")}
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
             >
-              <option value="ALL">Semua role</option>
-              <option value="SUPER_ADMIN">Super Admin</option>
-              <option value="ADMIN">Admin</option>
-              <option value="EDITOR">Editor</option>
-              <option value="FIELD_CREW">Field Crew</option>
-              <option value="VIEWER">Viewer</option>
+              <option value="ALL">{t("users.allRoles")}</option>
+              {["SUPER_ADMIN", "ADMIN", "EDITOR", "FIELD_CREW", "VIEWER"].map((r) => (
+                <option key={r} value={r}>{f.role(r)}</option>
+              ))}
             </select>
             {CHEVRON}
           </span>
@@ -655,22 +670,22 @@ export default function AdminPanel() {
         <table className={styles.userTable}>
           <thead>
             <tr>
-              <th scope="col" className="spine-label">Name</th>
-              <th scope="col" className="spine-label">Email</th>
-              <th scope="col" className="spine-label">Role</th>
-              <th scope="col" className="spine-label">Status</th>
-              <th scope="col" className="spine-label">Actions</th>
+              <th scope="col" className="spine-label">{t("column.name")}</th>
+              <th scope="col" className="spine-label">{t("column.email")}</th>
+              <th scope="col" className="spine-label">{t("column.role")}</th>
+              <th scope="col" className="spine-label">{t("column.status")}</th>
+              <th scope="col" className="spine-label">{t("column.actions")}</th>
             </tr>
           </thead>
           <tbody>
             {loading && users.length === 0 ? (
               <tr>
-                <td colSpan={5} className={`spine-body ${styles.tableEmpty}`}>Memuat daftar user…</td>
+                <td colSpan={5} className={`spine-body ${styles.tableEmpty}`}>{t("users.loading")}</td>
               </tr>
             ) : filteredUsers.length === 0 ? (
               <tr>
                 <td colSpan={5} className={`spine-body ${styles.tableEmpty}`}>
-                  {searchQuery || roleFilter !== "ALL" ? "Tidak ada user yang cocok." : "Belum ada user."}
+                  {searchQuery || roleFilter !== "ALL" ? t("users.noMatch") : t("users.none")}
                 </td>
               </tr>
             ) : (
@@ -679,7 +694,7 @@ export default function AdminPanel() {
                 const roleValue = roleDraft[u.id] ?? u.role;
                 return (
                   <tr key={u.id}>
-                    <td data-label="Name">
+                    <td data-label={t("column.name")}>
                       <span className={`spine-row-title ${styles.userName}`}>
                         {u.name}
                         {/* google-badge: akun yang dibuat lewat Google. */}
@@ -691,45 +706,43 @@ export default function AdminPanel() {
                               <path fill="#FBBC05" d="M11.5 28.5c-.5-1.4-.7-2.9-.7-4.5s.3-3.1.7-4.5l-7.1-5.5C2.9 17 2 20.4 2 24s.9 7 2.4 10z" />
                               <path fill="#EA4335" d="M24 10.7c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 4.6 29.9 2 24 2 15.4 2 8 6.7 4.4 14l7.1 5.5c1.8-5.3 6.7-8.8 12.5-8.8z" />
                             </svg>
-                            Google
+                            {t("users.google")}
                           </span>
                         )}
                       </span>
                     </td>
-                    <td data-label="Email" className={`spine-body-sm ${styles.userEmail}`}>{u.email}</td>
-                    <td data-label="Role">
+                    <td data-label={t("column.email")} className={`spine-body-sm ${styles.userEmail}`}>{u.email}</td>
+                    <td data-label={t("column.role")}>
                       <span className={styles.selectWrap}>
                         <select
                           className={`spine-focus-ring ${styles.selectPill}`}
-                          aria-label={`Role ${u.name}`}
+                          aria-label={t("users.roleFor", { name: u.name })}
                           value={roleValue}
                           onChange={(e) => handleRoleChange(u, e.target.value)}
                         >
-                          <option value="SUPER_ADMIN">Super Admin</option>
-                          <option value="ADMIN">Admin</option>
-                          <option value="EDITOR">Editor</option>
-                          <option value="FIELD_CREW">Field Crew</option>
-                          <option value="VIEWER">Viewer</option>
+                          {["SUPER_ADMIN", "ADMIN", "EDITOR", "FIELD_CREW", "VIEWER"].map((r) => (
+                            <option key={r} value={r}>{f.role(r)}</option>
+                          ))}
                         </select>
                         {CHEVRON}
                       </span>
                     </td>
-                    <td data-label="Status">
+                    <td data-label={t("column.status")}>
                       <StatusChip tone={u.active ? "ok" : "danger"}>
-                        {u.active ? "Active" : "Inactive"}
+                        {u.active ? t("users.active") : t("users.inactive")}
                       </StatusChip>
                     </td>
-                    <td data-label="Actions">
+                    <td data-label={t("column.actions")}>
                       <div className={styles.rowActions}>
                         {/* Label membawa KEADAANNYA sekaligus nama barisnya. */}
                         <PillButton
                           variant="surface"
                           busy={rowBusy[u.id]}
-                          busyLabel="Memproses..."
-                          aria-label={`${u.active ? "Nonaktifkan" : "Aktifkan"} ${u.name}`}
+                          busyLabel={t("working")}
+                          aria-label={u.active ? t("users.deactivateFor", { name: u.name }) : t("users.activateFor", { name: u.name })}
                           onClick={() => handleToggleActive(u)}
                         >
-                          {u.active ? "Nonaktifkan" : "Aktifkan"}
+                          {u.active ? t("users.deactivate") : t("users.activate")}
                         </PillButton>
                         {/* Reset Password & Hapus TIDAK ditampilkan untuk akun
                             sendiri maupun akun SUPER_ADMIN — server menolaknya
@@ -738,22 +751,22 @@ export default function AdminPanel() {
                           <>
                             <PillButton
                               variant="surface"
-                              aria-label={`Reset Password ${u.name}`}
+                              aria-label={t("users.resetFor", { name: u.name })}
                               onClick={() => openResetModal(u)}
                             >
-                              Reset Password
+                              {t("users.reset")}
                             </PillButton>
                             <ButtonDanger
                               variant="outline"
-                              aria-label={`Hapus ${u.name}`}
+                              aria-label={t("users.deleteFor", { name: u.name })}
                               onClick={() => setDeleteTarget(u)}
                             >
-                              Hapus
+                              {t("users.delete")}
                             </ButtonDanger>
                           </>
                         ) : (
                           <span className={`spine-footnote ${styles.rowNote}`}>
-                            {u.id === user.id ? "Akun kamu" : "Akun Super Admin"}
+                            {u.id === user.id ? t("users.yourAccount") : t("users.superAdminAccount")}
                           </span>
                         )}
                       </div>
@@ -769,7 +782,7 @@ export default function AdminPanel() {
       <section className={styles.panel} aria-labelledby="admin-storage-title">
         <div className={styles.panelHead}>
           <h2 id="admin-storage-title" className={`spine-display-panel ${styles.panelTitle}`}>
-            Storage Overview
+            {t("storage.title")}
           </h2>
         </div>
         <div aria-busy={statsLoading && !stats ? true : undefined}>
@@ -780,14 +793,14 @@ export default function AdminPanel() {
                 <path d="M12 7.5v5.5M12 16.5v.01" />
               </svg>
               <div>
-                <b className={`spine-row-title ${styles.errorTitle}`}>Gagal memuat data penyimpanan. Coba lagi.</b>
-                <span className={`spine-footnote ${styles.errorCause}`}>{humanizeError(statsError)}</span>
+                <b className={`spine-row-title ${styles.errorTitle}`}>{t("storage.loadFailed")}</b>
+                <span className={`spine-footnote ${styles.errorCause}`}>{humanize(statsError)}</span>
                 <PillButton
                   variant="surface"
                   className={styles.errorRetry}
                   onClick={() => { refetchStats().catch(() => undefined); }}
                 >
-                  Coba lagi
+                  {tc("retry")}
                 </PillButton>
               </div>
             </div>
@@ -797,20 +810,20 @@ export default function AdminPanel() {
               <div className={styles.skeletonRow} aria-hidden="true" />
             </>
           ) : !stats ? (
-            <p className={`spine-body ${styles.emptyState}`}>Belum ada data penyimpanan.</p>
+            <p className={`spine-body ${styles.emptyState}`}>{t("storage.empty")}</p>
           ) : (
             <div className={styles.stats}>
               {/* Label + angka berada dalam SATU elemen supaya pembaca layar
                   membacanya utuh ("Total Projects, 12"), bukan dua potongan. */}
               {[
-                { label: 'Total Projects', value: formatNumber(Number(stats.totalProjects)) },
-                { label: 'Total Files', value: formatNumber(Number(stats.totalFiles)) },
-                { label: 'Used Space', value: formatFileSize(Number(stats.usedSpace)) },
-                { label: 'Free Space', value: formatFileSize(Number(stats.freeSpace)) },
-              ].map((t) => (
-                <p key={t.label} className={styles.statTile}>
-                  <span className={`spine-label ${styles.statLabel}`}>{t.label}</span>
-                  <span className={`spine-display-stat ${styles.statValue}`}>{t.value}</span>
+                { label: t("storage.totalProjects"), value: f.number(Number(stats.totalProjects)) },
+                { label: t("storage.totalFiles"), value: f.number(Number(stats.totalFiles)) },
+                { label: t("storage.usedSpace"), value: f.fileSize(Number(stats.usedSpace)) },
+                { label: t("storage.freeSpace"), value: f.fileSize(Number(stats.freeSpace)) },
+              ].map((tile) => (
+                <p key={tile.label} className={styles.statTile}>
+                  <span className={`spine-label ${styles.statLabel}`}>{tile.label}</span>
+                  <span className={`spine-display-stat ${styles.statValue}`}>{tile.value}</span>
                 </p>
               ))}
             </div>
@@ -821,12 +834,12 @@ export default function AdminPanel() {
       {/* Tolak pendaftaran — `dialog` Story 3.1 menggantikan `confirm()`. */}
       {rejectTarget && (
         <ConfirmDialog
-          title={`Tolak pendaftaran ${rejectTarget.email}?`}
-          lead="Pendaftar ini tidak akan bisa masuk. Ia harus mendaftar ulang bila ingin dipertimbangkan lagi."
+          title={t("pending.rejectTitle", { email: rejectTarget.email })}
+          lead={t("pending.rejectLead")}
           tone="permanent"
-          confirmLabel="Tolak"
-          cancelLabel="Batal"
-          busyLabel="Memproses..."
+          confirmLabel={t("pending.reject")}
+          cancelLabel={tc("cancel")}
+          busyLabel={t("working")}
           busy={approvalBusy[rejectTarget.id] === 'reject'}
           onConfirm={() => {
             const target = rejectTarget;
@@ -840,7 +853,7 @@ export default function AdminPanel() {
       {/* Add User — bentuk `dialog` yang SAMA dengan dialog lain di layar ini. */}
       {showCreateModal && (
         <Dialog
-          title="Create New User"
+          title={t("create.title")}
           onClose={() => { if (!registerLoading) { setShowCreateModal(false); setCreateError(""); } }}
           closeDisabled={registerLoading}
           actions={
@@ -850,40 +863,40 @@ export default function AdminPanel() {
                 aria-disabled={registerLoading || undefined}
                 onClick={() => { if (!registerLoading) { setShowCreateModal(false); setCreateError(""); } }}
               >
-                Cancel
+                {tc("cancel")}
               </PillButton>
               <PillButton
                 variant="accent"
                 busy={registerLoading}
-                busyLabel="Creating..."
+                busyLabel={t("create.creating")}
                 onClick={() => handleCreateUser()}
               >
-                Create User
+                {t("create.submit")}
               </PillButton>
             </>
           }
         >
           <div className={styles.dlgStack}>
             <TextField
-              label="Name"
+              label={t("create.name")}
               value={newUserName}
               onChange={(e) => { setNewUserName(e.target.value); setCreateError(""); }}
               required
-              placeholder="Nama lengkap"
+              placeholder={t("create.namePlaceholder")}
               autoComplete="name"
             />
             <TextField
-              label="Email"
+              label={t("create.email")}
               type="email"
               value={newUserEmail}
               onChange={(e) => { setNewUserEmail(e.target.value); setCreateError(""); }}
               required
-              placeholder="user@example.com"
+              placeholder={t("create.emailPlaceholder")}
               autoComplete="email"
             />
             <div className={fieldStyles.field}>
               <label className={`spine-label ${fieldStyles.label}`} htmlFor="new-user-password">
-                Password
+                {t("create.password")}
               </label>
               <PasswordInput
                 id="new-user-password"
@@ -899,12 +912,12 @@ export default function AdminPanel() {
               {/* Teks bantuan DI BAWAH kolomnya (sebelumnya tampil di atas label,
                   terbaca seolah milik kolom Email). */}
               <p id="new-user-password-hint" className={`spine-footnote ${styles.minHint}`}>
-                Password minimal {MIN_PASSWORD_LENGTH} karakter
+                {tPw("minHint", { min: MIN_PASSWORD_LENGTH })}
               </p>
             </div>
             <div className={fieldStyles.field}>
               <label className={`spine-label ${fieldStyles.label}`} htmlFor="new-user-role">
-                Role
+                {t("create.role")}
               </label>
               <span className={`${styles.selectWrap} ${styles.selectWrapBlock}`}>
                 <select
@@ -913,10 +926,9 @@ export default function AdminPanel() {
                   value={newUserRole}
                   onChange={(e) => setNewUserRole(e.target.value)}
                 >
-                  <option value="ADMIN">Admin</option>
-                  <option value="EDITOR">Editor</option>
-                  <option value="FIELD_CREW">Field Crew</option>
-                  <option value="VIEWER">Viewer</option>
+                  {["ADMIN", "EDITOR", "FIELD_CREW", "VIEWER"].map((r) => (
+                    <option key={r} value={r}>{f.role(r)}</option>
+                  ))}
                 </select>
                 {CHEVRON}
               </span>
@@ -931,22 +943,22 @@ export default function AdminPanel() {
           `one-time-secret` Story 3.1. Tidak ada modal buatan sendiri. */}
       {resetTarget && !resetResult && (
         <Dialog
-          title="Reset Password"
-          lead={`${resetTarget.name} (${resetTarget.email})`}
+          title={t("reset.title")}
+          lead={t("reset.lead", { name: resetTarget.name, email: resetTarget.email })}
           onClose={closeResetModal}
           closeDisabled={resetLoading}
           actions={
             <>
               <PillButton variant="surface" onClick={closeResetModal} aria-disabled={resetLoading || undefined}>
-                Batal
+                {tc("cancel")}
               </PillButton>
               <PillButton
                 variant="accent"
                 busy={resetLoading}
-                busyLabel="Memproses..."
+                busyLabel={t("working")}
                 onClick={() => handleResetSubmit()}
               >
-                Reset Password
+                {t("reset.submit")}
               </PillButton>
             </>
           }
@@ -954,24 +966,22 @@ export default function AdminPanel() {
           {/* Akun Google → catatan NETRAL; akun nonaktif → catatan PERINGATAN. */}
           {!resetTarget.hasPassword && (
             <InfoNote variant="neutral">
-              Akun ini terdaftar via Google dan belum punya password. Setelah dibuatkan, user bisa
-              login dengan email + password dan tetap bisa login dengan Google.
+              {t("reset.googleNote")}
             </InfoNote>
           )}
           {!resetTarget.active && (
             <InfoNote variant="warn">
-              Akun ini sedang nonaktif. Reset password saja tidak cukup — klik &quot;Aktifkan&quot; di
-              tabel user supaya user bisa login.
+              {t("reset.inactiveNote")}
             </InfoNote>
           )}
 
           <RadioCardGroup
-            label="Cara membuat password"
+            label={t("reset.modeLabel")}
             value={resetMode}
             onChange={(v) => { setResetMode(v); setResetError(""); setResetFormError(null); }}
             options={[
-              { value: "auto", title: "Buat otomatis (10 karakter acak, disarankan)" },
-              { value: "manual", title: "Tulis manual" },
+              { value: "auto", title: t("reset.modeAuto") },
+              { value: "manual", title: t("reset.modeManual") },
             ]}
           />
 
@@ -979,10 +989,10 @@ export default function AdminPanel() {
             <div className={fieldStyles.field}>
               {/* Kalimat panjang minimal di ATAS field (pola Story 1.13). */}
               <p className={`spine-footnote ${styles.minHint}`}>
-                Password minimal {MIN_PASSWORD_LENGTH} karakter
+                {tPw("minHint", { min: MIN_PASSWORD_LENGTH })}
               </p>
               <label className={`spine-label ${fieldStyles.label}`} htmlFor="reset-new-password">
-                Password baru
+                {t("reset.newPassword")}
               </label>
               <PasswordInput
                 id="reset-new-password"
@@ -1009,7 +1019,7 @@ export default function AdminPanel() {
           )}
 
           <p className={`spine-footnote ${styles.resetHint}`}>
-            Semua sesi login user ini akan di-logout.
+            {t("reset.signOutHint")}
           </p>
 
           {/* `form-alert` danger TEPAT di atas tombol — kegagalan permintaan,
@@ -1021,7 +1031,7 @@ export default function AdminPanel() {
       {/* Hasil reset — rahasia sekali tampil: TIDAK tertutup oleh klik di luar. */}
       {resetTarget && resetResult && (
         <Dialog
-          title="Password Berhasil Diatur"
+          title={t("reset.doneTitle")}
           /* `locked`: rahasia yang hanya tampil SEKALI tidak boleh hilang
              karena klik di luar ATAU Esc yang tak sengaja — AC 3.20
              menulis "hanya tombol Selesai yang menutupnya". Tanpa
@@ -1031,33 +1041,34 @@ export default function AdminPanel() {
           locked
           dismissOnBackdrop={false}
           onClose={closeResetModal}
-          actions={<PillButton variant="accent" onClick={closeResetModal}>Selesai</PillButton>}
+          actions={<PillButton variant="accent" onClick={closeResetModal}>{t("reset.done")}</PillButton>}
         >
           {resetResult.password ? (
             <>
               <p className={`spine-body ${styles.resetLead}`}>
-                Password baru untuk <strong>{resetTarget.name}</strong> ({resetTarget.email}):
+                {t.rich("reset.newFor", {
+                  name: resetTarget.name,
+                  email: resetTarget.email,
+                  strong: (chunks) => <strong>{chunks}</strong>,
+                })}
               </p>
               <OneTimeSecret secret={resetResult.password} />
               <p className={`spine-footnote ${styles.resetWarn}`}>
-                Password ini hanya ditampilkan sekali. Salin sekarang dan kirim ke user lewat jalur
-                pribadi.
+                {t("reset.onceWarning")}
               </p>
             </>
           ) : (
             /* Mode manual TIDAK menampilkan kotak password. */
             <FormAlert tone="ok">
-              Password manual untuk {resetTarget.name} ({resetTarget.email}) sudah disimpan.
+              {t("reset.manualSaved", { name: resetTarget.name, email: resetTarget.email })}
             </FormAlert>
           )}
           <p className={`spine-body ${styles.resetLead}`}>
-            Semua sesi login user ini sudah di-logout. User perlu login ulang di semua perangkat.
-            {resetResult.googleOnly && " User tetap bisa login dengan Google."}
+            {t("reset.signedOut", { google: resetResult.googleOnly ? "yes" : "no" })}
           </p>
           {!resetTarget.active && (
             <InfoNote variant="warn">
-              Akun ini masih nonaktif, jadi user tetap belum bisa login. Klik &quot;Aktifkan&quot; di
-              tabel user supaya bisa login.
+              {t("reset.stillInactive")}
             </InfoNote>
           )}
         </Dialog>
@@ -1066,11 +1077,11 @@ export default function AdminPanel() {
       {/* Hapus akun */}
       {deleteTarget && (
         <ConfirmDialog
-          title={`Hapus akun ${deleteTarget.email}?`}
-          lead={`Akun ${deleteTarget.name} akan dihapus permanen beserta sesi, perangkat, dan notifikasinya. Hanya akun tanpa upload, share link, dan chat yang bisa dihapus — selain itu gunakan "Nonaktifkan". Tindakan ini tidak bisa dibatalkan.`}
+          title={t("delete.title", { email: deleteTarget.email })}
+          lead={t("delete.lead", { name: deleteTarget.name })}
           tone="permanent"
-          confirmLabel="Hapus"
-          cancelLabel="Batal"
+          confirmLabel={t("users.delete")}
+          cancelLabel={tc("cancel")}
           busy={deleteLoading}
           onConfirm={handleConfirmDelete}
           onClose={() => setDeleteTarget(null)}
