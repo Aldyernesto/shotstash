@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useApolloClient } from "@apollo/client";
 import { issueMediaCookie, serverLogout } from "@/lib/authClient";
+import { syncLocaleCookie } from "@/i18n/client";
 
 if (typeof window !== "undefined") {
   console.warn("[BUILD-MARKER] AuthContext module loaded at", new Date().toISOString());
@@ -21,6 +22,8 @@ export interface User {
   accountStatus?: string; // ACTIVE | PENDING | REJECTED
   /** Story 2.4: actions from `me.permissions`; the UI gates controls on this only. */
   permissions?: string[];
+  /** Story 3.1: UI locale; null = instance default. */
+  locale?: string | null;
 }
 
 interface AuthContextType {
@@ -50,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const res = await fetch('/api/graphql', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ['Authori'+'zation']: 'Bearer ' + storedToken },
-            body: JSON.stringify({ query: '{ me { id email role name avatarUrl accountStatus permissions } }' }),
+            body: JSON.stringify({ query: '{ me { id email role name avatarUrl accountStatus permissions locale } }' }),
           });
           const data = await res.json();
           if (data?.data?.me) {
@@ -59,6 +62,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await issueMediaCookie(storedToken);
             setUser(me);
             localStorage.setItem("shotstash_user", JSON.stringify(me));
+            // Story 3.1: server components follow the user's locale.
+            if (syncLocaleCookie(me.locale)) router.refresh();
             // Gerbang approval: akun belum ACTIVE tidak boleh masuk studio.
             if (me.accountStatus && me.accountStatus !== 'ACTIVE' && typeof window !== 'undefined') {
               const path = window.location.pathname;
@@ -82,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     };
     init();
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     console.warn('[AuthProvider] state change — user:', user?.email ?? null, 'isLoading:', isLoading);
@@ -93,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("shotstash_user", JSON.stringify(userData));
     localStorage.setItem("shotstash_token", token);
     void issueMediaCookie(token);
+    if (syncLocaleCookie(userData.locale)) router.refresh();
     // flushSync ensures React commits the state update synchronously
     // BEFORE we navigate — prevents race condition where dashboard
     // sees isAuthenticated=false and redirects back to login
@@ -108,6 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Revoke the session on the server and clear the media cookie.
     void serverLogout(localStorage.getItem("shotstash_token"));
     setUser(null);
+    // The next person on this browser starts from the instance default.
+    syncLocaleCookie(null);
     localStorage.removeItem("shotstash_user");
     localStorage.removeItem("shotstash_token");
     apolloClient.clearStore().catch((err) => {

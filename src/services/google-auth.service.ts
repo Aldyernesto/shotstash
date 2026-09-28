@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { GraphQLError } from 'graphql';
 import { createSession } from './auth.service';
 import { googleEmailDecision } from '@/lib/googleEmail';
+import { LOGIN_ERROR_CODES } from '@/lib/authMessages';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
@@ -44,7 +45,9 @@ export async function googleAuth(idToken: string) {
     // Akun yang dinonaktifkan admin tidak boleh dapat sesi. REJECTED (juga active=false)
     // tetap lolos supaya diarahkan ke /pending seperti sebelumnya.
     if (!user.active && user.accountStatus !== 'REJECTED') {
-      throw new Error('Akun telah dinonaktifkan. Hubungi admin.');
+      throw new GraphQLError('Account deactivated', {
+        extensions: { code: LOGIN_ERROR_CODES.deactivated },
+      });
     }
     // Existing user — link/refresh googleId + always refresh avatarUrl from Google
     const updates: any = {};

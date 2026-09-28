@@ -8,8 +8,8 @@ import SelectCheck from "./SelectCheck";
 import MoreButton from "./MoreButton";
 import { PillButton } from "@/components/form/buttons";
 import { EmptyState, SkeletonRow, ErrorBox } from "./states";
-import { formatNumber, formatDate, formatFileSize, formatCount } from "@/lib/format";
-import { describeContentSummary } from "@/lib/contentSummary";
+import { useTranslations } from "next-intl";
+import { useFormat } from "@/i18n/useFormat";
 import { parseSectionName } from "@/lib/sectionNumber";
 import type { RepFile } from "./ProjectCard";
 
@@ -18,43 +18,62 @@ export type ListLevel = "projects" | "sections" | "files";
 
 type Anchor = { x: number; y: number };
 
+type ListT = ReturnType<typeof useTranslations<"list">>;
+
+/** Column label keys under `list.column`. */
+type ColumnKey =
+  | "project"
+  | "section"
+  | "contents"
+  | "date"
+  | "actions"
+  | "select"
+  | "name"
+  | "type"
+  | "size"
+  | "uploadedBy";
+
 /** Satu kolom kepala: label + field urut bersama (null = tidak bisa diurut). */
-type Column = { label: string; field: SortField | null; hidden?: boolean };
+type Column = { label: ColumnKey; field: SortField | null; hidden?: boolean };
 
 const COLUMNS: Record<ListLevel, Column[]> = {
   // Tingkat Projects TIDAK punya kolom centang — Project tidak bisa
   // dipilih-banyak (perilaku sekarang, AC 2.12 & 2.15).
   projects: [
-    { label: "Project", field: "name" },
-    { label: "Isi", field: "size" },
-    { label: "Tanggal", field: "date" },
-    { label: "Aksi", field: null, hidden: true },
+    { label: "project", field: "name" },
+    { label: "contents", field: "size" },
+    { label: "date", field: "date" },
+    { label: "actions", field: null, hidden: true },
   ],
   sections: [
-    { label: "Pilih", field: null, hidden: true },
-    { label: "Section", field: "name" },
-    { label: "Isi", field: "size" },
-    { label: "Tanggal", field: "date" },
-    { label: "Aksi", field: null, hidden: true },
+    { label: "select", field: null, hidden: true },
+    { label: "section", field: "name" },
+    { label: "contents", field: "size" },
+    { label: "date", field: "date" },
+    { label: "actions", field: null, hidden: true },
   ],
   files: [
-    { label: "Pilih", field: null, hidden: true },
-    { label: "Nama", field: "name" },
-    { label: "Tipe", field: "type" },
-    { label: "Ukuran", field: "size" },
-    { label: "Tanggal", field: "date" },
+    { label: "select", field: null, hidden: true },
+    { label: "name", field: "name" },
+    { label: "type", field: "type" },
+    { label: "size", field: "size" },
+    { label: "date", field: "date" },
     // Skema hanya menyimpan `MediaFile.uploadedBy` tanpa indeks urut
     // bersama; kolom ini dijelaskan di laporan sebagai perbedaan mock.
-    { label: "Diunggah oleh", field: null },
-    { label: "Aksi", field: null, hidden: true },
+    { label: "uploadedBy", field: null },
+    { label: "actions", field: null, hidden: true },
   ],
 };
 
-const SORT_LABEL: Record<SortField, string> = {
-  name: "Nama",
-  date: "Tanggal",
-  size: "Ukuran",
-  type: "Tipe",
+/**
+ * Sort field -> message key under `list.column`; translate at render,
+ * e.g. `useTranslations("list.column")(SORT_LABEL[field])`.
+ */
+const SORT_LABEL: Record<SortField, ColumnKey> = {
+  name: "name",
+  date: "date",
+  size: "size",
+  type: "type",
 };
 
 function CaretIcon({ asc }: { asc: boolean }) {
@@ -76,6 +95,7 @@ function ListHead({
   sortAsc: boolean;
   onSort: (field: SortField) => void;
 }) {
+  const t = useTranslations("list.column");
   return (
     <div className={`${styles.head} ${styles[level]}`} role="row">
       {COLUMNS[level].map((col) => {
@@ -84,9 +104,9 @@ function ListHead({
           return (
             <span key={col.label} role="columnheader">
               {col.hidden ? (
-                <span className="spine-visually-hidden">{col.label}</span>
+                <span className="spine-visually-hidden">{t(col.label)}</span>
               ) : (
-                <span className={styles.headLabel}>{col.label}</span>
+                <span className={styles.headLabel}>{t(col.label)}</span>
               )}
             </span>
           );
@@ -105,7 +125,7 @@ function ListHead({
               }`}
               onClick={() => onSort(col.field as SortField)}
             >
-              {col.label}
+              {t(col.label)}
               {active ? <CaretIcon asc={sortAsc} /> : null}
             </button>
           </span>
@@ -117,6 +137,7 @@ function ListHead({
 
 /** Chip tipe berikon untuk tingkat isi Section. */
 function TypeChip({ kind, ext }: { kind: string; ext?: string | null }) {
+  const t = useTranslations("list.kind");
   if (kind === "folder") {
     return (
       <span className={`spine-chip ${styles.typeChip}`}>
@@ -124,7 +145,7 @@ function TypeChip({ kind, ext }: { kind: string; ext?: string | null }) {
           <rect x="4" y="7" width="16" height="13" rx="3" />
           <path d="M7 4h10" />
         </svg>
-        Sub-Section
+        {t("subSection")}
       </span>
     );
   }
@@ -134,7 +155,7 @@ function TypeChip({ kind, ext }: { kind: string; ext?: string | null }) {
         <svg className={styles.playGlyph} viewBox="0 0 10 12" fill="currentColor" aria-hidden="true">
           <path d="M0 0l10 6-10 6z" />
         </svg>
-        Video
+        {t("video")}
       </span>
     );
   }
@@ -145,7 +166,7 @@ function TypeChip({ kind, ext }: { kind: string; ext?: string | null }) {
           <path d="M6 3h7l5 5v13H6z" />
           <path d="M13 3v5h5" />
         </svg>
-        {ext ? `Dokumen · ${ext}` : "Dokumen"}
+        {ext ? t("documentExt", { ext }) : t("document")}
       </span>
     );
   }
@@ -157,7 +178,7 @@ function TypeChip({ kind, ext }: { kind: string; ext?: string | null }) {
           <circle cx="6.5" cy="18" r="2.5" />
           <circle cx="16.5" cy="16" r="2.5" />
         </svg>
-        Audio
+        {t("audio")}
       </span>
     );
   }
@@ -167,17 +188,18 @@ function TypeChip({ kind, ext }: { kind: string; ext?: string | null }) {
         <rect x="3" y="4" width="18" height="16" rx="3" />
         <path d="M3 16l5-5 4 4 3-3 6 6" />
       </svg>
-      Foto
+      {t("image")}
     </span>
   );
 }
 
 /** Sel kosong: "—" dengan label tersembunyi-visual "Tidak ada". */
 function EmptyCell() {
+  const t = useTranslations("list");
   return (
     <span className={styles.dash}>
       <span aria-hidden="true">—</span>
-      <span className="spine-visually-hidden">Tidak ada</span>
+      <span className="spine-visually-hidden">{t("none")}</span>
     </span>
   );
 }
@@ -189,13 +211,15 @@ function initialsOf(name?: string | null): string {
 }
 
 /** Baris kedua sub-Section: nama-namanya, jumlahnya, atau ketiadaannya. */
-function subSectionLine(children?: { id: string; name: string }[] | null): string {
+function subSectionLine(t: ListT, children?: { id: string; name: string }[] | null): string {
   const list = children ?? [];
-  if (list.length === 0) return "Tanpa sub-Section";
+  if (list.length === 0) return t("noSubSections");
   if (list.length <= 2) {
-    return `Sub-Section: ${list.map((c) => parseSectionName(c.name).title).join(" · ")}`;
+    return t("subSectionNames", {
+      names: list.map((c) => parseSectionName(c.name).title).join(" · "),
+    });
   }
-  return `${formatNumber(list.length)} sub-Section`;
+  return t("subSectionCount", { count: list.length });
 }
 
 export type ListViewProps = {
@@ -270,6 +294,12 @@ export type ListViewProps = {
  * Setiap baris berisi TEPAT SATU kontrol pembuka yang direntangkan seluas
  * baris; centang, "⋯", dan CTA adalah sibling DI ATASNYA.
  */
+
+/** Row accessible name from its non-empty parts: "Title, 5 files, 28 Sep 2026". */
+function rowName(...parts: Array<string | null | undefined>): string {
+  return parts.filter((part): part is string => !!part && part.trim() !== "").join(", ");
+}
+
 export default function ListView(props: ListViewProps) {
   const {
     level,
@@ -311,8 +341,13 @@ export default function ListView(props: ListViewProps) {
     onUploadHere,
   } = props;
 
-  const label =
-    level === "projects" ? "Projects" : level === "sections" ? "Section" : "Isi Section";
+  const t = useTranslations("list");
+  const tCards = useTranslations("cards");
+  const tCommon = useTranslations("common");
+  const tCount = useTranslations("count");
+  const fmt = useFormat();
+
+  const label = t(`tableLabel.${level}`);
 
   /* ---------- Story 2.16: keadaan runtime ----------
      Keempatnya MENGGANTIKAN daftar beserta kepala kolomnya — daftar
@@ -320,7 +355,7 @@ export default function ListView(props: ListViewProps) {
   if (state === "loading") {
     return (
       <div className={styles.list}>
-        <p className={`spine-body ${styles.loadingNote}`}>Memuat…</p>
+        <p className={`spine-body ${styles.loadingNote}`}>{tCommon("loading")}</p>
         {/* region ber-aria-busy="true" ada di dalam SkeletonRow */}
         <SkeletonRow rows={4} />
       </div>
@@ -332,7 +367,7 @@ export default function ListView(props: ListViewProps) {
       <div className={styles.list}>
         {/* role="alert" ada di dalam ErrorBox; teks server mentah tidak
             pernah dioper ke sini. */}
-        <ErrorBox text="Data tidak bisa diambil dari server." onRetry={onRetry} />
+        <ErrorBox text={t("errorText")} onRetry={onRetry} />
       </div>
     );
   }
@@ -348,8 +383,8 @@ export default function ListView(props: ListViewProps) {
               <path d="M20 20l-3.5-3.5" />
             </svg>
           }
-          title="Tidak ada hasil"
-          text={`Tidak ada hasil untuk "${searchTerm ?? ""}". Coba kata lain atau cek ejaan.`}
+          title={t("noResultsTitle")}
+          text={t("noResultsText", { term: searchTerm ?? "" })}
         />
       </div>
     );
@@ -360,12 +395,12 @@ export default function ListView(props: ListViewProps) {
       <div className={styles.list}>
         <EmptyState
           variant="ghost"
-          title="Masih kosong"
-          text="Seret file ke sini, atau upload dari komputermu."
+          title={t("emptyTitle")}
+          text={t("emptyText")}
           action={
             canUpload && onUploadHere ? (
               <PillButton variant="accent" onClick={onUploadHere}>
-                Upload footage pertama
+                {tCards("uploadFirst")}
               </PillButton>
             ) : undefined
           }
@@ -382,10 +417,8 @@ export default function ListView(props: ListViewProps) {
         projects.map((p: any) => {
           const total = Number(p.totalFiles) || 0;
           const isEmpty = total === 0;
-          const dateText = p.createdAt ? formatDate(new Date(p.createdAt)) : "";
-          const accessibleName = [p.title, formatCount(total, "file"), dateText]
-            .filter(Boolean)
-            .join(", ");
+          const dateText = p.createdAt ? fmt.date(new Date(p.createdAt)) : "";
+          const accessibleName = rowName(p.title, tCount("files", { count: total }), dateText);
           return (
             <div
               key={p.id}
@@ -404,8 +437,8 @@ export default function ListView(props: ListViewProps) {
                   </span>
                   <span className={`${styles.meta} ${isEmpty ? styles.metaGhost : ""}`}>
                     {isEmpty
-                      ? "Masih kosong — seret file ke sini"
-                      : describeContentSummary(p.contentSummary)}
+                      ? tCards("emptyDropHint")
+                      : fmt.contentSentence(p.contentSummary)}
                   </span>
                 </div>
               </div>
@@ -426,14 +459,14 @@ export default function ListView(props: ListViewProps) {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M12 16V4M6 10l6-6 6 6M4 20h16" />
                     </svg>
-                    Upload footage pertama
+                    {tCards("uploadFirst")}
                   </PillButton>
                 ) : isEmpty ? (
                   <EmptyCell />
                 ) : (
                   <span className={styles.num}>
-                    {formatNumber(total)}
-                    <small>file</small>
+                    {fmt.number(total)}
+                    <small>{tCount("fileWord", { count: total })}</small>
                   </span>
                 )}
               </div>
@@ -473,10 +506,8 @@ export default function ListView(props: ListViewProps) {
           const total = Number(f.totalFiles) || 0;
           const isEmpty = total === 0;
           const selected = selectedFolderIds.has(f.id);
-          const dateText = f.createdAt ? formatDate(new Date(f.createdAt)) : "";
-          const accessibleName = [title, formatCount(total, "file"), dateText]
-            .filter(Boolean)
-            .join(", ");
+          const dateText = f.createdAt ? fmt.date(new Date(f.createdAt)) : "";
+          const accessibleName = rowName(title, tCount("files", { count: total }), dateText);
           const isDropTarget = dragOverFolderId === f.id;
           return (
             <div
@@ -514,9 +545,9 @@ export default function ListView(props: ListViewProps) {
                     {number ? (
                       <span className={`spine-display-label ${styles.numberSticker}`}>
                         <span className={styles.numberPrefix} aria-hidden="true">
-                          NO
+                          {tCards("numberPrefix")}
                         </span>
-                        <span className="spine-visually-hidden">Nomor</span> {number}
+                        <span className="spine-visually-hidden">{tCards("number")}</span> {number}
                       </span>
                     ) : null}
                     <b className={`spine-display-card ${styles.rowTitle}`} title={title}>
@@ -525,8 +556,8 @@ export default function ListView(props: ListViewProps) {
                   </span>
                   <span className={styles.meta}>
                     {level === "sections"
-                      ? subSectionLine(f.children)
-                      : `Sub-Section · ${formatCount(total, "file")}`}
+                      ? subSectionLine(t, f.children)
+                      : t("subSectionFiles", { files: tCount("files", { count: total }) })}
                   </span>
                 </div>
               </div>
@@ -535,8 +566,8 @@ export default function ListView(props: ListViewProps) {
                 <>
                   <div role="cell" className={styles.colMeta}>
                     <span className={styles.num}>
-                      {formatNumber(total)}
-                      <small>file</small>
+                      {fmt.number(total)}
+                      <small>{tCount("fileWord", { count: total })}</small>
                     </span>
                   </div>
                   <div role="cell" className={`${styles.date} ${styles.colMeta}`}>
@@ -549,7 +580,7 @@ export default function ListView(props: ListViewProps) {
                     <TypeChip kind="folder" />
                   </div>
                   <div role="cell" className={`${styles.date} ${styles.colMeta}`}>
-                    {formatCount(total, "file")}
+                    {tCount("files", { count: total })}
                   </div>
                   <div role="cell" className={`${styles.date} ${styles.colMeta}`}>
                     {dateText || <EmptyCell />}
@@ -604,12 +635,22 @@ export default function ListView(props: ListViewProps) {
         files.map((file: any, idx: number) => {
           const kind = determineType(file.mimeType || "");
           const selected = selectedFileIds.has(file.id);
-          const sizeText = formatFileSize(Number(file.size) || 0);
-          const dateText = file.createdAt ? formatDate(new Date(file.createdAt)) : "";
+          const sizeText = fmt.fileSize(Number(file.size) || 0);
+          const dateText = file.createdAt ? fmt.date(new Date(file.createdAt)) : "";
           const ext = (file.originalName?.split(".").pop() || "").toUpperCase();
           const kindLabel =
-            kind === "video" ? "Video" : kind === "image" ? "Foto" : kind === "audio" ? "Audio" : "Dokumen";
-          const accessibleName = `${file.originalName}, ${kindLabel}, ${sizeText}`;
+            kind === "video"
+              ? t("kind.video")
+              : kind === "image"
+                ? t("kind.image")
+                : kind === "audio"
+                  ? t("kind.audio")
+                  : t("kind.document");
+          const accessibleName = t("fileRowName", {
+            name: String(file.originalName ?? ""),
+            kind: kindLabel,
+            size: sizeText,
+          });
           const thumb =
             file.thumbnailPath || file.thumbnailUrl
               ? mediaUrl.thumbnail(file.id)
@@ -654,7 +695,7 @@ export default function ListView(props: ListViewProps) {
                       satu baris meta; Tanggal dan "Diunggah oleh" PINDAH ke
                       viewer / panel info, tidak dihapus. */}
                   <span className={`${styles.meta} ${styles.metaMobile}`}>
-                    {`${kindLabel} · ${sizeText}`}
+                    {t("fileMeta", { kind: kindLabel, size: sizeText })}
                   </span>
                 </div>
               </div>
@@ -684,7 +725,7 @@ export default function ListView(props: ListViewProps) {
                   <button
                     type="button"
                     className={`spine-focus-ring ${styles.shareButton}`}
-                    aria-label={`Bagikan ${file.originalName}`}
+                    aria-label={tCards("share", { name: String(file.originalName ?? "") })}
                     onClick={(e) => {
                       e.stopPropagation();
                       onShareFile(file.id, file.originalName);

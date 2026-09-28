@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import AppSelect from '@/components/AppSelect';
 import { brand } from '@/lib/brand';
 import AuthPage from '@/components/auth/AuthPage';
@@ -17,113 +18,60 @@ import styles from './onboarding.module.css';
 // pertanyaan lanjutan bergantung jawaban sebelumnya, dan akun tetap
 // PENDING sampai admin menyetujui.
 
+// Question sets hold ids only; the copy lives in `onboarding.questions`
+// (`<id>.label`, `<id>.options.<option>`). Answers are option ids, so a
+// follow-up is keyed by the option id that opens it.
+type QuestionId =
+  | 'discover' | 'discover_social' | 'discover_other'
+  | 'edit_exp' | 'edit_content' | 'edit_reels_dur' | 'edit_software'
+  | 'fc_exp' | 'fc_gear' | 'fc_drone_cert' | 'fc_file'
+  | 'ag_purpose' | 'ag_org';
+
 type QDef = {
-  id: string;
-  label: string;
+  id: QuestionId;
   options: string[];
   followUps?: Record<string, QDef[]>;
 };
 
 const DISCOVER_Q: QDef = {
   id: 'discover',
-  label: `Dari mana kamu tahu ${brand.productName}?`,
-  options: [
-    'Diundang / direkomendasikan admin',
-    'Teman atau kolega',
-    'Media sosial (IG / TikTok / YouTube)',
-    'Grup travel / umrah',
-    'Pencarian Google',
-    'Lainnya',
-  ],
+  options: ['invited', 'friend', 'social', 'travelGroup', 'google', 'other'],
   followUps: {
-    'Media sosial (IG / TikTok / YouTube)': [
-      {
-        id: 'discover_social',
-        label: 'Platform mana yang membuat kamu tahu?',
-        options: ['Instagram', 'TikTok', 'YouTube', 'Facebook', 'Lainnya'],
-      },
+    social: [
+      { id: 'discover_social', options: ['instagram', 'tiktok', 'youtube', 'facebook', 'other'] },
     ],
-    'Lainnya': [
-      {
-        id: 'discover_other',
-        label: 'Paling mendekati, dari kategori mana?',
-        options: ['Rekan travel/umrah', 'Event / pameran', 'Website / blog', 'Iklan', 'Tidak ingat'],
-      },
+    other: [
+      { id: 'discover_other', options: ['travelPartner', 'event', 'website', 'ad', 'dontRemember'] },
     ],
   },
 };
 
 const ROLE_QUESTIONS: Record<string, QDef[]> = {
   EDITOR: [
-    {
-      id: 'edit_exp',
-      label: 'Sudah berapa lama pengalaman editing videomu?',
-      options: ['< 1 tahun', '1–3 tahun', '3–5 tahun', '> 5 tahun'],
-    },
+    { id: 'edit_exp', options: ['lt1', 'y1to3', 'y3to5', 'gt5'] },
     {
       id: 'edit_content',
-      label: 'Jenis konten apa yang paling sering kamu edit?',
-      options: ['Reels / Shorts', 'Dokumentasi perjalanan', 'Iklan / promosi', 'Vlog panjang', 'Campuran semua'],
+      options: ['reels', 'travelDocs', 'ads', 'longVlog', 'mix'],
       followUps: {
-        'Reels / Shorts': [
-          {
-            id: 'edit_reels_dur',
-            label: 'Rata-rata durasi hasil editmu?',
-            options: ['< 30 detik', '30–60 detik', '1–3 menit', '> 3 menit'],
-          },
-        ],
+        reels: [{ id: 'edit_reels_dur', options: ['lt30', 's30to60', 'm1to3', 'gt3'] }],
       },
     },
-    {
-      id: 'edit_software',
-      label: 'Software editing utamamu?',
-      options: ['Adobe Premiere Pro', 'DaVinci Resolve', 'Final Cut Pro', 'CapCut', 'After Effects', 'Lainnya'],
-    },
+    { id: 'edit_software', options: ['premiere', 'resolve', 'finalCut', 'capcut', 'afterEffects', 'other'] },
   ],
   FIELD_CREW: [
-    {
-      id: 'fc_exp',
-      label: 'Sudah berapa lama pengalaman shooting / liputan lapanganmu?',
-      options: ['< 1 tahun', '1–3 tahun', '3–5 tahun', '> 5 tahun'],
-    },
+    { id: 'fc_exp', options: ['lt1', 'y1to3', 'y3to5', 'gt5'] },
     {
       id: 'fc_gear',
-      label: 'Peralatan utama yang biasa kamu pakai?',
-      options: [
-        'Kamera mirrorless / DSLR',
-        'Kamera cinema (RED / BMPCC dll.)',
-        'Smartphone + gimbal',
-        'Action cam (GoPro / Insta360)',
-        'Drone',
-        'Campuran',
-      ],
+      options: ['mirrorless', 'cinema', 'phone', 'action', 'drone', 'mix'],
       followUps: {
-        'Drone': [
-          {
-            id: 'fc_drone_cert',
-            label: 'Apakah kamu punya sertifikat / izin terbang drone?',
-            options: ['Ya, ada', 'Belum ada', 'Sedang diproses'],
-          },
-        ],
+        drone: [{ id: 'fc_drone_cert', options: ['yes', 'no', 'inProgress'] }],
       },
     },
-    {
-      id: 'fc_file',
-      label: 'Bagaimana kamu mengatur file footage setelah shooting?',
-      options: ['Folder per tanggal', 'Folder per lokasi / acara', 'Langsung upload ke NAS / cloud', 'Belum ada sistem tetap'],
-    },
+    { id: 'fc_file', options: ['byDate', 'byEvent', 'upload', 'none'] },
   ],
   VIEWER: [
-    {
-      id: 'ag_purpose',
-      label: 'Untuk keperluan apa kamu butuh akses footage?',
-      options: ['Materi pemasaran media sosial', 'Arsip klien', 'Review hasil produksi', 'Lainnya'],
-    },
-    {
-      id: 'ag_org',
-      label: 'Kamu mewakili tim / instansi jenis apa?',
-      options: ['Klien', 'Agensi / studio partner', 'Media / content creator', 'Perorangan'],
-    },
+    { id: 'ag_purpose', options: ['marketing', 'clientArchive', 'review', 'other'] },
+    { id: 'ag_org', options: ['client', 'agency', 'media', 'individual'] },
   ],
 };
 
@@ -147,6 +95,12 @@ const WARN_ICON = (
 const ROLE_FIELD_ID = 'role';
 
 export default function OnboardingPage() {
+  const t = useTranslations('onboarding');
+  const tc = useTranslations('common');
+  const tq = useTranslations('onboarding.questions');
+  type QuestionKey = Parameters<typeof tq>[0];
+  const questionLabel = (q: QDef) => tq(`${q.id}.label`, { productName: brand.productName });
+  const optionLabel = (q: QDef, option: string) => tq(`${q.id}.options.${option}` as QuestionKey);
   const [name, setName] = useState('');
   const [role, setRole] = useState<'' | 'EDITOR' | 'FIELD_CREW' | 'VIEWER'>('');
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -223,10 +177,10 @@ export default function OnboardingPage() {
   const submit = async () => {
     setError('');
     setBadField('');
-    if (!role) { setError('Pilih jenis akun dulu.'); focusField(ROLE_FIELD_ID); return; }
+    if (!role) { setError(t('chooseRole')); focusField(ROLE_FIELD_ID); return; }
     if (!allAnswered) {
       const first = orderedQuestions.find(q => !answers[q.id]);
-      setError('Mohon jawab semua pertanyaan dulu.');
+      setError(t('answerAll'));
       if (first) focusField(first.id);
       return;
     }
@@ -234,7 +188,7 @@ export default function OnboardingPage() {
     try {
       const payload = {
         role,
-        answers: orderedQuestions.map(q => ({ question: q.label, answer: answers[q.id] })),
+        answers: orderedQuestions.map(q => ({ question: questionLabel(q), answer: optionLabel(q, answers[q.id]) })),
       };
       const j = await gql(
         'mutation Onboard($r: Role!, $a: String) { completeOnboarding(requestedRole: $r, signupAnswers: $a) { id accountStatus } }',
@@ -242,16 +196,16 @@ export default function OnboardingPage() {
       );
       if (j?.data?.completeOnboarding) { window.location.href = '/pending'; return; }
       // Teks server tidak pernah tampil mentah.
-      setError('Gagal mengirim. Coba lagi.');
+      setError(t('submitFailed'));
     } catch {
-      setError('Gagal mengirim. Coba lagi.');
+      setError(t('submitFailed'));
     } finally {
       setSubmitting(false);
     }
   };
 
   const firstName = name ? name.split(' ')[0] : '';
-  const greeting = firstName ? `Selamat datang, ${firstName}` : 'Selamat datang';
+  const greeting = firstName ? t('greeting', { name: firstName }) : t('greetingAnon');
 
   if (!ready) {
     return (
@@ -261,7 +215,7 @@ export default function OnboardingPage() {
           titleAs="h1"
           subtitle={null}
           pill={null}
-          form={<p className={`${styles.loading} spine-body`}>Memuat&hellip;</p>}
+          form={<p className={`${styles.loading} spine-body`}>{tc('loading')}</p>}
         />
       </AuthPage>
     );
@@ -272,19 +226,19 @@ export default function OnboardingPage() {
       <AuthCard
         title={greeting}
         titleAs="h1"
-        subtitle="Beberapa pertanyaan singkat supaya kami menyiapkan studio sesuai kebutuhanmu."
+        subtitle={t('subtitle')}
         pill={null}
         form={
           <div className={styles.questions}>
             <QuestionField
               id={ROLE_FIELD_ID}
-              label="Kamu ingin bergabung sebagai?"
+              label={t('roleQuestion')}
               value={role}
-              placeholder="Pilih jenis akun…"
+              placeholder={t('rolePlaceholder')}
               options={[
-                { value: 'EDITOR', label: 'Editor' },
-                { value: 'FIELD_CREW', label: 'Field Crew' },
-                { value: 'VIEWER', label: 'Viewer' },
+                { value: 'EDITOR', label: t('roleOptions.editor') },
+                { value: 'FIELD_CREW', label: t('roleOptions.crew') },
+                { value: 'VIEWER', label: t('roleOptions.viewer') },
               ]}
               invalid={badField === ROLE_FIELD_ID}
               error={badField === ROLE_FIELD_ID ? error : ''}
@@ -296,10 +250,10 @@ export default function OnboardingPage() {
               <QuestionField
                 key={q.id}
                 id={q.id}
-                label={q.label}
+                label={questionLabel(q)}
                 value={answers[q.id] || ''}
-                placeholder="Pilih jawaban…"
-                options={q.options.map(o => ({ value: o, label: o }))}
+                placeholder={t('answerPlaceholder')}
+                options={q.options.map(o => ({ value: o, label: optionLabel(q, o) }))}
                 invalid={badField === q.id}
                 error={badField === q.id ? error : ''}
                 buttonRef={(el) => { fieldRefs.current[q.id] = el; }}
@@ -313,10 +267,10 @@ export default function OnboardingPage() {
               <ButtonPrimary
                 className={styles.submit}
                 busy={submitting}
-                busyLabel="Mengirim…"
+                busyLabel={t('submitting')}
                 onClick={submit}
               >
-                Kirim untuk Ditinjau
+                {t('submit')}
               </ButtonPrimary>
             )}
           </div>

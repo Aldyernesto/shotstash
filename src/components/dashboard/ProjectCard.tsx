@@ -3,8 +3,9 @@
 import React from "react";
 import styles from "./ProjectCard.module.css";
 import { fanLayout, FAN_MAX, FAN_STAGGER_MS, type FanSlot } from "./projectCardGeometry";
-import { formatDate, formatNumber } from "@/lib/format";
-import { describeContentSummary, type ContentSummary } from "@/lib/contentSummary";
+import { useTranslations } from "next-intl";
+import { useFormat } from "@/i18n/useFormat";
+import type { ContentSummary } from "@/lib/contentSummary";
 import { PillButton } from "@/components/form/buttons";
 import MoreButton from "./MoreButton";
 import { useShellLayers } from "./project3d/useShellLayers";
@@ -152,6 +153,9 @@ export default function ProjectCard({
   // Story 2.7 — keadaan kipas. "auto" = hover/fokus CSS yang memutuskan;
   // "open" = kipas otomatis sekali di perangkat sentuh; "closed" = Esc
   // menutup kipas SEMENTARA FOKUS TETAP DI KARTU.
+  const t = useTranslations("cards");
+  const tCount = useTranslations("count");
+  const f = useFormat();
   const objectRef = React.useRef<HTMLDivElement>(null);
   const [fanState, setFanState] = React.useState<"auto" | "open" | "closed">("auto");
 
@@ -192,11 +196,11 @@ export default function ProjectCard({
   // Story 2.8: Project 0 file -> kipas diganti SATU slot hantu.
   const isEmpty = (totalFiles || 0) === 0;
   const showUploadCta = isEmpty && canUpload && !!onUploadFirst;
-  const dateText = formatDate(createdAt);
-  const countText = formatNumber(totalFiles || 0);
-  const summarySentence = describeContentSummary(contentSummary);
+  const dateText = f.date(createdAt);
+  const countText = f.number(totalFiles || 0);
+  const summarySentence = f.contentSentence(contentSummary);
   const summaryId = `project-summary-${id}`;
-  const accessibleName = `${title}, ${countText} file, ${dateText}`;
+  const accessibleName = t("projectName", { title, files: tCount("files", { count: totalFiles || 0 }), date: dateText });
 
   return (
     <article
@@ -248,7 +252,9 @@ export default function ProjectCard({
 
           <span className={`spine-display-sticker ${styles.countSticker}`} aria-hidden="true">
             {countText}
-            <span className={`spine-sticker-unit ${styles.countUnit}`}>file</span>
+            <span className={`spine-sticker-unit ${styles.countUnit}`}>
+              {tCount("fileWord", { count: totalFiles || 0 })}
+            </span>
           </span>
 
           {shell ? (
@@ -281,7 +287,7 @@ export default function ProjectCard({
             </span>
             {isEmpty ? (
               <span className={`spine-label ${styles.emptyHint}`} aria-hidden="true">
-                {canUpload ? "Masih kosong — seret file ke sini" : "Masih kosong"}
+                {canUpload ? t("emptyDropHint") : t("empty")}
               </span>
             ) : (
               <span className={`spine-label ${styles.date}`} aria-hidden="true">
@@ -305,7 +311,7 @@ export default function ProjectCard({
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
                 <path d="M12 16V4M6 10l6-6 6 6M4 20h16" />
               </svg>
-              Upload footage pertama
+              {t("uploadFirst")}
             </PillButton>
           ) : null}
         </div>

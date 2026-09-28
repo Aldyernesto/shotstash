@@ -23,7 +23,9 @@ import ActionMenu, { type ActionMenuEntry } from "./ActionMenu";
 import { navDestinations, isActiveDestination, type NavDestination } from "./navDestinations";
 import Logo from "@/components/Logo";
 import styles from "./dashboard-frame.module.css";
-import { roleInitials, roleLabel } from "@/lib/permissions";
+import { roleInitials } from "@/lib/permissions";
+import { useTranslations } from "next-intl";
+import { useFormat } from "@/i18n/useFormat";
 
 /* Ikon "Lainnya" = tiga titik — sama dengan slot "Lainnya" bottom-bar HP. */
 const MORE_ICON = (
@@ -34,7 +36,6 @@ const MORE_ICON = (
   </svg>
 );
 
-const MORE_LABEL = "Lainnya";
 
 /**
  * Menghitung href tujuan yang harus pindah ke "Lainnya".
@@ -143,6 +144,10 @@ export default function DesktopFrame({
   onOpenProfile: () => void;
   onOpenLogout: () => void;
 }) {
+  const t = useTranslations("shell");
+  const tn = useTranslations("nav");
+  const f = useFormat();
+  const moreLabel = t("more");
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
   const destinations = navDestinations(user);
@@ -210,14 +215,14 @@ export default function DesktopFrame({
   const moreEntries: ActionMenuEntry[] = overflow.map((d) => ({
     kind: "item",
     id: d.href,
-    label: d.label,
+    label: tn(d.labelKey),
     icon: d.icon,
     href: d.href,
     current: isActiveDestination(d, pathname),
     trailing: d.accentDot ? <span className={styles.accentDot} aria-hidden="true" /> : undefined,
   }));
 
-  const name = user?.name || user?.email?.split("@")[0] || "User";
+  const name = user?.name || user?.email?.split("@")[0] || t("userFallback");
 
   const itemClass = (active: boolean) =>
     `spine-nav spine-focus-ring ${active ? `spine-nav-active ${styles.capsuleOn}` : styles.capsuleLink}`;
@@ -234,7 +239,7 @@ export default function DesktopFrame({
         // tujuan role mana pun (AC 2.2); tidak fokusabel, tak bergeser saat diganti.
         <div className={styles.capsulePlaceholder} aria-hidden="true" />
       ) : (
-        <nav aria-label="Utama" className={styles.capsuleWrap} ref={wrapRef}>
+        <nav aria-label={t("mainNav")} className={styles.capsuleWrap} ref={wrapRef}>
           <ul className={styles.capsule}>
             {visible.map((d) => {
               const active = isActiveDestination(d, pathname);
@@ -247,7 +252,7 @@ export default function DesktopFrame({
                     className={itemClass(active)}
                   >
                     {d.icon}
-                    <span>{d.label}</span>
+                    <span>{tn(d.labelKey)}</span>
                     {d.accentDot && <span className={styles.accentDot} aria-hidden="true" />}
                   </Link>
                 </li>
@@ -268,7 +273,7 @@ export default function DesktopFrame({
                   onClick={onMoreClick}
                 >
                   {MORE_ICON}
-                  <span>{MORE_LABEL}</span>
+                  <span>{moreLabel}</span>
                 </button>
               </li>
             )}
@@ -284,7 +289,7 @@ export default function DesktopFrame({
                 <li key={d.href}>
                   <span className={itemClass(active)}>
                     {d.icon}
-                    <span>{d.label}</span>
+                    <span>{tn(d.labelKey)}</span>
                     {d.accentDot && <span className={styles.accentDot} />}
                   </span>
                 </li>
@@ -293,7 +298,7 @@ export default function DesktopFrame({
             <li>
               <span className={`${itemClass(true)} ${styles.capsuleMore}`}>
                 {MORE_ICON}
-                <span>{MORE_LABEL}</span>
+                <span>{moreLabel}</span>
               </span>
             </li>
           </ul>
@@ -301,7 +306,7 @@ export default function DesktopFrame({
           {moreOpen && overflow.length > 0 && (
             <ActionMenu
               anchor={moreAnchor}
-              target={{ kindLabel: "Navigasi", name: MORE_LABEL }}
+              target={{ kindLabel: t("navigation"), name: moreLabel }}
               entries={moreEntries}
               onClose={closeMore}
             />
@@ -333,7 +338,7 @@ export default function DesktopFrame({
               </span>
               <span className={styles.avpText}>
                 {name}
-                <small>{roleLabel(user)}</small>
+                <small>{f.role(user).toLocaleUpperCase(f.locale)}</small>
               </span>
             </button>
             {accountOpen && (

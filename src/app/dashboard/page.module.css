@@ -76,6 +76,9 @@
   border: 1px solid var(--app-spine-line);
   color: var(--app-spine-text-soft);
   white-space: nowrap;
+  /* The h1's -0.03em is inherited as an absolute length (about -1.7px at
+     the page-title size), which swallowed the space in "5 files". */
+  letter-spacing: normal;
 }
 
 .countChip svg {

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useTranslations } from "next-intl";
 import fieldStyles from "./form/TextField.module.css";
 
 type PasswordInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "type"> & {
@@ -40,7 +41,9 @@ function EyeOffIcon() {
  * bukan duplikasi); tampilan isi input tetap milik layar pemanggil.
  */
 export default function PasswordInput({ className, style, inputRef, ...inputProps }: PasswordInputProps) {
+  const t = useTranslations("password");
   const [visible, setVisible] = useState(false);
+  const eyeLabel = visible ? t("hide") : t("show");
   return (
     <div className={fieldStyles.controlWrap} style={{ width: "100%" }}>
       <input
@@ -54,8 +57,8 @@ export default function PasswordInput({ className, style, inputRef, ...inputProp
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
-          aria-label={visible ? "Sembunyikan password" : "Tampilkan password"}
-          title={visible ? "Sembunyikan password" : "Tampilkan password"}
+          aria-label={eyeLabel}
+          title={eyeLabel}
           /* Story 1.7: target sentuh ≥48px + cincin fokus spine. */
           className={`spine-hit-area spine-focus-ring ${fieldStyles.eyeBtn}`}
         >

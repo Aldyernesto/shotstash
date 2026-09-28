@@ -56,8 +56,8 @@ function push(layer: Layer) {
   if (layer.modal && stack.some((l) => l.modal) && process.env.NODE_ENV !== "production") {
     // Bukan crash — tetapi tidak boleh lolos tanpa terlihat.
     console.error(
-      "[spine] Dua lapisan modal terbuka sekaligus. Aturan satu lapisan modal (Story 3.1): " +
-        "pertanyaan lanjutan MENGGANTI isi lapisan yang sudah terbuka, tidak membuka dialog kedua.",
+      "[spine] Two modal layers are open at once. One-modal-layer rule (Story 3.1): " +
+        "a follow-up question REPLACES the content of the open layer instead of opening a second dialog.",
     );
   }
   stack.push(layer);

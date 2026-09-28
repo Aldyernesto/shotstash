@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale } from "next-intl/server";
 import { brand } from "@/lib/brand";
 
 const inter = Inter({
@@ -29,6 +31,7 @@ const poppins = localFont({
 import { ApolloWrapper } from "@/components/ApolloWrapper";
 import { AuthProvider } from "@/components/AuthContext";
 
+// Product name and tagline come from the brand module (single source).
 export const metadata: Metadata = {
   title: brand.productName,
   description: brand.tagline,
@@ -52,18 +55,20 @@ export const viewport: Viewport = {
 // Save-Data/deviceMemory dievaluasi saat muat (tidak punya event andal).
 const themeInit = `(function(){try{var t=localStorage.getItem('shotstash_theme');if(t!=='light'&&t!=='dark'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}try{var h=document.documentElement,m=window.matchMedia('(prefers-reduced-motion: reduce)'),s=false,d=false;try{s=!!(navigator.connection&&navigator.connection.saveData);}catch(e){}try{d=(navigator.deviceMemory||8)<=2;}catch(e){}var f=function(){h.setAttribute('data-motion',(m.matches||s||d)?'calm':'full');};f();if(m.addEventListener){m.addEventListener('change',f);}}catch(e){}})();`;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Story 3.1: the page language follows the resolved locale (cookie from
+  // users.locale, then DEFAULT_LOCALE, then English).
+  const locale = await getLocale();
   return (
     <html
       // data-theme & data-motion diubah skrip anti-FOUC pra-hidrasi —
       // tanpa ini React memberi warning mismatch atribut di dev.
       suppressHydrationWarning
-      // Story 1.9: halaman berbahasa Indonesia (FR4) — bukan "en" lagi.
-      lang="id"
+      lang={locale}
       className={`${inter.variable} ${poppins.variable}`}
       data-theme="dark"
       data-motion="full"
@@ -72,9 +77,11 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
       <body>
-        <ApolloWrapper>
-          <AuthProvider>{children}</AuthProvider>
-        </ApolloWrapper>
+        <NextIntlClientProvider>
+          <ApolloWrapper>
+            <AuthProvider>{children}</AuthProvider>
+          </ApolloWrapper>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

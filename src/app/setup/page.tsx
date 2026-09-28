@@ -7,6 +7,7 @@
  */
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import AuthPage from '@/components/auth/AuthPage';
 import { brand } from '@/lib/brand';
 import { isSetupComplete, probeStorage, setupTokenRequired } from '@/modules/setup';
@@ -14,9 +15,10 @@ import SetupForm from './SetupForm';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = {
-  title: `Set up | ${brand.productName}`,
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('setup');
+  return { title: t('metaTitle', { productName: brand.productName }) };
+}
 
 export default async function SetupPage() {
   if (await isSetupComplete()) redirect('/');

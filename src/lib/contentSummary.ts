@@ -1,11 +1,9 @@
-// Story 2.4 (sisi klien): merakit kalimat ringkasan isi dari ANGKA MENTAH
-// `contentSummary` GraphQL. Server sengaja hanya mengirim angka per ember —
-// urutan kata dan formatnya milik klien (AC 2.4), jadi satu modul ini yang
-// memegangnya supaya sub-judul page-head (Story 2.5), kontrak a11y Kartu
-// Project (Story 2.6), dan kolom "Isi" mode daftar memakai kalimat yang
-// sama persis. Angka memakai format Indonesia titik-ribuan dari Epic 1.
-
-import { formatNumber } from "./format";
+// Story 2.4 (client side): the content summary from the raw per-bucket
+// counts of GraphQL `contentSummary`. The server only sends numbers; word
+// order and wording belong to the client, so this one module decides which
+// buckets appear and in what order. The words come from the `content`
+// message namespace (ICU plurals), applied by the caller: src/lib cannot
+// import the i18n layer.
 
 export type ContentSummary = {
   photos?: number | null;
@@ -14,37 +12,26 @@ export type ContentSummary = {
   total?: number | null;
 };
 
-const BUCKETS = [
-  ["photos", "foto"],
-  ["videos", "video"],
-  ["documents", "dokumen"],
-] as const;
+export type ContentKind = "photos" | "videos" | "documents";
+
+export type ContentPart = { kind: ContentKind; count: number };
+
+const BUCKETS: ContentKind[] = ["photos", "videos", "documents"];
 
 /**
- * Potongan "{n} {jenis}". Ember berjumlah 0 TIDAK pernah ditulis
- * ("Berisi 18 dokumen · 7 video", bukan "… · 0 foto").
- * @param largestFirst true = urut dari jumlah terbesar (kalimat kartu);
- *   false = urutan tetap foto → video → dokumen (sub-judul page-head).
+ * Non-empty buckets. A bucket with 0 is never written ("18 documents ·
+ * 7 videos", not "... · 0 photos").
+ * @param largestFirst true = largest count first (card sentence);
+ *   false = fixed order photos, videos, documents (page-head subtitle).
  */
 export function contentSummaryParts(
   summary?: ContentSummary | null,
   largestFirst = false,
-): string[] {
+): ContentPart[] {
   if (!summary) return [];
-  const rows = BUCKETS.map(([key, label]) => ({
-    n: Number(summary[key] ?? 0) || 0,
-    label,
-  })).filter((row) => row.n > 0);
-  if (largestFirst) rows.sort((a, b) => b.n - a.n);
-  return rows.map((row) => `${formatNumber(row.n)} ${row.label}`);
-}
-
-/**
- * Kalimat ringkasan isi untuk nama/deskripsi aksesibel kartu:
- * "Berisi 1.900 video · 650 foto · 50 dokumen" (terbesar dulu).
- * Isi kosong / field gagal dimuat → "" (pemanggil tidak merender apa pun).
- */
-export function describeContentSummary(summary?: ContentSummary | null): string {
-  const parts = contentSummaryParts(summary, true);
-  return parts.length ? `Berisi ${parts.join(" · ")}` : "";
+  const rows = BUCKETS.map((kind) => ({ kind, count: Number(summary[kind] ?? 0) || 0 })).filter(
+    (row) => row.count > 0,
+  );
+  if (largestFirst) rows.sort((a, b) => b.count - a.count);
+  return rows;
 }

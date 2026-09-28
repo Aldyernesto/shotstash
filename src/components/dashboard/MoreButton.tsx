@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import styles from "./MoreButton.module.css";
 
 export type MoreButtonVariant = "object" | "in-caption";
@@ -36,12 +37,13 @@ export default function MoreButton({
   className,
   onOpen,
 }: MoreButtonProps) {
+  const t = useTranslations("more");
   return (
     <button
       type="button"
       aria-haspopup="menu"
       aria-expanded={expanded}
-      aria-label={`Aksi untuk ${itemName}`}
+      aria-label={t("actionsFor", { name: itemName })}
       className={`${variant === "object" ? "spine-focus-ring--on-photo" : "spine-focus-ring"} spine-hit-area ${
         styles.button
       } ${variant === "object" ? styles.object : styles.inCaption} ${className ?? ""}`}

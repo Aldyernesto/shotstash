@@ -16,6 +16,7 @@
  */
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import styles from "./states.module.css";
 import { PillButton } from "@/components/form/buttons";
 
@@ -96,6 +97,7 @@ export function SkeletonRow({
   columns = 4,
   className,
 }: SkeletonRowProps) {
+  const tCommon = useTranslations("common");
   return (
     <div
       className={`${styles.skeletonRegion} ${className ?? ""}`}
@@ -103,7 +105,7 @@ export function SkeletonRow({
       aria-live="off"
     >
       <p className="spine-visually-hidden" role="status">
-        Memuat…
+        {tCommon("loading")}
       </p>
       {Array.from({ length: rows }, (_, i) =>
         variant === "table" ? (
@@ -150,13 +152,18 @@ export type ErrorBoxProps = {
 };
 
 export function ErrorBox({
-  title = "Gagal memuat. Coba lagi.",
+  title,
   text,
   onRetry,
-  retryLabel = "Coba lagi",
+  retryLabel,
   variant = "box",
   className,
 }: ErrorBoxProps) {
+  const t = useTranslations("states");
+  const tCommon = useTranslations("common");
+  // Defaults come from messages so callers that omit them stay translated.
+  const titleText = title ?? t("errorTitle");
+  const retryText = retryLabel ?? tCommon("retry");
   return (
     <div
       className={`${styles.errorBox} ${variant === "banner" ? styles.errorBanner : ""} ${className ?? ""}`}
@@ -175,14 +182,14 @@ export function ErrorBox({
         <path d="M12 7.5v5.5M12 16.4v.2" />
       </svg>
       <div className={styles.errorBody}>
-        <p className={`spine-row-title ${styles.errorTitle}`}>{title}</p>
+        <p className={`spine-row-title ${styles.errorTitle}`}>{titleText}</p>
         {text ? <p className={`spine-footnote ${styles.errorText}`}>{text}</p> : null}
         {onRetry ? (
           <div className={styles.errorAction}>
             {/* pill "Coba lagi" dari keluarga tombol Epic 1 (Story 1.14) —
                 termasuk focus-ring tunggalnya; tidak dibangun ulang. */}
             <PillButton variant="surface" onClick={onRetry}>
-              {retryLabel}
+              {retryText}
             </PillButton>
           </div>
         ) : null}

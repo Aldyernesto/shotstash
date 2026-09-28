@@ -11,7 +11,7 @@
 // purged file in that database. Login limits (10 per 15 min per IP and per
 // email) mean a second run within 15 minutes needs a server restart.
 import 'dotenv/config';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import pg from 'pg';
 
@@ -61,6 +61,28 @@ ok(sa.status === 200 && sa.token, 'login REST 200 + token');
 ok(/HttpOnly/i.test(sa.sc) && /SameSite=Lax/i.test(sa.sc) && /Path=\/media/i.test(sa.sc) && !/Secure/i.test(sa.sc), 'cookie attributes', sa.sc);
 const bad = await login('superadmin@example.com', 'wrong-password');
 ok(bad.status === 401, 'wrong password 401');
+
+// ---- Story 3.1: stable login error codes (GraphQL). The login limit is 10
+// per 15 min per IP; the rows below that spend it are balanced by reading
+// counts from the database and creating test accounts as the super admin.
+const gqlLogin = (email, password) =>
+  gql(null, 'mutation($e:String!,$p:String!){ login(email:$e, password:$p) { success errorCode } }', { e: email, p: password });
+const badGql = await gqlLogin('superadmin@example.com', 'wrong-password');
+ok(badGql.data?.login?.success === false && badGql.data.login.errorCode === 'INVALID_CREDENTIALS', 'GraphQL login wrong password INVALID_CREDENTIALS', JSON.stringify(badGql));
+{
+  // A Google-only account has no password; create one when the seed has none.
+  const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await db.connect();
+  await db.query(
+    `INSERT INTO users (id, name, email, "passwordHash", role, "accountStatus", "updatedAt")
+     VALUES ($1, 'Google Only', 'google-only@example.com', NULL, 'EDITOR', 'ACTIVE', now())
+     ON CONFLICT (email) DO UPDATE SET "passwordHash" = NULL`,
+    [randomUUID()],
+  );
+  await db.end();
+}
+const googleOnly = await gqlLogin('google-only@example.com', 'any-password-123');
+ok(googleOnly.data?.login?.success === false && googleOnly.data.login.errorCode === 'GOOGLE_ONLY_ACCOUNT', 'GraphQL login on a Google-only account GOOGLE_ONLY_ACCOUNT', JSON.stringify(googleOnly));
 const admin = await login('admin@example.com');
 const editor = await login('editor@example.com');
 const viewer = await login('viewer@example.com');
@@ -262,17 +284,26 @@ const dvi = await gql(sa.token, `mutation { deactivateUser(id:"${viewer.user.id}
 ok(dvi.data?.deactivateUser, 'viewer deactivated for fan-out check');
 await gql(editor.token, `mutation { sendMessage(projectId:"${project.id}", message:"again @Viewer") { id } }`);
 await gql(sa.token, `mutation { reactivateUser(id:"${viewer.user.id}") { id } }`);
-const viewer2 = await login('viewer@example.com');
 await new Promise((res) => setTimeout(res, 500));
-ok((await unread(viewer2.token)) === before.viewer + 1, 'inactive mentioned user not notified');
+{
+  // Read from the database: a fresh viewer login here would spend the login limit.
+  const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await db.connect();
+  const n = (await db.query('SELECT count(*)::int AS n FROM notifications WHERE "userId" = $1 AND read = false', [viewer.user.id])).rows[0].n;
+  await db.end();
+  ok(n === before.viewer + 1, 'inactive mentioned user not notified', n);
+}
 
 // ---- Google path (needs a real Google id token): skipped locally
 console.log('SKIP Google email_verified linking (covered by code review; needs a Google-signed id token)');
 
 // ---- password length and pending accounts
-const shortReg = await gql(null, 'mutation { register(input:{name:"S", email:"short-pw@example.com", password:"123456789"}) { success errorCode } }');
+// Created as the super admin: same password rule, no login-limit cost.
+const shortReg = await gql(sa.token, 'mutation { register(input:{name:"S", email:"short-pw@example.com", password:"123456789", role:EDITOR}) { success errorCode } }');
 ok(shortReg.data?.register?.success === false && shortReg.data?.register?.errorCode === 'PASSWORD_TOO_SHORT', 'register with 9 chars PASSWORD_TOO_SHORT', JSON.stringify(shortReg));
 const pendEmail = `pending-${Date.now()}@example.com`;
+const taken = await gql(sa.token, 'mutation { register(input:{name:"Taken", email:"editor@example.com", password:"long-enough-password", role:EDITOR}) { success errorCode } }');
+ok(taken.data?.register?.success === false && taken.data.register.errorCode === 'EMAIL_TAKEN', 'register with an existing email EMAIL_TAKEN', JSON.stringify(taken));
 const pend = await gql(null, `mutation { register(input:{name:"Pending", email:"${pendEmail}", password:"pending-password"}) { success token } }`);
 ok(pend.data?.register?.success && pend.data.register.token, 'public register returns a PENDING session');
 ok(code(await gql(pend.data.register.token, '{ projects { id } }')) === 'FORBIDDEN', 'PENDING account cannot list projects');
@@ -379,10 +410,10 @@ r = await fetch(`${B}/media/i/${ownFile.id}`, { headers: { cookie: editor.cookie
 ok(r.status === 404, 'purged file media 404', r.status);
 
 // logout
-r = await fetch(`${B}/api/v1/auth/logout`, { method: 'POST', headers: { authorization: `Bearer ${viewer2.token}` } });
+r = await fetch(`${B}/api/v1/auth/logout`, { method: 'POST', headers: { authorization: `Bearer ${flooder.token}` } });
 ok(r.status === 200 && /shotstash_session=;/.test(r.headers.get('set-cookie') || ''), 'logout clears cookie', r.headers.get('set-cookie'));
-ok(code(await gql(viewer2.token, '{ projects { id } }')) === 'UNAUTHENTICATED', 'old token fails GraphQL');
-r = await fetch(`${B}/media/i/${vid.id}`, { headers: { cookie: viewer2.cookie } });
+ok(code(await gql(flooder.token, '{ projects { id } }')) === 'UNAUTHENTICATED', 'old token fails GraphQL');
+r = await fetch(`${B}/media/i/${vid.id}`, { headers: { cookie: flooder.cookie } });
 ok(r.status === 401, 'old token fails media', r.status);
 
 console.log(fails ? `${fails} FAILED` : 'ALL PASS');

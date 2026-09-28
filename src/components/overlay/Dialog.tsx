@@ -16,6 +16,7 @@
 
 import React, { useId, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useTranslations } from "next-intl";
 import styles from "./overlay.module.css";
 import { useFocusTrap, useModalLayer } from "./modalStack";
 import { ButtonDanger, PillButton } from "@/components/form/buttons";
@@ -268,13 +269,17 @@ export function ConfirmDialog({
   tone = "recoverable",
   alert = true,
   confirmLabel,
-  cancelLabel = "Batal",
-  busyLabel = "Memproses...",
+  cancelLabel,
+  busyLabel,
   busy = false,
   icon,
   onConfirm,
   onClose,
 }: ConfirmDialogProps) {
+  const tc = useTranslations("common");
+  const td = useTranslations("dialog");
+  const cancelText = cancelLabel ?? tc("cancel");
+  const busyText = busyLabel ?? td("busy");
   // Fokus awal SELALU di aksi aman, tidak pernah di tombol merusak.
   const cancelRef = useRef<HTMLButtonElement>(null);
   const sentRef = useRef(false);
@@ -307,11 +312,11 @@ export function ConfirmDialog({
       actions={
         <>
           <PillButton ref={cancelRef} variant="surface" onClick={onClose}>
-            {cancelLabel}
+            {cancelText}
           </PillButton>
           {tone === "permanent" ? (
             <ButtonDanger variant="solid" {...confirmProps}>
-              {busy ? busyLabel : (
+              {busy ? busyText : (
                 <>
                   {icon}
                   {confirmLabel}
@@ -320,7 +325,7 @@ export function ConfirmDialog({
             </ButtonDanger>
           ) : (
             <PillButton variant="accent" {...confirmProps}>
-              {busy ? busyLabel : (
+              {busy ? busyText : (
                 <>
                   {icon}
                   {confirmLabel}

@@ -16,6 +16,7 @@
 // tanpa I, L, O, 0, 1. — SATU sumber klien; shared.tsx me-re-ekspor.
 
 import { useEffect, useId, useImperativeHandle, useRef } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from './CodeInput.module.css';
 
 export const CODE_LENGTH = 6;
@@ -62,6 +63,7 @@ export default function CodeInput({
   invalid = false,
   ref,
 }: CodeInputProps) {
+  const t = useTranslations('authCode');
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const hintId = useId();
 
@@ -123,9 +125,9 @@ export default function CodeInput({
   return (
     <div className={styles.wrap}>
       <p id={hintId} className={`spine-footnote ${styles.hint}`}>
-        Kode diperiksa otomatis setelah 6 karakter.
+        {t('hint', { count: CODE_LENGTH })}
       </p>
-      <div className={`${styles.row} ${invalid ? styles.rowInvalid : ''}`} role="group" aria-label="Kode 6 karakter">
+      <div className={`${styles.row} ${invalid ? styles.rowInvalid : ''}`} role="group" aria-label={t('group', { count: CODE_LENGTH })}>
         {value.map((ch, i) => (
           <input
             key={i}
@@ -140,7 +142,7 @@ export default function CodeInput({
             autoCorrect="off"
             autoComplete={i === 0 ? 'one-time-code' : 'off'}
             spellCheck={false}
-            aria-label={`Karakter ke-${i + 1} dari ${CODE_LENGTH}`}
+            aria-label={t('box', { index: i + 1, count: CODE_LENGTH })}
             aria-invalid={invalid || undefined}
             aria-describedby={hintId}
             onFocus={(e) => e.target.select()}

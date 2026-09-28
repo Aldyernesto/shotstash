@@ -31,6 +31,8 @@ import { applyAuthMap } from './withAuth';
 import { limitBy, loginLimit } from '../lib/rateLimit';
 import { folderChainTrashed } from '../lib/shareLink';
 import * as Trash from '@/modules/trash';
+import { isSupportedLocale } from '@/modules/i18n';
+import { LOGIN_INTERNAL_ERROR } from '../lib/authMessages';
 import { GraphQLError } from 'graphql';
 
 function rateLimited(retryAfter: number) {
@@ -607,10 +609,13 @@ const rawResolvers = {
           user,
         };
       } catch (error: any) {
-        return {
-          success: false,
-          message: error.message,
-        };
+        // Only a LoginError carries a user-facing code; anything else
+        // (database down, Prisma P1001, a bug) is INTERNAL.
+        if (error instanceof AuthService.LoginError) {
+          return { success: false, message: error.message, errorCode: error.code };
+        }
+        console.error('[login] unexpected failure', error);
+        return { success: false, message: 'Internal error', errorCode: LOGIN_INTERNAL_ERROR };
       }
     },
 
@@ -688,7 +693,7 @@ const rawResolvers = {
         }
         return { success: true, user };
       } catch (error: any) {
-        if (error instanceof AuthService.PasswordRuleError) {
+        if (error instanceof AuthService.PasswordRuleError || error instanceof AuthService.EmailTakenError) {
           return { success: false, message: error.message, errorCode: error.code };
         }
         return { success: false, message: error.message };
@@ -884,7 +889,11 @@ const rawResolvers = {
       return ChatService.sendMessage(actor.id, projectId, message, referencedFileId || undefined);
     },
 
-    updateProfile: async (_: any, { name, avatarUrl }: { name?: string; avatarUrl?: string }, context: GraphQLContext) => {
+    updateProfile: async (
+      _: any,
+      { name, avatarUrl, locale }: { name?: string; avatarUrl?: string; locale?: string | null },
+      context: GraphQLContext,
+    ) => {
       assertCanWriteSelf(context.actor);
       const data: any = {};
       if (typeof name === 'string') {
@@ -896,6 +905,13 @@ const rawResolvers = {
       if (typeof avatarUrl === 'string') {
         if (avatarUrl.length > 0 && !isRenderableImageUrl(avatarUrl)) throw new Error('Invalid avatar URL');
         data.avatarUrl = avatarUrl.length > 0 ? avatarUrl : null;
+      }
+      // Story 3.1: '' or null clears the choice (back to the instance default).
+      if (locale !== undefined) {
+        const wanted = typeof locale === 'string' ? locale.trim().toLowerCase() : '';
+        if (wanted === '') data.locale = null;
+        else if (isSupportedLocale(wanted)) data.locale = wanted;
+        else throw new GraphQLError('Unsupported locale', { extensions: { code: 'UNSUPPORTED_LOCALE' } });
       }
       if (Object.keys(data).length === 0) throw new Error('Nothing to update');
       return prisma.user.update({ where: { id: context.actor.id }, data });

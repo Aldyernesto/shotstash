@@ -38,12 +38,13 @@
  *   berikutnya ([ASSUMPTION] sumber yang sama). "Aksi berikutnya" =
  *   toast berikutnya yang didorong ke antrean.
  * - Pengumuman tidak pernah memindahkan fokus.
- * - Kalimat SELALU Bahasa Indonesia; teks mentah server tidak pernah
- *   dioper apa adanya (lihat `humanizeError`).
+ * - Copy comes from messages; raw server text is never passed through
+ *   as is (see `errorKind` / `useHumanizeError`).
  */
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslations } from "next-intl";
 import styles from "./toast.module.css";
 
 export type ToastTone = "success" | "error";
@@ -51,7 +52,7 @@ export type ToastTone = "success" | "error";
 export type ToastInput = {
   tone?: ToastTone;
   message: string;
-  /** Penyebab singkat Bahasa Indonesia, digabung di belakang pesan. */
+  /** Short translated cause, appended after the message. */
   cause?: string | null;
 };
 
@@ -88,6 +89,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
   const timers = useRef(new Map<number, number>());
   const mounted = useMounted();
+  const tc = useTranslations("common");
 
   const dismissToast = useCallback((id: number) => {
     const t = timers.current.get(id);
@@ -159,7 +161,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                       className={`spine-focus-ring spine-chip ${styles.close}`}
                       onClick={() => dismissToast(item.id)}
                     >
-                      Tutup
+                      {tc("close")}
                     </button>
                   ) : null}
                 </div>
@@ -187,24 +189,49 @@ export function useToast() {
   );
 }
 
+export type ErrorKind = "offline" | "session" | "notFound" | "timeout" | "server" | "generic";
+
 /**
- * Menerjemahkan kegagalan jaringan/server menjadi SATU kalimat Indonesia.
- * "Failed to fetch", "HTTP 502", "Unauthorized" tidak pernah tampil apa
- * adanya (EXPERIENCE.md → Error jaringan / server).
+ * Classifies a network/server failure so it can be shown as ONE plain
+ * sentence. "Failed to fetch", "HTTP 502", "Unauthorized" are never shown
+ * as they are (EXPERIENCE.md, network / server errors). Pure.
  */
-export function humanizeError(err: unknown): string {
+export function errorKind(err: unknown): ErrorKind {
   const raw = String(
     (err as { message?: string } | null | undefined)?.message ?? err ?? "",
   ).toLowerCase();
-  if (!raw) return "Sambungan bermasalah.";
-  if (raw.includes("unauthorized") || raw.includes("401") || raw.includes("403")) {
-    return "Sesi kamu sudah tidak berlaku.";
-  }
+  if (!raw) return "generic";
+  if (raw.includes("unauthorized") || raw.includes("401") || raw.includes("403")) return "session";
   if (raw.includes("failed to fetch") || raw.includes("networkerror") || raw.includes("network error")) {
-    return "Sambungan ke server terputus.";
+    return "offline";
   }
-  if (raw.includes("404") || raw.includes("not found")) return "Datanya tidak ditemukan lagi.";
-  if (raw.includes("timeout") || raw.includes("aborted")) return "Server terlalu lama menjawab.";
-  if (/\b5\d\d\b/.test(raw)) return "Server sedang bermasalah.";
-  return "Sambungan bermasalah.";
+  if (raw.includes("404") || raw.includes("not found")) return "notFound";
+  if (raw.includes("timeout") || raw.includes("aborted")) return "timeout";
+  if (/\b5\d\d\b/.test(raw)) return "server";
+  return "generic";
+}
+
+/* Previous Indonesian sentences, kept exactly for the screens not yet
+   translated (Story 3.4 moves them to useHumanizeError and removes this). */
+const LEGACY_SENTENCE: Record<ErrorKind, string> = {
+  offline: "Sambungan ke server terputus.", // i18n-ignore
+  session: "Sesi kamu sudah tidak berlaku.", // i18n-ignore
+  notFound: "Datanya tidak ditemukan lagi.", // i18n-ignore
+  timeout: "Server terlalu lama menjawab.", // i18n-ignore
+  server: "Server sedang bermasalah.", // i18n-ignore
+  generic: "Sambungan bermasalah.", // i18n-ignore
+};
+
+/**
+ * @deprecated Untranslated screens only (Story 3.4): returns the previous
+ * Indonesian sentence unchanged. Components use `useHumanizeError()`.
+ */
+export function humanizeError(err: unknown): string {
+  return LEGACY_SENTENCE[errorKind(err)];
+}
+
+/** `(err) => sentence` in the active locale, from the `errors` messages. */
+export function useHumanizeError(): (err: unknown) => string {
+  const t = useTranslations("errors");
+  return useCallback((err: unknown) => t(errorKind(err)), [t]);
 }

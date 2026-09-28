@@ -25,7 +25,7 @@
     "build:folder-shell": "node scripts/build-folder-shell-geometry.mjs",
     "check:folder-shell": "node scripts/check-folder-shell.mjs",
     "start": "NODE_ENV=production tsx server.ts",
-    "lint": "eslint --max-warnings 292",
+    "lint": "eslint --max-warnings 288",
     "check:tokens": "node scripts/check-design-tokens.mjs",
     "check:legacy": "node scripts/check-legacy-allowlist.mjs",
     "brand:css": "tsx scripts/gen-brand-css.ts",
@@ -36,6 +36,8 @@
     "e2e:security": "node scripts/e2e-security.mjs",
     "e2e:setup": "node scripts/e2e-setup.mjs",
     "typecheck": "tsc --noEmit",
+    "i18n:check": "node scripts/i18n-check.mjs",
+    "i18n:check:all": "node scripts/i18n-check.mjs --all",
     "test": "node --test \"scripts/**/*.test.mjs\""
   },
   "dependencies": {
@@ -63,6 +65,7 @@
     "ioredis": "^5.10.1",
     "nanoid": "^5.1.11",
     "next": "16.2.4",
+    "next-intl": "4.14.7",
     "pg": "^8.20.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -85,6 +88,7 @@
     "draco3d": "^1.5.7",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "eslint-plugin-i18next": "6.1.5",
     "prisma": "^7.8.0",
     "tsx": "^4.21.0",
     "typescript": "^5"

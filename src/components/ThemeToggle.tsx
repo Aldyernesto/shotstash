@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from './ThemeToggle.module.css';
 
 // Story 1.12: theme-toggle kapsul — dua item ikon (matahari = terang,
@@ -30,6 +31,7 @@ function MoonIcon() {
 }
 
 export default function ThemeToggle() {
+  const t = useTranslations('theme');
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [mounted, setMounted] = useState(false);
 
@@ -50,13 +52,13 @@ export default function ThemeToggle() {
   const active = (t: 'light' | 'dark') => mounted && theme === t;
 
   return (
-    <div className={styles.capsule} role="group" aria-label="Mode tema">
+    <div className={styles.capsule} role="group" aria-label={t('group')}>
       <button
         type="button"
         role="switch"
         aria-checked={active('light')}
-        aria-label="Aktifkan mode terang"
-        title="Mode terang"
+        aria-label={t('lightLabel')}
+        title={t('lightTitle')}
         onClick={() => set('light')}
         data-active={active('light')}
         className={`spine-hit-area spine-focus-ring ${styles.item}`}
@@ -67,8 +69,8 @@ export default function ThemeToggle() {
         type="button"
         role="switch"
         aria-checked={active('dark')}
-        aria-label="Aktifkan mode gelap"
-        title="Mode gelap"
+        aria-label={t('darkLabel')}
+        title={t('darkTitle')}
         onClick={() => set('dark')}
         data-active={active('dark')}
         className={`spine-hit-area spine-focus-ring ${styles.item}`}

@@ -8,6 +8,7 @@
 // elemen yang aktif sebelum bar muncul. (Dibangun di sini; pemakai di
 // Epic 2/3.)
 import { useEffect, useRef } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from './FormAlert.module.css';
 
 export type FormAlertProps = {
@@ -54,14 +55,15 @@ export function FormAlert({ tone = 'danger', id, className, style, children }: F
 export type NoticeBarProps = FormAlertProps & {
   onClose: () => void;
   /**
-   * Nama aksesibel tombol ×. Bawaannya "Tutup pemberitahuan" — pemakai
-   * lama TIDAK berubah. Admin Panel (Story 3.21) mengopernya sebagai
-   * "Tutup pesan" karena AC-nya menulis kata itu.
+   * Accessible name of the × button. Defaults to `form.closeNotice`;
+   * callers may pass their own (the Admin Panel does, Story 3.21).
    */
   closeLabel?: string;
 };
 
-export function NoticeBar({ onClose, closeLabel = 'Tutup pemberitahuan', ...rest }: NoticeBarProps) {
+export function NoticeBar({ onClose, closeLabel: closeLabelProp, ...rest }: NoticeBarProps) {
+  const t = useTranslations('form');
+  const closeLabel = closeLabelProp ?? t('closeNotice');
   // Fokus kembali ke elemen yang aktif sebelum bar muncul.
   const prevFocusRef = useRef<HTMLElement | null>(null);
   useEffect(() => {

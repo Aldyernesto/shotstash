@@ -5,8 +5,7 @@ import { randomInt } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { createSessionRow, destroySessionToken, validateSessionToken } from '@/lib/sessionStore';
-import { GOOGLE_ONLY_MARKER } from '@/lib/authMessages';
-import { isEmailConfigured } from './email.service';
+import { EMAIL_TAKEN, LOGIN_ERROR_CODES, type LoginErrorCode } from '@/lib/authMessages';
 import {
   MIN_PASSWORD_LENGTH,
   PASSWORD_TOO_LONG_MESSAGE,
@@ -84,7 +83,7 @@ export async function registerUser(data: {
   });
 
   if (existingUser) {
-    throw new Error('Email sudah terdaftar');
+    throw new EmailTakenError();
   }
 
   const passwordHash = await hashPassword(data.password);
@@ -106,43 +105,53 @@ export async function registerUser(data: {
   return user;
 }
 
+/** Sign-up with an email that already has an account (code EMAIL_TAKEN). */
+export class EmailTakenError extends Error {
+  code = EMAIL_TAKEN;
+  constructor() {
+    super('Email is already registered');
+    this.name = 'EmailTakenError';
+  }
+}
+
+/** A failed login. `code` is stable; the client renders its own copy from it. */
+export class LoginError extends Error {
+  constructor(public code: LoginErrorCode, message: string) {
+    super(message);
+    this.name = 'LoginError';
+  }
+}
+
 export async function loginUser(email: string, password: string) {
   const user = await prisma.user.findUnique({
     where: { email },
   });
 
   if (!user) {
-    throw new Error('Email atau password salah');
+    throw new LoginError(LOGIN_ERROR_CODES.invalidCredentials, 'Invalid email or password');
   }
 
   if (!user.passwordHash) {
-    // GOOGLE_ONLY_MARKER dipakai halaman login (src/app/page.tsx) untuk menyorot tombol Google.
-    // Opsi "Lupa password?" hanya disebut kalau fitur reset via email sudah aktif (env Resend ada).
-    const passwordOption = isEmailConfigured()
-      ? 'atau buat password sendiri lewat "Lupa password?" di halaman login mam.example.com.'
-      : 'atau minta admin Shotstash membuatkan password.';
-    throw new Error(
-      `Akun ini ${GOOGLE_ONLY_MARKER}, jadi belum punya password. Tekan tombol "Login dengan Google" ` +
-      `(bukan aplikasi Google Authenticator), ${passwordOption}`
-    );
+    // The login page highlights the Google button on this code.
+    throw new LoginError(LOGIN_ERROR_CODES.googleOnly, 'This account signs in with Google and has no password yet');
   }
 
   const valid = await verifyPassword(user.passwordHash, password);
 
   if (!valid) {
-    throw new Error('Email atau password salah');
+    throw new LoginError(LOGIN_ERROR_CODES.invalidCredentials, 'Invalid email or password');
   }
 
   if (!user.active) {
-    throw new Error('Akun telah dinonaktifkan');
+    throw new LoginError(LOGIN_ERROR_CODES.deactivated, 'Account deactivated');
   }
 
   if (user.accountStatus === 'REJECTED') {
-    throw new Error('Pendaftaran akun ditolak oleh admin.');
+    throw new LoginError(LOGIN_ERROR_CODES.rejected, 'Account registration was rejected by an admin');
   }
 
-  // Catatan: status PENDING tetap boleh login supaya user bisa lihat layar
-  // "menunggu persetujuan" / melengkapi onboarding. Akses fitur dibatasi di layer lain.
+  // PENDING accounts may still sign in so they can see the waiting screen
+  // or finish onboarding; features are gated elsewhere.
   return user;
 }
 

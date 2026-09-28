@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import styles from "./SelectCheck.module.css";
 
 export type SelectCheckVariant = "on-photo" | "surface";
@@ -38,6 +39,7 @@ export default function SelectCheck({
   className,
   onToggle,
 }: SelectCheckProps) {
+  const t = useTranslations("selection");
   return (
     <label
       className={`${styles.wrap} ${variant === "surface" ? styles.wrapSurface : ""} ${className ?? ""}`}
@@ -51,7 +53,7 @@ export default function SelectCheck({
           variant === "surface" ? styles.inputSurface : styles.inputPhoto
         }`}
         checked={checked}
-        aria-label={`Pilih ${itemName}`}
+        aria-label={t("select", { name: itemName })}
         onChange={() => {
           /* keadaan dikendalikan pemanggil lewat onClick (butuh shiftKey). */
         }}

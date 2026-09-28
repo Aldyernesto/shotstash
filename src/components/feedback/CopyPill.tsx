@@ -15,6 +15,7 @@
  */
 
 import React, { useState } from "react";
+import { useTranslations } from "next-intl";
 import styles from "./copyPill.module.css";
 import { useToast } from "./ToastProvider";
 
@@ -27,6 +28,9 @@ const COPY_ICON = (
 
 /** Ekor yang selalu dipertahankan saat alamat dipotong di tengah. */
 const TAIL_CHARS = 5;
+
+/** Path prefix of a share link; shown as is, not copy. */
+const SHARE_PREFIX = "/s/";
 
 export type CopyPillProps = {
   /** Slug tanpa "/s/". */
@@ -48,9 +52,10 @@ export type CopyPillProps = {
 
 export function CopyPill({ slug, href, size = "default", action, className }: CopyPillProps) {
   const { pushToast } = useToast();
+  const t = useTranslations("copyPill");
   const [manual, setManual] = useState(false);
 
-  const shown = `/s/${slug}`;
+  const shown = `${SHARE_PREFIX}${slug}`;
   const head = slug.length > TAIL_CHARS ? slug.slice(0, slug.length - TAIL_CHARS) : slug;
   const tail = slug.length > TAIL_CHARS ? slug.slice(slug.length - TAIL_CHARS) : "";
 
@@ -68,7 +73,7 @@ export function CopyPill({ slug, href, size = "default", action, className }: Co
         }),
       ]);
       setManual(false);
-      pushToast({ tone: "success", message: "Link disalin ke clipboard!" });
+      pushToast({ tone: "success", message: t("copied") });
     } catch {
       setManual(true);
     }
@@ -78,12 +83,12 @@ export function CopyPill({ slug, href, size = "default", action, className }: Co
     <div className={className}>
       <button
         type="button"
-        aria-label={`Salin tautan ${shown}`}
+        aria-label={t("copyLink", { path: shown })}
         className={`spine-focus-ring spine-hit-area ${styles.pill} ${size === "large" ? styles.large : ""}`}
         onClick={copy}
       >
         <span className={styles.addr}>
-          <span className={`spine-nav ${styles.scheme}`}>/s/</span>
+          <span className={`spine-nav ${styles.scheme}`}>{SHARE_PREFIX}</span>
           <span className={`${size === "large" ? "spine-display-secret" : "spine-nav"} ${styles.head}`}>
             {head}
           </span>
@@ -100,7 +105,7 @@ export function CopyPill({ slug, href, size = "default", action, className }: Co
       {action ? action(copy, manual) : null}
       {manual ? (
         <p className={`spine-footnote ${styles.fallback}`} role="alert">
-          Gagal menyalin otomatis. Blok alamat link lalu salin manual.
+          {t("copyFailed")}
         </p>
       ) : null}
     </div>

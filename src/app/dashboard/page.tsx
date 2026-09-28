@@ -3,17 +3,9 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import styles from "./page.module.css";
 import TagPill from "@/components/tag-pill/TagPill";
-// Story 2.5: angka & tanggal format Indonesia (formatNumber/formatDate).
-import {
-  formatNumber,
-  formatDate,
-  formatCount,
-  formatFileSize as formatBytes,
-  formatDateTimeWIB,
-  formatExifCameraTime,
-} from "@/lib/format";
-// Story 2.4: kalimat ringkasan isi dirakit di klien dari angka mentah.
-import { contentSummaryParts } from "@/lib/contentSummary";
+// Story 3.2: copy from messages, numbers/dates/sizes in the active locale.
+import { useTranslations } from "next-intl";
+import { useFormat } from "@/i18n/useFormat";
 // Story 2.17: chip tujuan menulis "NO 24 Tarwiyah di Mina", bukan nama mentah.
 import { parseSectionName } from "@/lib/sectionNumber";
 // Story 2.18: satu sumber kebenaran gerbang role di ruang kerja berkas.
@@ -27,7 +19,7 @@ import SectionCard from "@/components/dashboard/SectionCard";
 import FileCard from "@/components/dashboard/FileCard";
 import { EmptyState, SkeletonRow, ErrorBox } from "@/components/dashboard/states";
 import BulkBar from "@/components/dashboard/BulkBar";
-import ListView, { SORT_LABEL } from "@/components/dashboard/ListView";
+import ListView from "@/components/dashboard/ListView";
 import { PillButton } from "@/components/form/buttons";
 // Story 3.8: `share-modal` baru — satu-satunya pembuat link /s/[slug].
 import ShareModal, { type ShareTargetKind } from "@/components/share/ShareModal";
@@ -51,31 +43,14 @@ import FileViewer from "@/components/media/FileViewer";
 import { ConfirmDialog } from "@/components/overlay/Dialog";
 import RepThumb from "@/components/dashboard/RepThumb";
 // Story 3.2: `toast` bersama — satu host di dashboard/layout.tsx.
-import { useToast, humanizeError } from "@/components/feedback/ToastProvider";
+import { useToast, useHumanizeError } from "@/components/feedback/ToastProvider";
 
 // Story 2.5: satu daftar kolom urut — dipakai sort-pills DAN kepala kolom
 // mode daftar, supaya tidak ada dua sumber nama/urutan kolom.
-const SORT_FIELDS = [
-  { field: "name", label: "Nama" },
-  { field: "date", label: "Tanggal" },
-  { field: "size", label: "Ukuran" },
-  { field: "type", label: "Tipe" },
-] as const;
+// Labels are translated at render (`dashboard.sort.<field>`).
+const SORT_FIELDS = ["name", "date", "size", "type"] as const;
 
-// Story 3.1: baris meta pratinjau "who" di dalam dialog/sheet — satu
-// bentuk kalimat untuk Project, Section, dan file, jadi tidak ada tiga
-// varian yang bisa menyimpang.
-function projectMetaLine(project: any): string {
-  if (!project) return "Project";
-  const files = Number(project.totalFiles) || 0;
-  const sections = (project.folders || []).length;
-  return `Project · ${formatCount(files, "file")} · ${formatCount(sections, "Section")}`;
-}
-
-function sectionMetaLine(folder: any): string {
-  if (!folder) return "Section";
-  return `Section · ${formatCount(Number(folder.totalFiles) || 0, "file")}`;
-}
+type DashboardT = ReturnType<typeof useTranslations<"dashboard">>;
 
 /** "video" | "image" | "audio" | "document" dari mime — versi modul. */
 function mimeKind(mimeType?: string | null): "video" | "image" | "audio" | "document" {
@@ -86,14 +61,8 @@ function mimeKind(mimeType?: string | null): "video" | "image" | "audio" | "docu
   return "document";
 }
 
-function kindLabel(mimeType?: string | null): string {
-  const kind = mimeKind(mimeType);
-  return kind === "video" ? "Video" : kind === "image" ? "Foto" : kind === "audio" ? "Audio" : "Dokumen";
-}
-
-function fileMetaLine(file: any): string {
-  if (!file) return "File";
-  return `${kindLabel(file.mimeType)} · ${formatBytes(Number(file.size) || 0)}`;
+function kindLabel(t: DashboardT, mimeType?: string | null): string {
+  return t(`kind.${mimeKind(mimeType)}`);
 }
 
 import { useQuery, useMutation, useApolloClient, gql } from "@apollo/client";
@@ -331,14 +300,17 @@ function FolderPickerModal({ mode, items, currentLocationId, apolloClient, onSel
   onSelect: (target: { folderId: string | null; projectId: string }) => void;
   onClose: () => void;
 }) {
+  const t = useTranslations('dashboard');
+  const tc = useTranslations('common');
+  const tn = useTranslations('count');
   const itemId = items.length === 1 ? items[0].id : '';
   const itemType = items.length === 1 ? items[0].type : 'file';
-  const itemName = items.length === 1 ? items[0].name : `${items.length} items`;
+  const itemName = items.length === 1 ? items[0].name : tn('items', { count: items.length });
   const [currentProjId, setCurrentProjId] = useState<string | null>(null);
   const [currentFoldId, setCurrentFoldId] = useState<string | null>(null);
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [breadcrumb, setBreadcrumb] = useState<{ id: string | null; name: string; type: 'root' | 'project' | 'folder' }[]>([
-    { id: null, name: 'Projects', type: 'root' }
+    { id: null, name: t('levels.projects'), type: 'root' }
   ]);
   const [folderItems, setFolderItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -420,8 +392,9 @@ function FolderPickerModal({ mode, items, currentLocationId, apolloClient, onSel
     (effectiveTargetId !== null && effectiveTargetId !== itemId && effectiveTargetId !== currentLocationId)
     || (targetIsProjectRoot && !containsFile && currentProjId !== currentLocationId);
 
-  const actionLabel = mode === 'move' ? 'Move here' : 'Copy here';
-  const titleLabel = mode === 'move' ? 'Move' : 'Copy';
+  const actionLabel = mode === 'move' ? t('picker.moveHere') : t('picker.copyHere');
+  const titleArgs = { icon: itemType === 'folder' ? '📁' : '📄', name: itemName };
+  const titleLabel = mode === 'move' ? t('picker.titleMove', titleArgs) : t('picker.titleCopy', titleArgs);
 
   const filteredItems = folderItems.filter(item => {
     // Prevent navigating into the folder that is currently being moved
@@ -432,9 +405,9 @@ function FolderPickerModal({ mode, items, currentLocationId, apolloClient, onSel
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
       <div className={styles.modalContent} onClick={e => e.stopPropagation()} style={{ maxWidth: '480px', minHeight: '340px' }}>
-        <h3 style={{ marginBottom: '4px' }}>{titleLabel} {itemType === 'folder' ? '📁' : '📄'} &quot;{itemName}&quot;</h3>
+        <h3 style={{ marginBottom: '4px' }}>{titleLabel}</h3>
         <p style={{ color: 'var(--color-on-surface-variant)', fontSize: '0.82rem', marginBottom: '12px' }}>
-          Navigate to the destination folder
+          {t('picker.hint')}
         </p>
 
         {/* Breadcrumb */}
@@ -459,10 +432,10 @@ function FolderPickerModal({ mode, items, currentLocationId, apolloClient, onSel
         {/* Folder list */}
         <div style={{ maxHeight: '260px', overflowY: 'auto', marginBottom: '16px', border: '1px solid var(--dash-chip-border)', borderRadius: '8px' }}>
           {loading ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-on-surface-variant)' }}>Loading...</div>
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-on-surface-variant)' }}>{tc('loading')}</div>
           ) : filteredItems.length === 0 ? (
             <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-on-surface-variant)', fontSize: '0.85rem' }}>
-              {currentProjId ? 'No subfolders here' : 'No projects found'}
+              {currentProjId ? t('picker.emptySections') : t('picker.emptyProjects')}
             </div>
           ) : (
             filteredItems.map((item: any) => {
@@ -499,13 +472,17 @@ function FolderPickerModal({ mode, items, currentLocationId, apolloClient, onSel
                     {item.title || item.name}
                   </span>
                   <span style={{ fontSize: '0.75rem', color: 'var(--color-on-surface-variant)' }}>
-                    {item.totalFiles != null ? `${item.totalFiles} files` : item.folders ? `${item.folders.length} folders` : ''}
+                    {item.totalFiles != null
+                      ? tn('files', { count: Number(item.totalFiles) || 0 })
+                      : item.folders
+                        ? tn('sections', { count: item.folders.length })
+                        : ''}
                   </span>
                   {!isProjectLevel ? (
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); navigateToFolder(item); }}
-                      title="Open folder"
+                      title={t('picker.openSection')}
                       style={{
                         background: 'var(--dash-hairline)',
                         border: 'none',
@@ -540,11 +517,11 @@ function FolderPickerModal({ mode, items, currentLocationId, apolloClient, onSel
                   return `📍 ${name}`;
                 })()
               : currentProjId
-                ? 'Tap a folder to select, › to open'
-                : 'Open a project'}
+                ? t('picker.tapHint')
+                : t('picker.openProject')}
           </span>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button className={styles.modalBtnSecondary} onClick={onClose}>Cancel</button>
+            <button className={styles.modalBtnSecondary} onClick={onClose}>{tc('cancel')}</button>
             <button
               className={styles.modalBtnPrimary}
               disabled={!canSelectHere}
@@ -577,6 +554,29 @@ export default function DashboardPage() {
 
   // Story 3.2: satu host `toast` (dipasang di dashboard/layout.tsx).
   const { pushToast: pushSpineToast } = useToast();
+  const t = useTranslations('dashboard');
+  const tc = useTranslations('common');
+  const tn = useTranslations('count');
+  const f = useFormat();
+  const humanize = useHumanizeError();
+
+  // Story 3.1: the preview meta line in dialogs/sheets, one sentence
+  // shape for Project, Section and file.
+  const projectMetaLine = (project: any): string => {
+    if (!project) return t('levels.project');
+    return t('meta.project', {
+      files: tn('files', { count: Number(project.totalFiles) || 0 }),
+      sections: tn('sections', { count: (project.folders || []).length }),
+    });
+  };
+  const sectionMetaLine = (folder: any): string => {
+    if (!folder) return t('levels.section');
+    return t('meta.section', { files: tn('files', { count: Number(folder.totalFiles) || 0 }) });
+  };
+  const fileMetaLine = (file: any): string => {
+    if (!file) return t('levels.file');
+    return t('meta.file', { kind: kindLabel(t, file.mimeType), size: f.fileSize(Number(file.size) || 0) });
+  };
 
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortBy, setSortBy] = useState<"name" | "date" | "size" | "type">("name");
@@ -775,12 +775,12 @@ export default function DashboardPage() {
       // Buka langsung lewat URL (?p=&f=): judul Project diambil dari
       // folder.project supaya back-pill menulis "← {nama Project}",
       // bukan kata generik (AC Story 2.5).
-      const projectTitle = rootData?.project?.title || folderData.folder.project?.title || 'Project';
+      const projectTitle = rootData?.project?.title || folderData.folder.project?.title || t('levels.project');
       setFolderHistory([{ id: 'root', name: projectTitle }, ...trail]);
     } else if (!currentFolderId && rootData?.project) {
       setFolderHistory([{ id: 'root', name: rootData.project.title }]);
     }
-  }, [currentProjectId, currentFolderId, folderData, rootData]);
+  }, [currentProjectId, currentFolderId, folderData, rootData, t]);
 
   const [createProject] = useMutation(CREATE_PROJECT, {
     onCompleted: () => {
@@ -798,13 +798,13 @@ export default function DashboardPage() {
     // Story 3.3: hasil aksi merusak dari `context-menu` memakai `toast`.
     onCompleted: () => {
       refetchProjects();
-      pushSpineToast({ tone: 'success', message: 'Project dihapus.' });
+      pushSpineToast({ tone: 'success', message: t('toasts.projectDeleted') });
     },
     onError: (err) => {
       pushSpineToast({
         tone: 'error',
-        message: 'Gagal menghapus project.',
-        cause: humanizeError(err),
+        message: t('toasts.projectDeleteFailed'),
+        cause: humanize(err),
       });
     },
   });
@@ -852,21 +852,21 @@ export default function DashboardPage() {
         if (currentFolderId) refetchFolder();
         else if (currentProjectId) refetchRoot();
         else refetchProjects();
-        if (notify) pushSpineToast({ tone: 'success', message: 'File dipindahkan ke Trash.' });
+        if (notify) pushSpineToast({ tone: 'success', message: t('toasts.fileTrashed') });
       } else if (notify) {
-        pushSpineToast({ tone: 'error', message: 'Gagal memindahkan file ke Trash.' });
+        pushSpineToast({ tone: 'error', message: t('toasts.fileTrashFailed') });
       } else {
-        alert("Trash failed");
+        alert(t('alerts.trashFailed'));
       }
     } catch (err: any) {
       if (notify) {
         pushSpineToast({
           tone: 'error',
-          message: 'Gagal memindahkan file ke Trash.',
-          cause: humanizeError(err),
+          message: t('toasts.fileTrashFailed'),
+          cause: humanize(err),
         });
       } else {
-        alert("Trash error: " + err.message);
+        alert(t('alerts.trashError', { cause: humanize(err) }));
       }
     }
   };
@@ -884,21 +884,21 @@ export default function DashboardPage() {
         cache.gc();
         if (currentFolderId) refetchFolder();
         else if (currentProjectId) refetchRoot();
-        if (notify) pushSpineToast({ tone: 'success', message: 'Section dipindahkan ke Trash.' });
+        if (notify) pushSpineToast({ tone: 'success', message: t('toasts.sectionTrashed') });
       } else if (notify) {
-        pushSpineToast({ tone: 'error', message: 'Gagal memindahkan Section ke Trash.' });
+        pushSpineToast({ tone: 'error', message: t('toasts.sectionTrashFailed') });
       } else {
-        alert("Trash folder failed");
+        alert(t('alerts.trashFailed'));
       }
     } catch (err: any) {
       if (notify) {
         pushSpineToast({
           tone: 'error',
-          message: 'Gagal memindahkan Section ke Trash.',
-          cause: humanizeError(err),
+          message: t('toasts.sectionTrashFailed'),
+          cause: humanize(err),
         });
       } else {
-        alert("Trash folder error: " + err.message);
+        alert(t('alerts.trashError', { cause: humanize(err) }));
       }
     }
   };
@@ -925,11 +925,11 @@ export default function DashboardPage() {
   React.useEffect(() => {
     const q = searchQuery.trim();
     if (q.length < 1) { setLiveMessage(""); return; }
-    if (searchError) { setLiveMessage("Pencarian gagal. Coba lagi."); return; }
+    if (searchError) { setLiveMessage(t('toolbar.searchFailed')); return; }
     if (searchLoading) return; // jangan umumkan keadaan antara
     const n = (searchData?.searchFolders?.length || 0) + (searchData?.searchFiles?.length || 0);
-    setLiveMessage(n === 0 ? `Tidak ada hasil untuk "${q}".` : `${formatNumber(n)} hasil untuk "${q}".`);
-  }, [searchQuery, searchData, searchError, searchLoading]);
+    setLiveMessage(n === 0 ? t('toolbar.noResults', { query: q }) : t('live.results', { count: n, query: q }));
+  }, [searchQuery, searchData, searchError, searchLoading, t]);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -943,18 +943,18 @@ export default function DashboardPage() {
     if (item._type === 'folder') {
       if (item.project?.id !== currentProjectId) {
         setCurrentProjectId(item.project?.id);
-        setFolderHistory([{ id: 'root', name: item.project?.title || 'Project' }]);
+        setFolderHistory([{ id: 'root', name: item.project?.title || t('levels.project') }]);
       }
       setCurrentFolderId(item.id);
       setFolderHistory(prev => [...prev, { id: item.id, name: item.name }]);
     } else {
       if (item.project?.id !== currentProjectId) {
         setCurrentProjectId(item.project?.id);
-        setFolderHistory([{ id: 'root', name: item.project?.title || 'Project' }]);
+        setFolderHistory([{ id: 'root', name: item.project?.title || t('levels.project') }]);
       }
       if (item.folder?.id) {
         setCurrentFolderId(item.folder.id);
-        setFolderHistory(prev => [...prev, { id: item.folder.id, name: item.folder.name || 'Folder' }]);
+        setFolderHistory(prev => [...prev, { id: item.folder.id, name: item.folder.name || t('levels.section') }]);
       }
     }
   };
@@ -1077,10 +1077,10 @@ export default function DashboardPage() {
 
   /** Kalimat chip tujuan; selalu tertulis, tidak pernah warna saja. */
   const dragOverChipLabel = (folderName: string): string | null => {
-    if (dragOverKind === "files") return "Lepas untuk pilih Section tujuan";
+    if (dragOverKind === "files") return t('drag.pickSection');
     if (dragOverKind === "item") {
       const { number, title } = parseSectionName(folderName);
-      return `Lepas untuk memindahkan ke ${number ? `NO ${number} ` : ""}${title}`;
+      return t('drag.moveTo', { target: `${number ? `NO ${number} ` : ""}${title}` });
     }
     return null;
   };
@@ -1115,7 +1115,7 @@ export default function DashboardPage() {
       {
         kind: "item",
         id: "preview",
-        label: "Preview",
+        label: t('menu.preview'),
         icon: MenuIcon.preview,
         onSelect: () => openFile(file),
       },
@@ -1125,14 +1125,14 @@ export default function DashboardPage() {
         {
           kind: "item",
           id: "fast",
-          label: "Download (Fast)",
+          label: t('menu.fastDownload'),
           icon: MenuIcon.fast,
           onSelect: () => parallelDownload(file.id, file.originalName, file.mimeType),
         },
         {
           kind: "item",
           id: "download",
-          label: "Download",
+          label: t('menu.download'),
           icon: MenuIcon.download,
           onSelect: () => openDirectDownload(file.id),
         },
@@ -1141,7 +1141,7 @@ export default function DashboardPage() {
     entries.push({
       kind: "item",
       id: "share",
-      label: "Share",
+      label: t('menu.share'),
       icon: MenuIcon.share,
       onSelect: () => handleShare(file.id, file.originalName),
     });
@@ -1157,7 +1157,7 @@ export default function DashboardPage() {
         {
           kind: "item",
           id: "move",
-          label: "Move to…",
+          label: t('menu.moveTo'),
           icon: MenuIcon.move,
           onSelect: () =>
             setMoveCopyModal({ mode: "move", items: buildMoveCopyItems("file", file.id, file.originalName) }),
@@ -1165,7 +1165,7 @@ export default function DashboardPage() {
         {
           kind: "item",
           id: "copy",
-          label: "Copy to…",
+          label: t('menu.copyTo'),
           icon: MenuIcon.copy,
           onSelect: () =>
             setMoveCopyModal({ mode: "copy", items: buildMoveCopyItems("file", file.id, file.originalName) }),
@@ -1178,9 +1178,9 @@ export default function DashboardPage() {
         {
           kind: "item",
           id: "trash",
-          label: "Move to Trash",
+          label: t('menu.trash'),
           icon: MenuIcon.trash,
-          hint: "30 hari",
+          hint: t('menu.days30'),
           danger: true,
           onSelect: () => setConfirmTrash({ fileId: file.id, name: file.originalName }),
         },
@@ -1189,7 +1189,7 @@ export default function DashboardPage() {
 
     return {
       target: {
-        kindLabel: "File",
+        kindLabel: t('levels.file'),
         name: file.originalName,
         meta: fileMetaLine(file),
         thumb: (
@@ -1210,14 +1210,14 @@ export default function DashboardPage() {
       {
         kind: "item",
         id: "open",
-        label: "Open",
+        label: t('menu.open'),
         icon: MenuIcon.open,
         onSelect: () => handleFolderClick(folder.id, folder.name),
       },
       {
         kind: "item",
         id: "share",
-        label: "Share",
+        label: t('menu.share'),
         icon: MenuIcon.share,
         onSelect: () =>
           setShareData({
@@ -1241,7 +1241,7 @@ export default function DashboardPage() {
         {
           kind: "item",
           id: "rename",
-          label: "Rename",
+          label: t('menu.rename'),
           icon: MenuIcon.rename,
           onSelect: () => {
             setRenameFolderData({ id: folder.id, name: folder.name });
@@ -1251,7 +1251,7 @@ export default function DashboardPage() {
         {
           kind: "item",
           id: "move",
-          label: "Move to…",
+          label: t('menu.moveTo'),
           icon: MenuIcon.move,
           onSelect: () =>
             setMoveCopyModal({ mode: "move", items: buildMoveCopyItems("folder", folder.id, folder.name) }),
@@ -1264,9 +1264,9 @@ export default function DashboardPage() {
         {
           kind: "item",
           id: "trash",
-          label: "Move to Trash",
+          label: t('menu.trash'),
           icon: MenuIcon.trash,
-          hint: "30 hari",
+          hint: t('menu.days30'),
           danger: true,
           onSelect: () => setConfirmTrash({ folderId: folder.id, name: folder.name }),
         },
@@ -1274,7 +1274,7 @@ export default function DashboardPage() {
     }
     return {
       target: {
-        kindLabel: "Section",
+        kindLabel: t('levels.section'),
         name: parsed.number ? `NO ${parsed.number} ${parsed.title}` : parsed.title,
         meta: sectionMetaLine(folder),
         thumb: <RepThumb variant="section" size="sm" repFiles={folder.repFiles} />,
@@ -1288,14 +1288,14 @@ export default function DashboardPage() {
       {
         kind: "item",
         id: "open",
-        label: "Open",
+        label: t('menu.open'),
         icon: MenuIcon.open,
         onSelect: () => handleProjectClick(project.id, project.title),
       },
       {
         kind: "item",
         id: "share",
-        label: "Share Project",
+        label: t('menu.shareProject'),
         icon: MenuIcon.share,
         onSelect: () =>
           setShareData({
@@ -1319,7 +1319,7 @@ export default function DashboardPage() {
         {
           kind: "item",
           id: "rename",
-          label: "Rename",
+          label: t('menu.rename'),
           icon: MenuIcon.rename,
           onSelect: () => {
             setRenameProjectData({ id: project.id, title: project.title });
@@ -1334,9 +1334,9 @@ export default function DashboardPage() {
         {
           kind: "item",
           id: "delete",
-          label: "Delete Project",
+          label: t('menu.deleteProject'),
           icon: MenuIcon.trash,
-          hint: "Permanen",
+          hint: t('menu.permanent'),
           danger: true,
           onSelect: () => setDeleteProjectData({ id: project.id, title: project.title }),
         },
@@ -1344,7 +1344,7 @@ export default function DashboardPage() {
     }
     return {
       target: {
-        kindLabel: "Project",
+        kindLabel: t('levels.project'),
         name: project.title,
         meta: projectMetaLine(project),
         thumb: <RepThumb variant="project" size="sm" repFiles={project.repFiles} />,
@@ -1398,7 +1398,7 @@ export default function DashboardPage() {
     e.preventDefault();
     e.stopPropagation(); // prevent bubbling to the main drop zone
     const movedCount = selectedFileIds.size + selectedFolderIds.size || 1;
-    const targetName = folders.find((f: any) => f.id === targetId)?.name || "Section";
+    const targetName = folders.find((f: any) => f.id === targetId)?.name || t('levels.section');
     
     try {
       // Multi-select: move all selected + drag item
@@ -1414,11 +1414,11 @@ export default function DashboardPage() {
       clearSelection();
       // Story 2.17: hasil drop diumumkan lewat live region polite.
       setLiveMessage(
-        `${formatNumber(movedCount)} item dipindahkan ke ${parseSectionName(targetName).title}`,
+        t('live.moved', { count: movedCount, target: parseSectionName(targetName).title }),
       );
     } catch (err: any) {
       // Umpan balik memakai mekanisme yang ADA hari ini; item tetap di tempatnya.
-      alert(err.message || "Move failed");
+      alert(t('alerts.moveFailed', { cause: humanize(err) }));
     }
     setDragItem(null);
     if (currentFolderId) refetchFolder();
@@ -1480,7 +1480,7 @@ export default function DashboardPage() {
 
     if (tasks.length > 0) {
       // Story 2.17: hasil drop diumumkan lewat live region polite.
-      setLiveMessage(`${formatNumber(tasks.length)} file siap diunggah.`);
+      setLiveMessage(t('live.readyToUpload', { count: tasks.length }));
       upload.open(
         {
           projectId: currentProjectId,
@@ -1531,7 +1531,7 @@ export default function DashboardPage() {
 
   // Natural sort: "10. Raudhah" sorts after "9. Orientasi", not after "1. Kedatangan"
   const naturalCompare = (a: string, b: string) =>
-    (a || "").localeCompare(b || "", undefined, { numeric: true, sensitivity: "base" });
+    (a || "").localeCompare(b || "", f.locale, { numeric: true, sensitivity: "base" });
 
   // Sort
   // Story 2.15: kepala kolom mode daftar memakai keadaan urut BERSAMA ini,
@@ -1548,7 +1548,7 @@ export default function DashboardPage() {
       return cmp;
     });
     return arr;
-  }, [rawFolders, sortBy, sortAsc]);
+  }, [rawFolders, sortBy, sortAsc, f.locale]);
 
   const projects = React.useMemo(() => {
     const arr = [...rawProjects];
@@ -1561,7 +1561,7 @@ export default function DashboardPage() {
       return cmp;
     });
     return arr;
-  }, [rawProjects, sortBy, sortAsc]);
+  }, [rawProjects, sortBy, sortAsc, f.locale]);
 
   const files = React.useMemo(() => {
     const arr = [...rawFiles];
@@ -1570,12 +1570,12 @@ export default function DashboardPage() {
       if (sortBy === "name") cmp = naturalCompare(a.originalName, b.originalName);
       else if (sortBy === "date") cmp = new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
       else if (sortBy === "size") cmp = (Number(a.size) || 0) - (Number(b.size) || 0);
-      else if (sortBy === "type") cmp = (a.mimeType || "").localeCompare(b.mimeType || "");
+      else if (sortBy === "type") cmp = (a.mimeType || "").localeCompare(b.mimeType || "", f.locale);
       if (!sortAsc) cmp = -cmp;
       return cmp;
     });
     return arr;
-  }, [rawFiles, sortBy, sortAsc]);
+  }, [rawFiles, sortBy, sortAsc, f.locale]);
 
 
   /* ------------------------------------------------------------------ */
@@ -1660,24 +1660,20 @@ export default function DashboardPage() {
   // Story 3.8: meta baris identitas varian file — "{jenis} · {ukuran} ·
   // {Section induk}". Berkasnya dicari di daftar yang sedang tampil.
   const handleShare = (id: string, title: string) => {
-    const f = files.find((x: any) => x.id === id);
-    const kindWord = f
-      ? ({ video: "Video", image: "Foto", audio: "Audio", document: "Dokumen" } as Record<string, string>)[
-          determineType(f.mimeType)
-        ] ?? "File"
-      : "File";
+    const file = files.find((x: any) => x.id === id);
+    const kindWord = file ? kindLabel(t, file.mimeType) : t('kind.file');
     setShareData({
       kind: "file",
       id,
       name: title,
       kindLabel: kindWord,
-      sizeText: f ? formatBytes(Number(f.size) || 0) : null,
+      sizeText: file ? f.fileSize(Number(file.size) || 0) : null,
       parentName: currentFolderName ?? currentProjectTitle ?? null,
-      file: f
+      file: file
         ? {
-            kind: determineType(f.mimeType),
-            thumbnailUrl: f.thumbnailPath ? mediaUrl.thumbnail(f.id) : null,
-            extension: (f.originalName?.split(".").pop() || null) as string | null,
+            kind: determineType(file.mimeType),
+            thumbnailUrl: file.thumbnailPath ? mediaUrl.thumbnail(file.id) : null,
+            extension: (file.originalName?.split(".").pop() || null) as string | null,
           }
         : null,
     });
@@ -1766,8 +1762,8 @@ export default function DashboardPage() {
   React.useEffect(() => {
     if (totalSelected === lastAnnouncedCountRef.current) return;
     lastAnnouncedCountRef.current = totalSelected;
-    if (totalSelected > 0) setLiveMessage(`${totalSelected} dipilih`);
-  }, [totalSelected]);
+    if (totalSelected > 0) setLiveMessage(t('live.selected', { count: totalSelected }));
+  }, [totalSelected, t]);
 
   // Kata benda jumlah mengikuti tingkat yang sedang dibuka.
   const bulkNoun =
@@ -1857,7 +1853,7 @@ export default function DashboardPage() {
           variables: isFolder ? { folderId: id } : { fileId: id },
         });
         const ok = isFolder ? res.data?.moveFolderToTrash : res.data?.moveToTrash;
-        if (!ok) throw new Error("Ditolak server");
+        if (!ok) throw new Error("rejected by server");
         const cacheId = apolloClient.cache.identify({
           __typename: isFolder ? "Folder" : "MediaFile",
           id,
@@ -1869,7 +1865,7 @@ export default function DashboardPage() {
         const name = isFolder
           ? folders.find((f: any) => f.id === id)?.name
           : files.find((f: any) => f.id === id)?.originalName;
-        reasons.push(`${name || id}: ${err?.message || "gagal"}`);
+        reasons.push(t('alerts.bulkReason', { name: name || id, cause: humanize(err) }));
       }
     };
 
@@ -1888,15 +1884,15 @@ export default function DashboardPage() {
       message = null;
       setBulkResult(null);
     } else if (failedCount === total) {
-      message = `Gagal — ${failedCount} item masih dipilih`;
+      message = t('bulk.failedAll', { count: failedCount });
       setBulkResult(message);
     } else {
-      message = `${failedCount} dari ${total} gagal — masih dipilih`;
+      message = t('bulk.failedSome', { failed: failedCount, total });
       setBulkResult(message);
     }
     // Kalimat hasil diumumkan SEKALI lewat live region polite.
     if (message) setLiveMessage(message);
-    if (reasons.length) alert(`Sebagian gagal dipindahkan ke Trash:\n\n${reasons.join("\n")}`);
+    if (reasons.length) alert(t('alerts.bulkTrash', { reasons: reasons.join("\n") }));
 
     if (currentFolderId) refetchFolder();
     else if (currentProjectId) refetchRoot();
@@ -1916,7 +1912,7 @@ export default function DashboardPage() {
       if (fIds) {
          params.append('fileIds', fIds);
       } else {
-         alert("Multiple folder selection download is not fully supported in API yet. Selecting first folder.");
+         alert(t('alerts.zipOneSection'));
          params.append('folderId', Array.from(selectedFolderIds)[0]);
       }
     }
@@ -1932,13 +1928,6 @@ export default function DashboardPage() {
     return 'document';
   };
 
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  };
 
   // ===== Story 2.5: satu keadaan urut untuk ketiga tingkat =====
   // { sortBy, sortAsc } di atas adalah SATU-SATUNYA sumber urutan: grid,
@@ -1952,7 +1941,7 @@ export default function DashboardPage() {
     // Story 2.15: perubahan urutan diumumkan SEKALI lewat live region polite
     // tanpa memindahkan fokus dari kepala kolom / pill yang ditekan.
     setLiveMessage(
-      `Diurutkan menurut ${SORT_LABEL[field]}, urut ${nextAsc ? "naik" : "turun"}`,
+      t('live.sorted', { field: t(`sort.${field}`), dir: nextAsc ? "asc" : "desc" }),
     );
   };
 
@@ -1962,23 +1951,23 @@ export default function DashboardPage() {
     const next = !selectMode;
     setSelectMode(next);
     if (!next) clearSelection();
-    setLiveMessage(next ? "Mode pilih aktif." : "Mode pilih selesai.");
+    setLiveMessage(next ? t('live.selectOn') : t('live.selectOff'));
   };
 
   // ===== Isi page-head per tingkat (dirakit sekali di sini) =====
   const safeDate = (value: any): string => {
     if (!value) return '';
     const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? '' : formatDate(d);
+    return Number.isNaN(d.getTime()) ? '' : f.date(d);
   };
   const pageTitle =
     currentProjectId === null
-      ? 'Projects'
+      ? t('levels.projects')
       : currentFolderId
-        ? folderData?.folder?.name || 'Section'
-        : rootData?.project?.title || 'Project';
+        ? folderData?.folder?.name || t('levels.section')
+        : rootData?.project?.title || t('levels.project');
   const backLabel =
-    folderHistory.length > 1 ? folderHistory[folderHistory.length - 2].name : 'Projects';
+    folderHistory.length > 1 ? folderHistory[folderHistory.length - 2].name : t('levels.projects');
   const totalFilesAllProjects = projects.reduce(
     (sum: number, p: any) => sum + (p.totalFiles || 0),
     0,
@@ -1991,7 +1980,7 @@ export default function DashboardPage() {
   // Rincian isi Section dari contentSummary Story 2.4 (foto → video →
   // dokumen, ember 0 tidak ditulis); di < 900 px rincian ini disembunyikan
   // CSS sehingga sub-judul menyusut jadi "{n} file · {tanggal}".
-  const folderContentParts = contentSummaryParts(folderData?.folder?.contentSummary);
+  const folderContentParts = f.contentParts(folderData?.folder?.contentSummary);
 
   // Story 2.16: keadaan runtime mode daftar. Urutannya penting — memuat dan
   // gagal menang atas kosong, dan "tanpa hasil" hanya dipakai saat ada kata
@@ -2054,8 +2043,11 @@ export default function DashboardPage() {
           </span>
           <span className={`spine-display-panel-mobile ${styles.dropLabel}`}>
             {currentFolderId
-              ? `Lepas untuk upload ke ${parseSectionName(folderData?.folder?.name || "").title || "Section ini"}`
-              : "Lepas untuk pilih Section tujuan"}
+              ? (() => {
+                  const target = parseSectionName(folderData?.folder?.name || "").title;
+                  return target ? t('drag.uploadTo', { target }) : t('drag.uploadHere');
+                })()
+              : t('drag.pickSection')}
           </span>
         </div>
       )}
@@ -2079,7 +2071,7 @@ export default function DashboardPage() {
           <h1 className={`${styles.pageTitle} spine-display-page`}>
             <span className={styles.pageTitleText}>{pageTitle}</span>
             {currentProjectId === null ? (
-              projects.length > 0 && <TagPill>{`${formatNumber(projects.length)} project`}</TagPill>
+              projects.length > 0 && <TagPill>{tn('projects', { count: projects.length })}</TagPill>
             ) : (
               <span className={`${styles.countChip} spine-chip`}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -2093,8 +2085,8 @@ export default function DashboardPage() {
                   )}
                 </svg>
                 {currentFolderId
-                  ? `${formatNumber(folderFileCount)} file`
-                  : `${formatNumber(sectionCount)} Section`}
+                  ? tn('files', { count: folderFileCount })
+                  : tn('sections', { count: sectionCount })}
               </span>
             )}
           </h1>
@@ -2102,18 +2094,18 @@ export default function DashboardPage() {
           <p className={`${styles.pageSub} spine-body-sub`}>
             {currentProjectId === null ? (
               <>
-                {`${formatNumber(totalFilesAllProjects)} file footage`}
+                {t('units.footage', { count: totalFilesAllProjects })}
                 {/* Petunjuk intip: hanya perangkat ber-hover (CSS) dan
                     tidak dirender saat mode daftar (tidak ada kipas). */}
                 {viewMode !== 'list' && (
                   <span className={styles.hoverHint}>
-                    {' · '}arahkan kursor ke project untuk mengintip isinya.
+                    {' · '}{t('head.hoverHint')}
                   </span>
                 )}
               </>
             ) : currentFolderId ? (
               <>
-                {`${formatNumber(folderFileCount)} file`}
+                {tn('files', { count: folderFileCount })}
                 {folderContentParts.length > 0 && (
                   <span className={styles.subDetail}>{` · ${folderContentParts.join(' · ')}`}</span>
                 )}
@@ -2121,7 +2113,10 @@ export default function DashboardPage() {
               </>
             ) : (
               <>
-                {`${formatNumber(projectFileCount)} file · ${formatNumber(sectionCount)} Section`}
+                {t('head.projectSub', {
+                  files: tn('files', { count: projectFileCount }),
+                  sections: tn('sections', { count: sectionCount }),
+                })}
                 {projectDate && ` · ${projectDate}`}
               </>
             )}
@@ -2139,8 +2134,8 @@ export default function DashboardPage() {
       <div className={`${styles.toolbar} ${currentProjectId !== null ? styles.toolbarInProject : ""}`}>
         {/* sort-pills tidak dirender di tingkat Projects (perilaku sekarang) */}
         {currentProjectId !== null && (
-          <div className={styles.sortPills} role="group" aria-label="Urutkan">
-            {SORT_FIELDS.map(({ field, label }) => {
+          <div className={styles.sortPills} role="group" aria-label={t('sort.group')}>
+            {SORT_FIELDS.map((field) => {
               const active = sortBy === field;
               return (
                 <button
@@ -2150,11 +2145,11 @@ export default function DashboardPage() {
                   className={`${styles.sortPill} ${active ? styles.sortPillActive : ""} spine-sort spine-focus-ring`}
                   onClick={() => handleSortChange(field)}
                 >
-                  {label}
+                  {t(`sort.${field}`)}
                   {active && (
                     <>
                       <span className={styles.sortGlyph} aria-hidden="true">{sortAsc ? "▲" : "▼"}</span>
-                      <span className="spine-visually-hidden">{sortAsc ? "urut naik" : "urut turun"}</span>
+                      <span className="spine-visually-hidden">{sortAsc ? t('sort.asc') : t('sort.desc')}</span>
                     </>
                   )}
                 </button>
@@ -2171,8 +2166,8 @@ export default function DashboardPage() {
           <input
             ref={searchInputRef}
             type="text"
-            placeholder="Cari footage…"
-            aria-label="Cari footage…"
+            placeholder={t('toolbar.search')}
+            aria-label={t('toolbar.search')}
             className={styles.searchInput}
             value={searchQuery}
             onChange={handleSearch}
@@ -2184,19 +2179,19 @@ export default function DashboardPage() {
                 // berbohong tentang isi arsip. Kata yang diketik tetap ada,
                 // fokus tidak dipindah — "Coba lagi" mengirim ulang kata itu.
                 <div className={styles.searchFailed} role="alert">
-                  <span>Pencarian gagal. Coba lagi.</span>
+                  <span>{t('toolbar.searchFailed')}</span>
                   <button
                     type="button"
                     className={`${styles.retryBtn} spine-focus-ring`}
                     onClick={() => { refetchSearch().catch(() => {}); }}
                   >
-                    Coba lagi
+                    {tc('retry')}
                   </button>
                 </div>
               ) : searchLoading ? (
-                <div className={styles.searchEmpty}>Mencari…</div>
+                <div className={styles.searchEmpty}>{t('toolbar.searching')}</div>
               ) : searchResults.length === 0 ? (
-                <div className={styles.searchEmpty}>{`Tidak ada hasil untuk "${searchQuery}".`}</div>
+                <div className={styles.searchEmpty}>{t('toolbar.noResults', { query: searchQuery })}</div>
               ) : (
                 searchResults.map((item: any) => (
                   <div
@@ -2219,7 +2214,7 @@ export default function DashboardPage() {
           <button
             type="button"
             className={`${styles.iconBtn} ${isChatOpen ? styles.iconBtnOn : ""} spine-hit-area spine-focus-ring`}
-            aria-label="Diskusi project"
+            aria-label={t('toolbar.chat')}
             aria-expanded={isChatOpen}
             onClick={() => setIsChatOpen((open) => !open)}
           >
@@ -2229,10 +2224,10 @@ export default function DashboardPage() {
           </button>
         )}
 
-        <div className={styles.viewToggle} role="group" aria-label="Tampilan">
+        <div className={styles.viewToggle} role="group" aria-label={t('toolbar.viewGroup')}>
           <button
             type="button"
-            aria-label="Tampilan grid"
+            aria-label={t('toolbar.gridView')}
             aria-pressed={viewMode === "grid"}
             className={`${styles.viewBtn} ${viewMode === "grid" ? styles.viewBtnActive : ""} spine-hit-area spine-focus-ring`}
             onClick={() => setViewMode("grid")}
@@ -2246,7 +2241,7 @@ export default function DashboardPage() {
           </button>
           <button
             type="button"
-            aria-label="Tampilan daftar"
+            aria-label={t('toolbar.listView')}
             aria-pressed={viewMode === "list"}
             className={`${styles.viewBtn} ${viewMode === "list" ? styles.viewBtnActive : ""} spine-hit-area spine-focus-ring`}
             onClick={() => setViewMode("list")}
@@ -2278,7 +2273,7 @@ export default function DashboardPage() {
                 <path d="M8 12.5l2.7 2.7L16 9.8" />
               </svg>
             )}
-            {selectMode ? "Batal" : "Pilih"}
+            {selectMode ? tc('cancel') : t('toolbar.select')}
           </button>
         )}
         {/* Aksi utama ikut baris alat (design mock): satu baris
@@ -2287,14 +2282,14 @@ export default function DashboardPage() {
           {currentProjectId === null ? (
             canCreateProject ? (
               <button className={styles.actionBtn} onClick={() => setIsCreateProjectModalOpen(true)}>
-                + New Project
+                {t('toolbar.newProject')}
               </button>
             ) : null
           ) : (
             <>
               {canCreateProject && (
                 <button className={styles.actionBtn} onClick={() => setIsCreateFolderModalOpen(true)}>
-                  + New Folder
+                  {t('toolbar.newSection')}
                 </button>
               )}
               {currentFolderId && canUpload ? (
@@ -2309,11 +2304,11 @@ export default function DashboardPage() {
                     })
                   }
                 >
-                  + Upload to {folderData?.folder?.name}
+                  {t('toolbar.uploadTo', { name: folderData?.folder?.name ?? '' })}
                 </button>
               ) : currentProjectId !== null && canUpload ? (
                 <button className={styles.actionBtn} onClick={() => setProjectRootPickerFiles([])}>
-                  + Upload Files
+                  {t('toolbar.uploadFiles')}
                 </button>
               ) : null}
             </>
@@ -2344,7 +2339,7 @@ export default function DashboardPage() {
             <SkeletonRow rows={4} />
           )
         ) : viewMode === "grid" && loadError ? (
-          <ErrorBox text="Data tidak bisa diambil dari server." onRetry={retryLoad} />
+          <ErrorBox text={t('states.loadError')} onRetry={retryLoad} />
         ) : (
           viewMode === "grid" ? (
             /* Story 2.7: tingkat Projects punya aturan kolom sendiri
@@ -2490,11 +2485,11 @@ export default function DashboardPage() {
                         <path d="M3 7l2-4h14l2 4M7 3l2 4M12 3l2 4M17 3l2 4" />
                       </svg>
                     )}
-                    title="Belum ada project."
-                    text="Project baru akan muncul di sini begitu dibuat."
+                    title={t('states.noProjectsTitle')}
+                    text={t('states.noProjectsText')}
                     action={canCreateProject ? (
                       <PillButton variant="accent" onClick={() => setIsCreateProjectModalOpen(true)}>
-                        New Project
+                        {t('states.newProject')}
                       </PillButton>
                     ) : undefined}
                   />
@@ -2505,8 +2500,8 @@ export default function DashboardPage() {
               {currentProjectId !== null && folders.length === 0 && files.length === 0 && (
                 <EmptyState
                   variant="ghost"
-                  title="Masih kosong — seret file ke sini"
-                  text={canUpload ? undefined : "Belum ada file di Section ini."}
+                  title={t('states.emptySectionTitle')}
+                  text={canUpload ? undefined : t('states.emptySectionText')}
                   action={canUpload && currentFolderId ? (
                     <PillButton variant="accent" onClick={() => {
                       upload.open({
@@ -2516,11 +2511,11 @@ export default function DashboardPage() {
                         folderType: folderData?.folder?.folderType ?? null,
                       });
                     }}>
-                      Upload footage pertama
+                      {t('states.uploadFirst')}
                     </PillButton>
                   ) : canUpload ? (
                     <PillButton variant="accent" onClick={() => setProjectRootPickerFiles([])}>
-                      Upload footage pertama
+                      {t('states.uploadFirst')}
                     </PillButton>
                   ) : undefined}
                 />
@@ -2633,11 +2628,11 @@ export default function DashboardPage() {
             clearSelection();
             if (wasSelectMode) {
               setSelectMode(false);
-              setLiveMessage("Mode pilih selesai.");
+              setLiveMessage(t('live.selectOff'));
             }
             focusLastTouched();
           }}
-          onTrash={() => setConfirmTrash({ name: `${totalSelected} item` })}
+          onTrash={() => setConfirmTrash({ name: tn('items', { count: totalSelected }) })}
           onDownloadZip={handleDownloadZip}
         />
       )}
@@ -2659,9 +2654,9 @@ export default function DashboardPage() {
       {renameProjectData && (
         <div className={styles.modalOverlay} onClick={() => setRenameProjectData(null)}>
           <div className={styles.modalContent} onClick={e => e.stopPropagation()} style={{ maxWidth: "400px" }}>
-            <h3>Rename Project</h3>
+            <h3>{t('dialogs.renameProject')}</h3>
             <p style={{ color: 'var(--color-on-surface-variant)', fontSize: '0.9rem', marginBottom: '1rem' }}>
-              Enter a new name for &quot;{renameProjectData.title}&quot;.
+              {t('dialogs.renameLead', { name: renameProjectData.title })}
             </p>
             <input type="text" value={renameProjectName} onChange={(e) => setRenameProjectName(e.target.value)} autoFocus
               className={styles.modalInput} style={{ marginBottom: '1rem' }}
@@ -2671,11 +2666,11 @@ export default function DashboardPage() {
               }}}
             />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-              <button type="button" className={styles.modalBtnSecondary} onClick={() => setRenameProjectData(null)}>Cancel</button>
+              <button type="button" className={styles.modalBtnSecondary} onClick={() => setRenameProjectData(null)}>{tc('cancel')}</button>
               <button className={styles.modalBtnPrimary} disabled={!renameProjectName.trim()} onClick={() => {
                 renameProject({ variables: { id: renameProjectData.id, input: { title: renameProjectName.trim() } } });
                 setRenameProjectData(null);
-              }}>Rename</button>
+              }}>{t('dialogs.rename')}</button>
             </div>
           </div>
         </div>
@@ -2685,9 +2680,9 @@ export default function DashboardPage() {
       {renameFolderData && (
         <div className={styles.modalOverlay} onClick={() => setRenameFolderData(null)}>
           <div className={styles.modalContent} onClick={e => e.stopPropagation()} style={{ maxWidth: "400px" }}>
-            <h3>Rename Folder</h3>
+            <h3>{t('dialogs.renameSection')}</h3>
             <p style={{ color: 'var(--color-on-surface-variant)', fontSize: '0.9rem', marginBottom: '1rem' }}>
-              Enter a new name for &quot;{renameFolderData.name}&quot;.
+              {t('dialogs.renameLead', { name: renameFolderData.name })}
             </p>
             <input type="text" value={renameFolderName} onChange={(e) => setRenameFolderName(e.target.value)} autoFocus
               className={styles.modalInput} style={{ marginBottom: '1rem' }}
@@ -2696,10 +2691,10 @@ export default function DashboardPage() {
               }}}
             />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-              <button type="button" className={styles.modalBtnSecondary} onClick={() => setRenameFolderData(null)}>Cancel</button>
+              <button type="button" className={styles.modalBtnSecondary} onClick={() => setRenameFolderData(null)}>{tc('cancel')}</button>
               <button className={styles.modalBtnPrimary} disabled={!renameFolderName.trim()} onClick={() => {
                 renameFolderMutate({ variables: { folderId: renameFolderData.id, name: renameFolderName.trim() } });
-              }}>Rename</button>
+              }}>{t('dialogs.rename')}</button>
             </div>
           </div>
         </div>
@@ -2712,19 +2707,17 @@ export default function DashboardPage() {
         return (
           <ConfirmDialog
             tone="permanent"
-            title="Hapus project ini?"
-            lead={
-              <>
-                Semua Section dan file di dalam project <b>{deleteProjectData.title}</b> terhapus{" "}
-                <b>permanen</b>. Tindakan ini tidak bisa dibatalkan.
-              </>
-            }
+            title={t('dialogs.deleteProjectTitle')}
+            lead={t.rich('dialogs.deleteProjectLead', {
+              name: deleteProjectData.title,
+              b: (c) => <b>{c}</b>,
+            })}
             preview={{
               thumb: <RepThumb variant="project" repFiles={project?.repFiles} />,
               name: deleteProjectData.title,
               meta: projectMetaLine(project),
             }}
-            confirmLabel="Delete Forever"
+            confirmLabel={t('dialogs.deleteForever')}
             onConfirm={() => {
               deleteProject({ variables: { id: deleteProjectData.id } });
               setDeleteProjectData(null);
@@ -2738,14 +2731,14 @@ export default function DashboardPage() {
       {isCreateProjectModalOpen && (
         <div className={styles.modalOverlay} onClick={() => setIsCreateProjectModalOpen(false)}>
           <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
-            <h3>Create New Project</h3>
+            <h3>{t('dialogs.createProjectTitle')}</h3>
             <p style={{ color: 'var(--color-on-surface-variant)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-              A new card will be created in your dashboard, and a physical directory will be allocated on the NAS.
+              {t('dialogs.createProjectLead')}
             </p>
             <form onSubmit={handleCreateProject}>
               <input
                 type="text"
-                placeholder="Project Title (e.g. Haji 2026)"
+                placeholder={t('dialogs.projectTitlePlaceholder')}
                 value={newProjectTitle}
                 onChange={(e) => setNewProjectTitle(e.target.value)}
                 autoFocus
@@ -2754,15 +2747,15 @@ export default function DashboardPage() {
               />
               <input
                 type="text"
-                placeholder="Description (optional)"
+                placeholder={t('dialogs.descriptionPlaceholder')}
                 value={newProjectDesc}
                 onChange={(e) => setNewProjectDesc(e.target.value)}
                 className={styles.modalInput}
                 style={{ marginBottom: '0.75rem' }}
               />
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                <button type="button" className={styles.modalBtnSecondary} onClick={() => setIsCreateProjectModalOpen(false)}>Cancel</button>
-                <button type="submit" className={styles.modalBtnPrimary} disabled={!newProjectTitle.trim()}>Create</button>
+                <button type="button" className={styles.modalBtnSecondary} onClick={() => setIsCreateProjectModalOpen(false)}>{tc('cancel')}</button>
+                <button type="submit" className={styles.modalBtnPrimary} disabled={!newProjectTitle.trim()}>{t('dialogs.create')}</button>
               </div>
             </form>
           </div>
@@ -2773,14 +2766,19 @@ export default function DashboardPage() {
       {isCreateFolderModalOpen && (
         <div className={styles.modalOverlay} onClick={() => setIsCreateFolderModalOpen(false)}>
           <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
-            <h3>Create New Folder</h3>
+            <h3>{t('dialogs.createSectionTitle')}</h3>
             <p style={{ color: 'var(--color-on-surface-variant)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-              Create a new folder inside {currentFolderId ? folderData?.folder?.name : (rootData?.project?.title || 'this project')}.
+              {(() => {
+                const parentName = currentFolderId ? folderData?.folder?.name : rootData?.project?.title;
+                return parentName
+                  ? t('dialogs.createSectionLead', { name: parentName })
+                  : t('dialogs.createSectionLeadFallback');
+              })()}
             </p>
             <form onSubmit={handleCreateFolder}>
               <input
                 type="text"
-                placeholder="Folder name (e.g. B-Roll, Thumbnails)"
+                placeholder={t('dialogs.sectionPlaceholder')}
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
                 autoFocus
@@ -2788,8 +2786,8 @@ export default function DashboardPage() {
                 style={{ marginBottom: '1rem' }}
               />
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                <button type="button" className={styles.modalBtnSecondary} onClick={() => setIsCreateFolderModalOpen(false)}>Cancel</button>
-                <button type="submit" className={styles.modalBtnPrimary} disabled={!newFolderName.trim()}>Create</button>
+                <button type="button" className={styles.modalBtnSecondary} onClick={() => setIsCreateFolderModalOpen(false)}>{tc('cancel')}</button>
+                <button type="submit" className={styles.modalBtnPrimary} disabled={!newFolderName.trim()}>{t('dialogs.create')}</button>
               </div>
             </form>
           </div>
@@ -2872,26 +2870,16 @@ export default function DashboardPage() {
         return (
           <ConfirmDialog
             tone="recoverable"
-            title="Pindahkan ke Trash?"
+            title={t('dialogs.trashTitle')}
             lead={
-              isBulk ? (
-                <>
-                  <b>{confirmTrash.name}</b> masuk Trash. Kamu bisa me-restore-nya dalam 30 hari.
-                </>
-              ) : folder ? (
-                <>
-                  Section <b>{folder.name}</b> beserta isinya masuk Trash. Kamu bisa me-restore-nya
-                  dalam 30 hari.
-                </>
-              ) : (
-                <>
-                  File <b>{confirmTrash.name}</b> masuk Trash. Kamu bisa me-restore-nya dalam 30
-                  hari.
-                </>
-              )
+              isBulk
+                ? t.rich('dialogs.trashLeadBulk', { name: confirmTrash.name, b: (c) => <b>{c}</b> })
+                : folder
+                  ? t.rich('dialogs.trashLeadSection', { name: folder.name, b: (c) => <b>{c}</b> })
+                  : t.rich('dialogs.trashLeadFile', { name: confirmTrash.name, b: (c) => <b>{c}</b> })
             }
             preview={preview}
-            confirmLabel="Move to Trash"
+            confirmLabel={t('dialogs.trashConfirm')}
             onConfirm={() => {
               const c = confirmTrash;
               setConfirmTrash(null);
@@ -2936,7 +2924,7 @@ export default function DashboardPage() {
             if (currentFolderId) refetchFolder();
             else if (currentProjectId) refetchRoot();
           } catch (err: any) {
-            alert(err.message || 'Operation failed');
+            alert(t('alerts.operationFailed', { cause: humanize(err) }));
           }
         }}
         onClose={() => setMoveCopyModal(null)}

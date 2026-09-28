@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useTranslations } from 'next-intl';
 import TagPill from '../tag-pill/TagPill';
 import styles from './auth.module.css';
 
@@ -19,11 +20,10 @@ export default function AuthCard({
   alt,
   help,
   pairing,
-  title = 'Studio Access',
-  titleLang,
+  title,
   titleAs = 'h2',
-  subtitle = 'Masuk dan lanjutkan kerjamu.',
-  pill = <TagPill>TIM &amp; MITRA</TagPill>,
+  subtitle,
+  pill,
   head,
 }: {
   tabs?: ReactNode;
@@ -32,8 +32,6 @@ export default function AuthCard({
   help?: ReactNode;
   pairing?: ReactNode;
   title?: string;
-  /** Bahasa judul — mis. 'en' untuk "Create Account" (Story 1.21). */
-  titleLang?: string;
   /** Tag judul: 'h1' untuk layar yang tak punya h1 lain (layar reset,
    * review hunter G3); default 'h2' seperti halaman masuk. */
   titleAs?: 'h1' | 'h2';
@@ -43,6 +41,10 @@ export default function AuthCard({
   /** Menggantikan slot-head bawaan seluruhnya (layar selesai, Story 1.31). */
   head?: ReactNode;
 }) {
+  const t = useTranslations('authCard');
+  const headTitle = title ?? t('title');
+  const headSubtitle = subtitle === undefined ? t('subtitle') : subtitle;
+  const headPill = pill === undefined ? <TagPill>{t('pill')}</TagPill> : pill;
   const HeadTag = titleAs;
   return (
     <div className={styles.card}>
@@ -58,13 +60,13 @@ export default function AuthCard({
       ) : (
         <div className={`${styles.slot} ${styles.head}`} data-slot="head">
           <div className={styles.headRow}>
-            <HeadTag className={`spine-display-panel ${styles.title}`} lang={titleLang}>
-              {title}
+            <HeadTag className={`spine-display-panel ${styles.title}`}>
+              {headTitle}
             </HeadTag>
-            {pill != null && pill}
+            {headPill != null && headPill}
           </div>
-          {subtitle != null && (
-            <p className={`spine-body-sub ${styles.subtitle}`}>{subtitle}</p>
+          {headSubtitle != null && (
+            <p className={`spine-body-sub ${styles.subtitle}`}>{headSubtitle}</p>
           )}
         </div>
       )}

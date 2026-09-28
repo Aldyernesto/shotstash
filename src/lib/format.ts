@@ -1,95 +1,143 @@
-// Story 1.9: satu util format angka/tanggal/jam konvensi Indonesia (FR4).
-// Aturan sumber: EXPERIENCE.md — ribuan titik ("7.354"), desimal koma
-// ("3,8 MB"), satuan kecil ("file"), hitungan "48 kali", tanggal
-// "16 Jun 2026", waktu relatif "baru saja / 5 mnt / 2 jam / 16 Sep 2026",
-// jam selalu bersufiks WIB. Semua jam memakai zona EKSPLISIT Asia/Jakarta
-// — bukan zona perangkat — supaya angkanya sama dengan yang dikirim di
-// email. Waktu kamera (EXIF) punya jalur terpisah yang TIDAK PERNAH
-// dikonversi: ditulis apa adanya + keterangan "(waktu kamera)".
-// Bagian jam memakai locale en-GB secara sengaja: CLDR id-ID menulis jam
-// dengan titik ("20.15"), sedangkan DESIGN.md menetapkan "20:15 WIB".
+// Stories 1.9 / 3.1: one place for number, size, date and time formatting.
+// Every helper takes the active locale (default English) and, for times,
+// an optional IANA time zone. In the browser the zone defaults to the
+// viewer's own; server-rendered text passes DEFAULT_TIMEZONE (UTC by
+// default). Absolute times always carry a short zone label ("17:00 GMT+7").
+// Camera time (EXIF) has its own path and is never converted.
+// Words (relative time, orientation, "camera time") come from the caller's
+// messages: src/lib cannot import the i18n layer, so callers pass labels.
 
-const TZ_WIB = "Asia/Jakarta";
+import { resolveServerTimeZone } from "../i18n/config.ts";
 
-const dateFmt = new Intl.DateTimeFormat("id-ID", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: TZ_WIB,
-});
-
-// en-GB = "HH:mm" (jam 24 dengan titik dua), dipakai hanya untuk jam.
-const timeFmt = new Intl.DateTimeFormat("en-GB", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-  timeZone: TZ_WIB,
-});
-
-const numberFmt = new Intl.NumberFormat("id-ID");
+export type FormatOptions = {
+  /** BCP 47 locale, default "en". */
+  locale?: string;
+  /** IANA time zone; default is the runtime's own zone. */
+  timeZone?: string;
+};
 
 type DateLike = Date | string | number;
 
-/** Angka dengan pemisah ribuan Indonesia: 7354 → "7.354". */
-export function formatNumber(n: number): string {
-  return numberFmt.format(n);
+const DEFAULT_LOCALE = "en";
+
+function toDate(d: DateLike): Date {
+  return d instanceof Date ? d : new Date(d);
 }
 
-/** Ukuran berkas dengan desimal koma: 3_900_000 → "3,7 MB". */
-export function formatFileSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
+/** Integers and decimals grouped by locale: 7354 -> "7,354". */
+export function formatNumber(n: number, opts: FormatOptions = {}): string {
+  return new Intl.NumberFormat(opts.locale ?? DEFAULT_LOCALE).format(n);
+}
+
+/** File size with one decimal from KB up: 1536 -> "1.5 KB", 2.5 GiB -> "2.5 GB". */
+export function formatFileSize(bytes: number, opts: FormatOptions = {}): string {
+  const locale = opts.locale ?? DEFAULT_LOCALE;
+  let v = Number.isFinite(bytes) && bytes > 0 ? bytes : 0;
   const units = ["B", "KB", "MB", "GB", "TB"];
-  let v = bytes;
   let u = 0;
   while (v >= 1024 && u < units.length - 1) {
     v /= 1024;
     u++;
   }
-  const s = u === 0 ? String(v) : v.toFixed(1).replace(".", ",");
+  const digits = u === 0 ? 0 : 1;
+  const s = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(v);
   return `${s} ${units[u]}`;
 }
 
-/** Hitungan dengan kata satuan kecil: 48, "kali" → "48 kali". */
-export function formatCount(n: number, unit: string): string {
-  return `${formatNumber(n)} ${unit}`;
+/**
+ * Short date: "28 Sep 2026". English is written day-first with the
+ * abbreviated month (the design's date style); other locales use their own
+ * CLDR order.
+ */
+export function formatDate(d: DateLike, opts: FormatOptions = {}): string {
+  const locale = opts.locale ?? DEFAULT_LOCALE;
+  const date = toDate(d);
+  if (Number.isNaN(date.getTime())) return "";
+  const fmt = new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: opts.timeZone,
+  });
+  if (!locale.toLowerCase().startsWith("en")) return fmt.format(date);
+  const parts = fmt.formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("day")} ${get("month")} ${get("year")}`;
 }
 
-/** Tanggal pendek: → "16 Jun 2026". */
-export function formatDate(d: DateLike): string {
-  return dateFmt.format(new Date(d));
+/**
+ * Short date for server-rendered text: the instance zone (DEFAULT_TIMEZONE,
+ * UTC when unset or invalid), never the server machine's own zone.
+ */
+export function formatServerDate(
+  d: DateLike,
+  timeZoneSetting: string | null | undefined = process.env.DEFAULT_TIMEZONE,
+): string {
+  return formatDate(d, { timeZone: resolveServerTimeZone(timeZoneSetting) });
 }
 
-/** Jam WIB: → "20:15 WIB". */
-export function formatTimeWIB(d: DateLike): string {
-  return `${timeFmt.format(new Date(d))} WIB`;
+/** 24-hour time with a short zone label: "17:00 GMT+7", "10:00 UTC". */
+export function formatTime(d: DateLike, opts: FormatOptions = {}): string {
+  const date = toDate(d);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(opts.locale ?? DEFAULT_LOCALE, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: opts.timeZone,
+    timeZoneName: "short",
+  }).format(date);
 }
 
-/** Tanggal + jam WIB: → "25 Sep 2026 · 20:15 WIB". */
-export function formatDateTimeWIB(d: DateLike): string {
-  return `${formatDate(d)} · ${formatTimeWIB(d)}`;
+/** Date and time: "28 Sep 2026 · 17:00 GMT+7". */
+export function formatDateTime(d: DateLike, opts: FormatOptions = {}): string {
+  const date = formatDate(d, opts);
+  return date ? `${date} · ${formatTime(d, opts)}` : "";
 }
 
-/** Waktu relatif: "baru saja" / "5 mnt" / "2 jam", lalu mundur ke
-    tanggal pendek "16 Sep 2026". */
-export function formatRelative(d: DateLike, now: Date = new Date()): string {
-  const diff = Math.floor((now.getTime() - new Date(d).getTime()) / 1000);
-  if (diff < 60) return "baru saja";
-  if (diff < 3600) return `${formatNumber(Math.floor(diff / 60))} mnt`;
-  if (diff < 86400) return `${formatNumber(Math.floor(diff / 3600))} jam`;
-  return formatDate(d);
+/** Labels for relative time, usually from the `format` message namespace. */
+export type RelativeLabels = {
+  justNow: string;
+  minutesAgo: (count: number) => string;
+  hoursAgo: (count: number) => string;
+};
+
+const ENGLISH_RELATIVE: RelativeLabels = {
+  justNow: "just now",
+  minutesAgo: (n) => `${formatNumber(n)} min ago`,
+  hoursAgo: (n) => `${formatNumber(n)} h ago`,
+};
+
+/**
+ * Relative time: "just now" / "5 min ago" / "3 h ago", then the short date
+ * ("16 Sep 2026") from one day on.
+ */
+export function formatRelative(
+  d: DateLike,
+  opts: FormatOptions & { now?: Date; labels?: RelativeLabels } = {},
+): string {
+  const labels = opts.labels ?? ENGLISH_RELATIVE;
+  const now = opts.now ?? new Date();
+  const diff = Math.floor((now.getTime() - toDate(d).getTime()) / 1000);
+  if (diff < 60) return labels.justNow;
+  if (diff < 3600) return labels.minutesAgo(Math.floor(diff / 60));
+  if (diff < 86400) return labels.hoursAgo(Math.floor(diff / 3600));
+  return formatDate(d, opts);
 }
 
-/** Waktu kamera (EXIF): DITULIS APA ADANYA — string mentah dari metadata,
-    tanpa konversi zona apa pun, ditambah keterangan "(waktu kamera)"
-    agar pembaca tahu ini bukan WIB. Jangan pernah mengoper Date ke sini:
-    Date sudah kehilangan jam-dinding kamera. */
-export function formatExifCameraTime(raw: string): string {
-  return `${raw} (waktu kamera)`;
+/**
+ * Camera time (EXIF): written as is, never converted, plus a label such as
+ * "(camera time)" so the reader knows it is not their zone. Never pass a
+ * Date here: a Date has already lost the camera's wall clock.
+ */
+export function formatExifCameraTime(raw: string, label = LEGACY_CAMERA_TIME): string {
+  return `${raw} ${label}`;
 }
 
-/** Jam video "MM:SS" untuk chip waktu dan baris Tipe: 138 → "02:18".
-    Menit boleh melebihi 59 ("75:00") — sama dengan kontrak scrubber
-    Story 3.4 ("00:41 dari 02:18"). */
+/** Video clock "MM:SS": 138 -> "02:18". Minutes may pass 59 ("75:00"). */
 export function formatClock(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "00:00";
   const total = Math.floor(seconds);
@@ -98,19 +146,22 @@ export function formatClock(seconds: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-/* Rasio umum yang di-snap (toleransi 2 %). Selain ini hanya kata
-   orientasi yang ditulis — angka rasio ganjil (1440:1081) tidak berguna. */
+/* Common ratios snapped within 2 %. Anything else only gets the
+   orientation word: an odd ratio (1440:1081) helps nobody. */
 const COMMON_RATIOS: [number, number][] = [
   [1, 1], [16, 9], [9, 16], [4, 3], [3, 4], [3, 2], [2, 3], [4, 5], [5, 4], [21, 9],
 ];
 
+/** Orientation code; the visible word comes from messages. */
+export type Orientation = "portrait" | "landscape" | "square";
+
 export type AspectInfo = {
-  orientation: "Potret" | "Lanskap" | "Persegi";
-  /** "9:16" bila cocok dengan rasio umum, selain itu null. */
+  orientation: Orientation;
+  /** "9:16" when it matches a common ratio, else null. */
   ratio: string | null;
 };
 
-/** Orientasi + rasio umum dari lebar × tinggi SETELAH rotasi. */
+/** Orientation and common ratio from width x height AFTER rotation. */
 export function describeAspect(width: number, height: number): AspectInfo | null {
   if (!(width > 0) || !(height > 0)) return null;
   const r = width / height;
@@ -123,18 +174,68 @@ export function describeAspect(width: number, height: number): AspectInfo | null
       break;
     }
   }
-  // Orientasi diturunkan dari rasio yang SUDAH di-snap supaya tidak pernah
-  // muncul "Potret (1:1)": 1080×1100 → Persegi (1:1).
-  const orientation = Math.abs(snapped - 1) < 0.01 ? "Persegi" : snapped < 1 ? "Potret" : "Lanskap";
+  // Derived from the snapped ratio so "Portrait (1:1)" can never appear.
+  const orientation: Orientation =
+    Math.abs(snapped - 1) < 0.01 ? "square" : snapped < 1 ? "portrait" : "landscape";
   return { orientation, ratio };
 }
 
-/** Baris "Dimensi" panel info: 2160, 3840 → "2160 × 3840 px · Potret (9:16)".
-    Piksel ditulis polos (tanpa titik ribuan) — ini ukuran gambar, bukan
-    hitungan. */
-export function formatDimensions(width: number, height: number): string {
+/* Default words keep the previous Indonesian output for the untranslated
+   viewer (Story 3.4 passes labels from messages and removes these). */
+const LEGACY_ORIENTATION: Record<Orientation, string> = {
+  portrait: "Potret",
+  landscape: "Lanskap",
+  square: "Persegi",
+};
+const LEGACY_CAMERA_TIME = "(waktu kamera)";
+
+/** Info panel dimensions: 2160, 3840 -> "2160 × 3840 px · Portrait (9:16)".
+    Pixels are written plain (no grouping): a size, not a count. */
+export function formatDimensions(
+  width: number,
+  height: number,
+  orientationLabel: (o: Orientation) => string = (o) => LEGACY_ORIENTATION[o],
+): string {
   const info = describeAspect(width, height);
   const base = `${Math.round(width)} × ${Math.round(height)} px`;
   if (!info) return base;
-  return info.ratio ? `${base} · ${info.orientation} (${info.ratio})` : `${base} · ${info.orientation}`;
+  const word = orientationLabel(info.orientation);
+  return info.ratio ? `${base} · ${word} (${info.ratio})` : `${base} · ${word}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Deprecated: kept only so group C screens compile until they move to */
+/* messages (Story 3.4). Do not use in new code.                        */
+/* ------------------------------------------------------------------ */
+
+/** @deprecated Use an ICU plural message instead. */
+export function formatCount(n: number, unit: string): string {
+  return `${formatNumber(n)} ${unit}`;
+}
+
+/* The WIB helpers keep their previous output exactly (Asia/Jakarta,
+   Indonesian date, " WIB") so untranslated screens render the same on the
+   server and in the browser until Story 3.4 moves them to formatTime. */
+const TZ_WIB = "Asia/Jakarta";
+
+/** @deprecated Untranslated screens only: "20:15 WIB". Use formatTime. */
+export function formatTimeWIB(d: DateLike): string {
+  const time = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: TZ_WIB,
+  }).format(toDate(d));
+  return `${time} WIB`;
+}
+
+/** @deprecated Untranslated screens only: "25 Sep 2026 · 20:15 WIB". Use formatDateTime. */
+export function formatDateTimeWIB(d: DateLike): string {
+  const date = new Intl.DateTimeFormat("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: TZ_WIB,
+  }).format(toDate(d));
+  return `${date} · ${formatTimeWIB(d)}`;
 }

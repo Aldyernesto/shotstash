@@ -20,6 +20,7 @@
 // jalur animationend mulus karena token tanpa fill kembali ke 0% yang
 // identik dengan -50% (konten diduplikasi).
 import { Fragment, useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useTranslations } from 'next-intl';
 import MotionPause from './MotionPause';
 import TagPill from '../tag-pill/TagPill'; // Story 1.20: pill diekstrak jadi komponen bersama
 import { approvedHeroPhotosForSlot } from '@/lib/hero-photos';
@@ -52,6 +53,7 @@ const TILE_SLOT_CLASS = [
 ];
 
 export default function HeroStage() {
+  const t = useTranslations('hero');
   const tiles = approvedHeroPhotosForSlot('tile');
   const band = approvedHeroPhotosForSlot('band');
   const stack = approvedHeroPhotosForSlot('mobile');
@@ -116,17 +118,15 @@ export default function HeroStage() {
         )}
 
         <div className={styles.copy}>
-          <TagPill>Arsip premium</TagPill>
+          <TagPill>{t('tag')}</TagPill>
           <h1 className={`spine-display-hero ${styles.headline}`}>
-            Your footage
-            <br />
-            <span className={styles.sticker}>your hardware</span>
-            <br />
-            your cloud
+            {t.rich('headline', {
+              br: () => <br />,
+              sticker: (chunks) => <span className={styles.sticker}>{chunks}</span>,
+            })}
           </h1>
           <p className={`spine-body-lead ${styles.lead}`}>
-            Semua klip dan foto proyekmu di perangkat sendiri: rapi, cepat dicari,
-            siap dibagikan ke tim dan klien.
+            {t('lead')}
           </p>
         </div>
 

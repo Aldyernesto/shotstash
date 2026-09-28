@@ -2,9 +2,10 @@
 
 import React from "react";
 import styles from "./SectionCard.module.css";
-import { formatCount } from "@/lib/format";
+import { useTranslations } from "next-intl";
+import { useFormat } from "@/i18n/useFormat";
 import { parseSectionName } from "@/lib/sectionNumber";
-import { describeContentSummary, type ContentSummary } from "@/lib/contentSummary";
+import type { ContentSummary } from "@/lib/contentSummary";
 import { PillButton } from "@/components/form/buttons";
 import SelectCheck from "./SelectCheck";
 import MoreButton from "./MoreButton";
@@ -82,16 +83,20 @@ export default function SectionCard({
   onDrop,
   onDragEnd,
 }: SectionCardProps) {
+  const t = useTranslations("cards");
+  const tCount = useTranslations("count");
+  const f = useFormat();
   const { number, title } = parseSectionName(name);
   const sample = (repFiles ?? []).slice(0, 3);
   const isEmpty = (totalFiles || 0) === 0;
   const showUploadCta = isEmpty && canUpload && !!onUploadFirst;
-  const countText = formatCount(totalFiles || 0, "file");
-  const summarySentence = describeContentSummary(contentSummary);
+  const count = totalFiles || 0;
+  const countText = tCount("files", { count });
+  const summarySentence = f.contentSentence(contentSummary);
   const summaryId = `section-summary-${id}`;
   const accessibleName = number
-    ? `Nomor ${number}, ${title}, ${countText}`
-    : `${title}, ${countText}`;
+    ? t("sectionNameNumbered", { number, title, files: countText })
+    : t("sectionName", { title, files: countText });
 
   return (
     <article
@@ -128,7 +133,7 @@ export default function SectionCard({
           <span className={`spine-display-card ${styles.title}`}>{title}</span>
           {isEmpty ? (
             <span className={`spine-label ${styles.emptyHint}`}>
-              {canUpload ? "Masih kosong — seret file ke sini" : "Masih kosong"}
+              {canUpload ? t("emptyDropHint") : t("empty")}
             </span>
           ) : null}
         </div>
@@ -136,9 +141,9 @@ export default function SectionCard({
         {number ? (
           <span className={`spine-display-label ${styles.numberSticker}`}>
             <span className={styles.numberPrefix} aria-hidden="true">
-              NO
+              {t("numberPrefix")}
             </span>
-            <span className="spine-visually-hidden">Nomor</span> {number}
+            <span className="spine-visually-hidden">{t("number")}</span> {number}
           </span>
         ) : null}
       </div>
@@ -216,7 +221,7 @@ export default function SectionCard({
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
             <path d="M12 16V4M6 10l6-6 6 6M4 20h16" />
           </svg>
-          Upload footage pertama
+          {t("uploadFirst")}
         </PillButton>
       ) : null}
 

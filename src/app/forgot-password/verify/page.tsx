@@ -1,17 +1,18 @@
 'use client';
 
 // Langkah 2: masukkan kode dari email → token reset (disimpan di sessionStorage)
-// → password baru (Story 1.29). Jam kedaluwarsa absolut "Kode berlaku sampai
-// HH:MM WIB" dihitung di perangkat dari saat kode terakhir dikirim (AC 1.28:
-// sama dengan isi email) via formatTimeWIB (Asia/Jakarta, bukan zona perangkat).
+// → password baru (Story 1.29). Jam kedaluwarsa absolut ("Code valid until
+// 17:00 GMT+7") dihitung di perangkat dari saat kode terakhir dikirim, lalu
+// ditampilkan di zona waktu penonton dengan label zona (Story 3.2).
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { TextLink } from '@/components/form/buttons';
 import CodeInput, { type CodeInputHandle } from '@/components/auth/CodeInput';
 import { FormAlert } from '@/components/form/FormAlert';
 import { ButtonPrimary } from '@/components/form/buttons';
-import { formatTimeWIB } from '@/lib/format';
+import { useFormat } from '@/i18n/useFormat';
 import styles from '../forgot-password.module.css';
 import {
   BackToLogin,
@@ -26,6 +27,7 @@ import {
   markCodeSent,
   requestPasswordReset,
   resendSecondsLeft,
+  resetErrorMessage,
   resetGql,
   saveResetSession,
   usePasswordResetAvailability,
@@ -38,11 +40,12 @@ const VERIFY_CODE = `mutation VerifyPasswordResetCode($email: String!, $code: St
 
 const emptyCode = () => Array.from({ length: RESET_CODE_LENGTH }, () => '');
 
-// Gagal transport (bukan kode salah): kalimat bisa ditindaklanjuti, bukan teks mentah.
-const TRANSPORT_ERROR = 'Tidak bisa terhubung ke server. Periksa koneksi lalu coba lagi.';
-
 // Langkah 2: masukkan kode dari email → token reset (disimpan di sessionStorage) → password baru.
 function VerifyCodeForm() {
+  const t = useTranslations('forgotPassword');
+  const f = useFormat();
+  // Gagal transport (bukan kode salah): kalimat bisa ditindaklanjuti, bukan teks mentah.
+  const TRANSPORT_ERROR = t('errors.transport');
   const router = useRouter();
   const email = (useSearchParams().get('email') ?? '').trim();
   const availability = usePasswordResetAvailability();
@@ -105,7 +108,7 @@ function VerifyCodeForm() {
   const submitCode = async (fullCode: string) => {
     if (submittingRef.current) return;
     if (fullCode.length !== RESET_CODE_LENGTH) {
-      setError(`Masukkan ${RESET_CODE_LENGTH} karakter kode dari email.`);
+      setError(t('verify.codeIncomplete', { length: RESET_CODE_LENGTH }));
       // Kotak belum disabled (submit belum mulai) — fokus langsung aman;
       // kontrak alur: fokus ke kontrol invalid pertama (review hunter G3).
       codeRef.current?.focusLastFilled();
@@ -125,14 +128,14 @@ function VerifyCodeForm() {
         // kalimat yang bisa ditindaklanjuti, jangan biarkan pengguna memutar
         // di lingkaran tanpa tahu penyebabnya (review hunter G3).
         if (!saveResetSession(result.resetToken, email)) {
-          setError('Browser kamu memblokir penyimpanan sesi sehingga reset tidak bisa dilanjutkan. Buka di jendela biasa (bukan mode privat) lalu minta kode baru.');
+          setError(t('verify.storageBlocked'));
           return;
         }
         router.push('/forgot-password/new');
         return;
       }
       if (result.errorCode === 'UNAVAILABLE') { setUnavailable(true); return; }
-      setError(result.message || 'Kode salah atau kedaluwarsa.');
+      setError(resetErrorMessage(t, result.errorCode) ?? t('errors.invalidCode'));
       if (result.errorCode === 'CODE_LOCKED') {
         setCode(emptyCode());
         // Kotak dikosongkan → fokus kembali ke kotak pertama (setelah disabled lepas).
@@ -150,7 +153,7 @@ function VerifyCodeForm() {
         setError(TRANSPORT_ERROR);
         pendingFocusRef.current = 'last';
       } else {
-        setError(err instanceof Error ? err.message : TRANSPORT_ERROR);
+        setError(t('errors.requestFailed'));
       }
     } finally {
       submittingRef.current = false;
@@ -177,14 +180,14 @@ function VerifyCodeForm() {
         pendingFocusRef.current = 0;
         setExpiryMs((codeSentAt(email) ?? Date.now()) + CODE_TTL_MS);
         // Server bisa diam-diam melewati pengiriman (cooldown/kuota) → jangan klaim kode lama mati.
-        setInfo('Jika email terdaftar, kode baru akan dikirim. Gunakan kode dari email terbaru yang kamu terima.');
+        setInfo(t('verify.resent'));
       } else if (result.errorCode === 'UNAVAILABLE') {
         setUnavailable(true);
       } else {
-        setError(result.message || 'Gagal mengirim ulang kode. Coba lagi.');
+        setError(resetErrorMessage(t, result.errorCode) ?? t('verify.resendFailed'));
       }
     } catch (err) {
-      setError(isTransportError(err) ? TRANSPORT_ERROR : (err as Error)?.message || 'Gagal mengirim ulang kode. Coba lagi.');
+      setError(isTransportError(err) ? TRANSPORT_ERROR : t('verify.resendFailed'));
     } finally {
       setResending(false);
     }
@@ -194,11 +197,13 @@ function VerifyCodeForm() {
   const ss = String(cooldown % 60).padStart(2, '0');
 
   return (
-    <ResetCard title="Masukkan kode">
+    <ResetCard title={t('verify.title')}>
       <p className={"spine-body-sm " + styles.lead}>
-        Jika <strong>{email}</strong> terdaftar, kami sudah mengirim kode 6 karakter ke email tersebut.{' '}
-        {expiryMs !== null ? `Kode berlaku sampai ${formatTimeWIB(new Date(expiryMs))}.` : 'Kode berlaku 15 menit.'}{' '}
-        Tidak ada di kotak masuk? Cek folder spam.
+        {t.rich('verify.lead', { email, length: RESET_CODE_LENGTH, strong: (c) => <strong>{c}</strong> })}{' '}
+        {expiryMs !== null
+          ? t('verify.validUntil', { time: f.time(new Date(expiryMs)) })
+          : t('verify.validFor', { minutes: CODE_TTL_MS / 60000 })}{' '}
+        {t('verify.spamHint')}
       </p>
       <form
         className={styles.stack}
@@ -217,14 +222,14 @@ function VerifyCodeForm() {
         <ButtonPrimary
           type="submit"
           busy={submitting}
-          busyLabel="Memeriksa..."
+          busyLabel={t('verify.checking')}
           style={{ width: '100%' }}
         >
-          Verifikasi kode
+          {t('verify.submit')}
         </ButtonPrimary>
       </form>
       <div className={"spine-footnote " + styles.resendRow}>
-        <span>Belum menerima kode?</span>
+        <span>{t('verify.noCode')}</span>
         <button
           type="button"
           className={`spine-hit-area spine-focus-ring ${styles.linkButton}`}
@@ -232,12 +237,12 @@ function VerifyCodeForm() {
           disabled={submitting || cooldown > 0 || resending}
           aria-busy={resending || undefined}
         >
-          {resending ? 'Mengirim...' : cooldown > 0 ? `Kirim ulang dalam ${mm}:${ss}` : 'Kirim ulang kode'}
+          {resending ? t('sending') : cooldown > 0 ? t('verify.resendIn', { time: `${mm}:${ss}` }) : t('verify.resend')}
         </button>
       </div>
       <p className={"spine-footnote " + styles.footerLink}>
         {/* Story 1.14: tautan teks spine. */}
-        <TextLink href={`/forgot-password?email=${encodeURIComponent(email)}`}>Ganti email</TextLink>
+        <TextLink href={`/forgot-password?email=${encodeURIComponent(email)}`}>{t('verify.changeEmail')}</TextLink>
       </p>
       <BackToLogin />
     </ResetCard>

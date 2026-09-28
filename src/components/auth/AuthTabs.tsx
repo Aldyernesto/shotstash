@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from './AuthTabs.module.css';
 
 // Story 1.21: auth-tabs — kapsul dua tab yang mengisi slot-tabs kartu auth.
@@ -17,6 +18,7 @@ export default function AuthTabs<T extends string>({
   value: T;
   onChange: (key: T) => void;
 }) {
+  const t = useTranslations('authTabs');
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const activeIndex = Math.max(
     0,
@@ -32,7 +34,7 @@ export default function AuthTabs<T extends string>({
   };
 
   return (
-    <div role="tablist" aria-label="Mode akses" className={styles.tabs} data-tab={value}>
+    <div role="tablist" aria-label={t('label')} className={styles.tabs} data-tab={value}>
       {tabs.map((tab, i) => (
         <button
           key={tab.key}

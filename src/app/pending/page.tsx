@@ -9,6 +9,9 @@
 // polling.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { brand } from '@/lib/brand';
+import { useFormat } from '@/i18n/useFormat';
 import { serverLogout } from '@/lib/authClient';
 import AuthPage from '@/components/auth/AuthPage';
 import AuthCard from '@/components/auth/AuthCard';
@@ -27,16 +30,8 @@ async function gql(query: string, variables?: any) {
   return res.json();
 }
 
-const ROLE_LABEL: Record<string, string> = {
-  EDITOR: 'Editor',
-  FIELD_CREW: 'Field Crew',
-  VIEWER: 'Viewer',
-  ADMIN: 'Admin',
-};
-
-/** Kalimat live region polling — keduanya tanpa teks mentah server. */
-const POLL_OK = 'Status diperbarui otomatis tiap 10 detik.';
-const POLL_FAIL = 'Belum bisa mengecek status. Mencoba lagi…';
+/** Polling live-region line: never raw server text (pending.pollOk / pollFail). */
+type PollLine = 'ok' | 'fail';
 
 const CLOCK_ICON = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -46,10 +41,12 @@ const CLOCK_ICON = (
 );
 
 export default function PendingPage() {
+  const t = useTranslations('pending');
+  const f = useFormat();
   const [me, setMe] = useState<any>(null);
   const [rejected, setRejected] = useState(false);
   const [checking, setChecking] = useState(false);
-  const [pollLine, setPollLine] = useState(POLL_OK);
+  const [pollLine, setPollLine] = useState<PollLine>('ok');
   /** Polling berhenti HANYA pada keadaan Ditolak. */
   const rejectedRef = useRef(false);
 
@@ -64,7 +61,7 @@ export default function PendingPage() {
         return;
       }
       setMe(u);
-      setPollLine(POLL_OK);
+      setPollLine('ok');
       if (u.accountStatus === 'ACTIVE') {
         window.location.href = '/dashboard';
         return;
@@ -76,7 +73,7 @@ export default function PendingPage() {
     } catch {
       /* Polling gagal: TETAP di keadaan menunggu — tidak pernah
          berpindah ke keadaan ditolak hanya karena koneksi putus. */
-      setPollLine(POLL_FAIL);
+      setPollLine('fail');
     } finally {
       setChecking(false);
     }
@@ -104,7 +101,7 @@ export default function PendingPage() {
     window.location.href = '/';
   };
 
-  const roleLabel = me ? ROLE_LABEL[me.requestedRole] || me.requestedRole || 'Belum diisi' : '';
+  const roleLabel = me ? f.role(me.requestedRole) || t('roleNotSet') : '';
 
   return (
     <AuthPage variant="centered">
@@ -114,12 +111,12 @@ export default function PendingPage() {
             {/* `status-mark` menggantikan emoji ⏳ / ⛔ — TANPA gerak. */}
             <StatusMark variant={rejected ? 'rejected' : 'waiting'} />
             <h1 className={`${styles.title} spine-display-panel`}>
-              {rejected ? 'Pendaftaran Ditolak' : 'Menunggu Persetujuan'}
+              {rejected ? t('titleRejected') : t('titleWaiting')}
             </h1>
             <p className={`${styles.lead} ${rejected ? styles.leadBad : ''} spine-body-sub`}>
               {rejected
-                ? 'Maaf, pendaftaran akunmu ditolak. Silakan hubungi admin untuk info lebih lanjut.'
-                : 'Akunmu sudah kami terima dan sedang ditinjau admin. Kamu bisa masuk ke studio setelah disetujui.'}
+                ? t('leadRejected', { productName: brand.productName })
+                : t('leadWaiting')}
             </p>
           </div>
         }
@@ -127,9 +124,9 @@ export default function PendingPage() {
           <>
             {!rejected && me && (
               <dl className={styles.account}>
-                <dt>Email</dt>
+                <dt>{t('emailLabel')}</dt>
                 <dd>{me.email}</dd>
-                <dt>Jenis akun diminta</dt>
+                <dt>{t('requestedRole')}</dt>
                 <dd>
                   <TagPill>
                     <span className={styles.rolePill}>{roleLabel}</span>
@@ -143,21 +140,21 @@ export default function PendingPage() {
                 <ButtonPrimary
                   arrow={false}
                   busy={checking}
-                  busyLabel="Mengecek…"
+                  busyLabel={t('checking')}
                   onClick={() => void check()}
                 >
-                  Cek Status
+                  {t('checkStatus')}
                 </ButtonPrimary>
               )}
               <PillButton variant="surface" onClick={logout}>
-                Keluar
+                {t('signOut')}
               </PillButton>
             </div>
 
             {!rejected && (
               <p className={styles.poll} role="status">
                 {CLOCK_ICON}
-                <span>{pollLine}</span>
+                <span>{pollLine === 'ok' ? t('pollOk') : t('pollFail')}</span>
               </p>
             )}
           </>

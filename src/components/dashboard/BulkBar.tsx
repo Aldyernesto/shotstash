@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import styles from "./BulkBar.module.css";
 
 function TrashIcon() {
@@ -35,7 +36,10 @@ function ShieldIcon() {
 export type BulkBarProps = {
   /** Jumlah item yang MASIH terpilih. */
   count: number;
-  /** "file" / "Section" / "item" — menentukan kalimat jumlah. */
+  /**
+   * "file" / "Section" / "item" (case-insensitive): picks the count
+   * sentence from messages; any other value counts as "item".
+   */
   noun: string;
   /** Kalimat hasil campuran/gagal yang MENGGANTIKAN kalimat jumlah. */
   resultText?: string | null;
@@ -70,7 +74,15 @@ export default function BulkBar({
   onDownloadZip,
 }: BulkBarProps) {
   const ref = React.useRef<HTMLDivElement>(null);
-  const countText = `${count} ${noun} dipilih`;
+  const t = useTranslations("bulk");
+  const tCommon = useTranslations("common");
+  const nounKey = noun.toLowerCase();
+  const countText =
+    nounKey === "file"
+      ? t("selectedFiles", { count })
+      : nounKey === "section"
+        ? t("selectedSections", { count })
+        : t("selectedItems", { count });
   const headline = resultText || countText;
 
   // `scroll-padding-bottom` <main> mengikuti tinggi bar yang sedang tampil,
@@ -110,7 +122,7 @@ export default function BulkBar({
     <div
       ref={ref}
       role="region"
-      aria-label="Aksi untuk item terpilih"
+      aria-label={t("regionLabel")}
       className={styles.bar}
       onKeyDown={onKeyDown}
     >
@@ -123,7 +135,7 @@ export default function BulkBar({
             checked={allSelected}
             onChange={onToggleSelectAll}
           />
-          Pilih semua
+          {t("selectAll")}
         </label>
       </div>
 
@@ -133,7 +145,7 @@ export default function BulkBar({
           className={`spine-button spine-focus-ring ${styles.pill} ${styles.pillSurface} ${styles.cancelButton}`}
           onClick={onCancel}
         >
-          Batal
+          {tCommon("cancel")}
         </button>
         {canTrash ? (
           <button
@@ -142,7 +154,7 @@ export default function BulkBar({
             onClick={onTrash}
           >
             <TrashIcon />
-            Trash
+            {t("trash")}
           </button>
         ) : null}
         <button
@@ -151,7 +163,7 @@ export default function BulkBar({
           onClick={onDownloadZip}
         >
           <ZipIcon />
-          Download ZIP
+          {t("downloadZip")}
         </button>
       </div>
     </div>

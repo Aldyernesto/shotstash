@@ -26,7 +26,7 @@
  */
 
 import prisma from "@/lib/prisma";
-import { formatDate, formatFileSize, formatNumber } from "@/lib/format";
+import { formatFileSize, formatNumber, formatServerDate } from "@/lib/format";
 import { parseSectionName } from "@/lib/sectionNumber";
 import { liveSubtree, zipFileName, zipPlanForFolders, type ZipPlan } from "@/lib/mediaTree";
 import { linkInactiveReason } from "@/lib/shareState";
@@ -115,7 +115,7 @@ function breakdownOf(files: { mimeType: string }[]): string | null {
 function newestDate(rows: { createdAt: Date }[], fallback: Date): string {
   let best = fallback;
   for (const r of rows) if (r.createdAt > best) best = r.createdAt;
-  return formatDate(best);
+  return formatServerDate(best);
 }
 
 function totalSizeText(files: { size: bigint | number }[]): string {
@@ -387,7 +387,7 @@ export async function resolveShare(
       fileCount: 1,
       sectionCount: null,
       totalSizeText: formatFileSize(Number(file.size) || 0),
-      dateText: formatDate(file.createdAt),
+      dateText: formatServerDate(file.createdAt),
       breakdown: null,
       expiresAt: link.expiresAt ? link.expiresAt.toISOString() : null,
       stageThumbs: repThumbsOf([file as RawFile], sign),

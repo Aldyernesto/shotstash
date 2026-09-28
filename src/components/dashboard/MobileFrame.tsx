@@ -19,6 +19,7 @@ import { navDestinations, isActiveDestination, type NavDestination } from "./nav
 import Logo from "@/components/Logo";
 import styles from "./dashboard-frame.module.css";
 import * as perm from "@/lib/permissions";
+import { useTranslations } from "next-intl";
 
 const PROJECTS_MINI = gql`
   query ProjectsMiniForUploadSheet {
@@ -79,6 +80,9 @@ export default function MobileFrame({
   onOpenLogout: () => void;
 }) {
   const router = useRouter();
+  const t = useTranslations("shell");
+  const tn = useTranslations("nav");
+  const tc = useTranslations("common");
   // Story 2.4: bottom-bar slots use the same `me.permissions` gates as the
   // nav-capsule and the file workspace.
   const canUpload = perm.canUpload(user);
@@ -164,7 +168,7 @@ export default function MobileFrame({
     window.dispatchEvent(new CustomEvent("mam:focus-search"));
   };
 
-  const name = user?.name || user?.email?.split("@")[0] || "User";
+  const name = user?.name || user?.email?.split("@")[0] || t("userFallback");
 
   const pageSlot = (d: NavDestination) => {
     const active = isActiveDestination(d, pathname);
@@ -176,7 +180,7 @@ export default function MobileFrame({
         className={`spine-hit-area spine-focus-ring ${styles.slot} ${active ? styles.slotActive : ""}`}
       >
         <span className={styles.slotPill}>{d.icon}</span>
-        <span className={`spine-chip ${styles.slotLabel}`}>{d.label}</span>
+        <span className={`spine-chip ${styles.slotLabel}`}>{tn(d.labelKey)}</span>
       </Link>
     );
   };
@@ -203,19 +207,19 @@ export default function MobileFrame({
           className={`spine-hit-area spine-focus-ring ${styles.slot}`}
         >
           <span className={styles.slotPill}><UploadIcon /></span>
-          <span className={`spine-chip ${styles.slotLabel}`}>Upload</span>
+          <span className={`spine-chip ${styles.slotLabel}`}>{t("upload")}</span>
         </button>,
       );
     } else {
       slots.push(
         <button
           type="button"
-          key="cari"
+          key="search"
           onClick={handleCariSlot}
           className={`spine-hit-area spine-focus-ring ${styles.slot}`}
         >
           <span className={styles.slotPill}><SearchIcon /></span>
-          <span className={`spine-chip ${styles.slotLabel}`}>Cari</span>
+          <span className={`spine-chip ${styles.slotLabel}`}>{t("search")}</span>
         </button>,
       );
     }
@@ -229,19 +233,19 @@ export default function MobileFrame({
         className={`spine-hit-area spine-focus-ring ${styles.slot}`}
       >
         <span className={styles.slotPill}><ProfileIcon /></span>
-        <span className={`spine-chip ${styles.slotLabel}`}>Profil</span>
+        <span className={`spine-chip ${styles.slotLabel}`}>{t("profile")}</span>
       </button>,
     );
     if (sheetItems.length > 0) {
       slots.push(
         <button
           type="button"
-          key="lainnya"
+          key="more"
           onClick={() => setSheet("nav")}
           className={`spine-hit-area spine-focus-ring ${styles.slot}`}
         >
           <span className={styles.slotPill}><MoreIcon /></span>
-          <span className={`spine-chip ${styles.slotLabel}`}>Lainnya</span>
+          <span className={`spine-chip ${styles.slotLabel}`}>{t("more")}</span>
         </button>,
       );
     }
@@ -259,7 +263,7 @@ export default function MobileFrame({
         </div>
       </header>
 
-      <nav aria-label="Utama" className={styles.bottomBar}>
+      <nav aria-label={t("mainNav")} className={styles.bottomBar}>
         {slots}
       </nav>
 
@@ -283,16 +287,16 @@ export default function MobileFrame({
             ref={sheetRef}
             role="dialog"
             aria-modal="true"
-            aria-label={sheet === "nav" ? "Lainnya" : "Pilih Project"}
+            aria-label={sheet === "nav" ? t("more") : t("pickProject")}
             className={styles.sheet}
           >
             <div className={styles.sheetHandle} aria-hidden="true" />
             <div className={styles.sheetHead}>
-              <h2 className={styles.sheetTitle}>{sheet === "nav" ? "Lainnya" : "Pilih Project"}</h2>
+              <h2 className={styles.sheetTitle}>{sheet === "nav" ? t("more") : t("pickProject")}</h2>
               <button
                 type="button"
                 data-sheet-close
-                aria-label="Tutup"
+                aria-label={tc("close")}
                 className={`spine-hit-area spine-focus-ring ${styles.sheetClose}`}
                 onClick={() => setSheet(null)}
               >
@@ -315,7 +319,7 @@ export default function MobileFrame({
                       className={`spine-hit-area spine-focus-ring ${styles.sheetRow} ${active ? styles.sheetRowActive : ""}`}
                     >
                       {d.icon}
-                      <span>{d.label}</span>
+                      <span>{tn(d.labelKey)}</span>
                       {d.accentDot && <span className={styles.accentDot} aria-hidden="true" />}
                     </Link>
                   );

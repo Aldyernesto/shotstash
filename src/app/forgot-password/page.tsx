@@ -6,6 +6,8 @@
 
 import { Suspense, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
+import { brand } from '@/lib/brand';
 import TextField from '@/components/form/TextField';
 import styles from './forgot-password.module.css';
 import { ButtonPrimary } from '@/components/form/buttons';
@@ -13,19 +15,21 @@ import { FormAlert } from '@/components/form/FormAlert';
 import {
   BackToLogin,
   LoadingCard,
+  RESET_CODE_LENGTH,
   ResetCard,
   UnavailableNotice,
   isTransportError,
   markCodeSent,
   requestPasswordReset,
+  resetErrorMessage,
   usePasswordResetAvailability,
 } from './shared';
 
 // Cukup untuk menangkap salah ketik jelas; keputusan final tetap milik server.
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const INVALID_EMAIL = 'Masukkan alamat email yang valid.';
 
 function RequestResetForm() {
+  const t = useTranslations('forgotPassword');
   const router = useRouter();
   const searchParams = useSearchParams();
   const availability = usePasswordResetAvailability();
@@ -42,6 +46,8 @@ function RequestResetForm() {
 
   if (availability === 'loading') return <LoadingCard />;
   if (availability === 'unavailable' || unavailable) return <UnavailableNotice />;
+
+  const INVALID_EMAIL = t('errors.invalidEmail');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,11 +66,11 @@ function RequestResetForm() {
         return;
       }
       if (result.errorCode === 'UNAVAILABLE') { setUnavailable(true); return; }
-      if (result.errorCode === 'INVALID_EMAIL') { setEmailError(result.message || INVALID_EMAIL); emailRef.current?.focus(); return; }
+      if (result.errorCode === 'INVALID_EMAIL') { setEmailError(INVALID_EMAIL); emailRef.current?.focus(); return; }
       // RATE_LIMITED dan sisanya: pesan form tepat di atas tombol utama.
-      setError(result.message || 'Permintaan gagal. Coba lagi.');
+      setError(resetErrorMessage(t, result.errorCode) ?? t('errors.requestFailed'));
     } catch (err) {
-      setError(isTransportError(err) ? 'Tidak bisa terhubung ke server. Periksa koneksi lalu coba lagi.' : (err as Error)?.message || 'Permintaan gagal. Coba lagi.');
+      setError(isTransportError(err) ? t('errors.transport') : t('errors.requestFailed'));
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -72,25 +78,25 @@ function RequestResetForm() {
   };
 
   return (
-    <ResetCard title="Lupa password?">
+    <ResetCard title={t('request.title')}>
       <p className={"spine-body-sm " + styles.lead}>
-        Masukkan email akun Shotstash kamu. Kami akan mengirim kode 6 karakter untuk membuat password baru.
+        {t('request.lead', { productName: brand.productName, length: RESET_CODE_LENGTH })}
       </p>
       <form className={styles.stack} onSubmit={handleSubmit} noValidate>
         {error && <FormAlert tone="danger">{error}</FormAlert>}
         <TextField
           inputRef={emailRef}
-          label="Email"
+          label={t('request.emailLabel')}
           type="email"
           inputMode="email"
           autoComplete="email"
-          placeholder="nama@email.com"
+          placeholder={t('request.emailPlaceholder')}
           value={email}
           error={emailError}
           onChange={(e) => { setEmail(e.target.value); setEmailError(null); }}
         />
-        <ButtonPrimary type="submit" busy={submitting} busyLabel="Mengirim..." style={{ width: '100%' }}>
-          Kirim kode
+        <ButtonPrimary type="submit" busy={submitting} busyLabel={t('sending')} style={{ width: '100%' }}>
+          {t('request.submit')}
         </ButtonPrimary>
       </form>
       <BackToLogin />

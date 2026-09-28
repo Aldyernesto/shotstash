@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { getTranslations } from 'next-intl/server';
 import AuthPage from '@/components/auth/AuthPage';
 import { brand } from '@/lib/brand';
 
-export const metadata: Metadata = {
-  title: `Reset Password | ${brand.productName}`,
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('forgotPassword');
+  return { title: t('metaTitle', { productName: brand.productName }) };
+}
 
 // Story 1.20: kerangka glow lama (backgroundGlow/accentGlow dari
 // page.module.css root) dipensiunkan — shell kini auth-topbar dari

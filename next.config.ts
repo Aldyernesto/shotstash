@@ -1,4 +1,9 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
+
+// Story 3.1: next-intl without locale routing; request config in
+// src/i18n/request.ts (locale from cookie, DEFAULT_LOCALE, then en).
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
   // Next 16 blocks 127.0.0.1 as a cross-origin dev host: the page stops at
@@ -14,4 +19,4 @@ const nextConfig: NextConfig = {
   turbopack: { root: typeof __dirname !== "undefined" ? __dirname : process.cwd() },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

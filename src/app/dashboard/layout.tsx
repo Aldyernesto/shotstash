@@ -19,10 +19,16 @@ import DesktopFrame from "@/components/dashboard/DesktopFrame";
 import MobileFrame from "@/components/dashboard/MobileFrame";
 // Story 2.18: satu sumber kebenaran gerbang role.
 import { useApolloClient } from "@apollo/client";
+import { useTranslations } from "next-intl";
+import AppSelect from "@/components/AppSelect";
+import { useHumanizeError, errorKind } from "@/components/feedback/ToastProvider";
+import { useFormat } from "@/i18n/useFormat";
+import { SUPPORTED_LOCALES, LOCALE_NAMES } from "@/i18n/config";
+import { syncLocaleCookie } from "@/i18n/client";
 
 const UPDATE_PROFILE = gql`
-  mutation UpdateProfile($name: String, $avatarUrl: String) {
-    updateProfile(name: $name, avatarUrl: $avatarUrl) { id name avatarUrl }
+  mutation UpdateProfile($name: String, $avatarUrl: String, $locale: String) {
+    updateProfile(name: $name, avatarUrl: $avatarUrl, locale: $locale) { id name avatarUrl locale }
   }
 `;
 
@@ -37,6 +43,7 @@ export default function DashboardLayout({
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showProfileSettings, setShowProfileSettings] = useState(false);
   const apolloClient = useApolloClient();
+  const t = useTranslations("shell");
 
   // Clear Apollo cache on mount to prevent merge conflicts
   useEffect(() => {
@@ -103,7 +110,7 @@ export default function DashboardLayout({
             document.getElementById("spine-main-content")?.focus();
           }}
         >
-          Lewati ke konten
+          {t("skipToContent")}
         </a>
         <DesktopFrame
           user={authed ? user ?? null : null}
@@ -145,6 +152,8 @@ export default function DashboardLayout({
 }
 
 function LogoutConfirm({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
+  const t = useTranslations("account");
+  const tc = useTranslations("common");
   return (
     <div
       style={{
@@ -163,9 +172,9 @@ function LogoutConfirm({ onCancel, onConfirm }: { onCancel: () => void; onConfir
           boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
         }}
       >
-        <h3 style={{ margin: '0 0 8px', color: 'var(--color-on-surface)', fontSize: '1.05rem' }}>Logout?</h3>
+        <h3 style={{ margin: '0 0 8px', color: 'var(--color-on-surface)', fontSize: '1.05rem' }}>{t("logoutTitle")}</h3>
         <p style={{ color: 'var(--color-on-surface-variant)', fontSize: '0.88rem', margin: '0 0 20px', lineHeight: 1.55 }}>
-          Sesi kamu akan diakhiri dan kamu perlu login lagi untuk mengakses dashboard.
+          {t("logoutBody")}
         </p>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
           <button
@@ -176,7 +185,7 @@ function LogoutConfirm({ onCancel, onConfirm }: { onCancel: () => void; onConfir
               cursor: 'pointer', fontSize: '13px', fontWeight: 600,
             }}
           >
-            Batal
+            {tc("cancel")}
           </button>
           <button
             onClick={onConfirm}
@@ -186,7 +195,7 @@ function LogoutConfirm({ onCancel, onConfirm }: { onCancel: () => void; onConfir
               cursor: 'pointer', fontSize: '13px', fontWeight: 700,
             }}
           >
-            Ya, Logout
+            {t("logoutConfirm")}
           </button>
         </div>
       </div>
@@ -202,13 +211,23 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [updateProfile] = useMutation(UPDATE_PROFILE);
+  const t = useTranslations("profile");
+  const tc = useTranslations("common");
+  const tl = useTranslations("language");
+  const humanize = useHumanizeError();
+  const f = useFormat();
+  // '' = instance default (stored as null on the server).
+  const initialLocale: string = user.locale || '';
+  const [locale, setLocale] = useState<string>(initialLocale);
+  const languageLabelId = React.useId();
+  const languageHintId = React.useId();
 
   const handlePickFile = () => fileInputRef.current?.click();
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { setError('Ukuran foto max 5MB'); return; }
+    if (file.size > 5 * 1024 * 1024) { setError(t('photoTooLarge')); return; }
     setError(null);
     setUploading(true);
     try {
@@ -222,10 +241,10 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
         body: fd,
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || data.error || 'Upload failed');
+      if (!res.ok) throw new Error(data.message || data.error || 'upload failed');
       setAvatarUrl(data.url);
     } catch (err: any) {
-      setError(err.message);
+      setError(errorKind(err) === 'generic' ? t('uploadFailed') : humanize(err));
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -234,23 +253,34 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
 
   const handleSave = async () => {
     const trimmed = name.trim();
-    if (!trimmed) { setError('Nama tidak boleh kosong'); return; }
+    if (!trimmed) { setError(t('nameRequired')); return; }
     setError(null);
     setSaving(true);
     try {
-      const res = await updateProfile({ variables: { name: trimmed, avatarUrl: avatarUrl ?? '' } });
+      // Only send the locale when the user picked a different one; '' clears
+      // it back to the instance default.
+      const res = await updateProfile({
+        variables: {
+          name: trimmed,
+          avatarUrl: avatarUrl ?? '',
+          locale: locale !== initialLocale ? locale : undefined,
+        },
+      });
       const updated = res.data?.updateProfile;
       if (updated) {
         // Update localStorage user
         const cached = localStorage.getItem('shotstash_user');
         if (cached) {
           const parsed = JSON.parse(cached);
-          localStorage.setItem('shotstash_user', JSON.stringify({ ...parsed, name: updated.name, avatarUrl: updated.avatarUrl }));
+          localStorage.setItem('shotstash_user', JSON.stringify({ ...parsed, name: updated.name, avatarUrl: updated.avatarUrl, locale: updated.locale ?? null }));
         }
+        // Server components follow the cookie; the reload below re-renders
+        // them (and the rest of the page) in the saved locale.
+        syncLocaleCookie(updated.locale);
         window.location.reload();
       }
     } catch (err: any) {
-      setError(err.message || 'Save failed');
+      setError(errorKind(err) === 'generic' ? t('saveFailed') : humanize(err));
     } finally {
       setSaving(false);
     }
@@ -278,11 +308,11 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h3 style={{ margin: 0, color: 'var(--color-on-surface)', fontSize: '1.15rem', fontWeight: 700 }}>Profile Settings</h3>
+          <h3 style={{ margin: 0, color: 'var(--color-on-surface)', fontSize: '1.15rem', fontWeight: 700 }}>{t('title')}</h3>
           <button
             onClick={onClose}
             style={{ background: 'none', border: 'none', color: 'var(--color-on-surface-variant)', fontSize: '24px', cursor: 'pointer', lineHeight: 1 }}
-            aria-label="Close"
+            aria-label={tc('close')}
           >×</button>
         </div>
 
@@ -300,7 +330,7 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
               position: 'relative',
               boxShadow: '0 8px 24px var(--app-spine-accent-20)',
             }}
-            title="Click to change photo"
+            title={t('changePhotoTitle')}
           >
             {!avatarUrl && initials}
             <div style={{
@@ -313,11 +343,11 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
           </div>
           <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
           <div style={{ marginTop: '10px', display: 'flex', gap: '8px', alignItems: 'center', fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
-            {uploading ? 'Uploading...' : (
+            {uploading ? t('uploading') : (
               <>
-                <span>Klik foto untuk ganti</span>
+                <span>{t('changePhotoHint')}</span>
                 {avatarUrl && (
-                  <button onClick={() => setAvatarUrl(null)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '12px' }}>Hapus</button>
+                  <button onClick={() => setAvatarUrl(null)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '12px' }}>{t('removePhoto')}</button>
                 )}
               </>
             )}
@@ -326,7 +356,7 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
 
         {/* Name */}
         <div style={{ marginBottom: '16px' }}>
-          <label style={{ display: 'block', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-on-surface-variant)', marginBottom: '6px', fontWeight: 700 }}>Nama</label>
+          <label style={{ display: 'block', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-on-surface-variant)', marginBottom: '6px', fontWeight: 700 }}>{t('name')}</label>
           <input
             type="text"
             value={name}
@@ -342,7 +372,7 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
 
         {/* Email (read-only) */}
         <div style={{ marginBottom: '16px' }}>
-          <label style={{ display: 'block', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-on-surface-variant)', marginBottom: '6px', fontWeight: 700 }}>Email</label>
+          <label style={{ display: 'block', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-on-surface-variant)', marginBottom: '6px', fontWeight: 700 }}>{t('email')}</label>
           <div style={{
             padding: '11px 14px', background: 'var(--dash-chip)',
             border: '1px solid var(--dash-hairline-soft)', borderRadius: '10px',
@@ -352,14 +382,32 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
 
         {/* Role (read-only) */}
         <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-on-surface-variant)', marginBottom: '6px', fontWeight: 700 }}>Role</label>
+          <label style={{ display: 'block', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-on-surface-variant)', marginBottom: '6px', fontWeight: 700 }}>{t('role')}</label>
           <div style={{
             padding: '11px 14px', background: 'var(--dash-chip)',
             border: '1px solid var(--dash-hairline-soft)', borderRadius: '10px',
             color: 'var(--app-accent)', fontSize: '14px', fontWeight: 700, letterSpacing: '0.05em',
-          }}>{user.role}</div>
+          }}>{f.role(user).toLocaleUpperCase(f.locale)}</div>
           <div style={{ fontSize: '11px', color: 'var(--color-on-surface-variant)', marginTop: '4px', opacity: 0.7 }}>
-            Role hanya dapat diubah oleh admin.
+            {t('roleHint')}
+          </div>
+        </div>
+
+        {/* Language */}
+        <div style={{ marginBottom: '20px' }}>
+          <label id={languageLabelId} style={{ display: 'block', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-on-surface-variant)', marginBottom: '6px', fontWeight: 700 }}>{tl('label')}</label>
+          <AppSelect
+            value={locale}
+            options={[
+              { value: '', label: tl('instanceDefault') },
+              ...SUPPORTED_LOCALES.map((code) => ({ value: code, label: LOCALE_NAMES[code] })),
+            ]}
+            onChange={setLocale}
+            labelledBy={languageLabelId}
+            describedBy={languageHintId}
+          />
+          <div id={languageHintId} style={{ fontSize: '11px', color: 'var(--color-on-surface-variant)', marginTop: '4px', opacity: 0.7 }}>
+            {tl('hint')}
           </div>
         </div>
 
@@ -378,7 +426,7 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
               color: 'var(--color-on-surface)', padding: '9px 18px', borderRadius: '999px',
               cursor: saving ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 600,
             }}
-          >Batal</button>
+          >{tc('cancel')}</button>
           <button
             onClick={handleSave}
             disabled={saving || uploading}
@@ -388,7 +436,7 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
               cursor: saving ? 'wait' : 'pointer', fontSize: '13px', fontWeight: 700,
               opacity: (saving || uploading) ? 0.6 : 1,
             }}
-          >{saving ? 'Saving...' : 'Simpan'}</button>
+          >{saving ? tc('saving') : tc('save')}</button>
         </div>
       </div>
     </div>

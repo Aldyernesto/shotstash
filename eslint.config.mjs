@@ -1,6 +1,22 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import i18next from "eslint-plugin-i18next";
+import { readFileSync } from "node:fs";
+
+// Story 3.1: files already moved to messages/*.json. Literal UI text there
+// is an error; Story 3.5 widens the scope to all of src.
+const i18nScope = JSON.parse(
+  readFileSync(new URL("./scripts/i18n-scope.json", import.meta.url), "utf8"),
+).files;
+
+// Attributes and copy props that reach the user (read aloud or shown) must
+// come from messages too. no-literal-string in jsx-text-only mode only sees JSX text,
+// so these are checked with a syntax selector.
+const TEXT_ATTRS =
+  "/^(aria-label|title|placeholder|alt|label|busyLabel|confirmLabel|cancelLabel|text|lead|description|message|hint)$/";
+const LETTERS = "/[A-Za-z]{2,}/";
+const literalAttrMessage = "User-visible attribute text must come from messages (t(...)).";
 
 // Module boundaries (AD-2): other code imports a module only through its
 // public surface, `@/modules/<name>` (its index.ts), never its internals.
@@ -44,6 +60,26 @@ const eslintConfig = defineConfig([
           },
         ],
       }],
+    },
+  },
+  {
+    files: i18nScope,
+    plugins: { i18next },
+    rules: {
+      "i18next/no-literal-string": ["error", {
+        mode: "jsx-text-only",
+        words: {
+          // Technical text only: no letters (punctuation, numbers, symbols
+          // such as the middle dot) or an all-caps identifier.
+          exclude: [/^[^\p{L}]*$/u, /^[A-Z0-9_-]+$/],
+        },
+      }],
+      "no-restricted-syntax": ["error",
+        { selector: `JSXAttribute[name.name=${TEXT_ATTRS}] > Literal[value=${LETTERS}]`, message: literalAttrMessage },
+        { selector: `JSXAttribute[name.name=${TEXT_ATTRS}] > JSXExpressionContainer > Literal[value=${LETTERS}]`, message: literalAttrMessage },
+        { selector: `JSXAttribute[name.name=${TEXT_ATTRS}] > JSXExpressionContainer > TemplateLiteral > TemplateElement[value.raw=${LETTERS}]`, message: literalAttrMessage },
+        { selector: `JSXAttribute[name.name=${TEXT_ATTRS}] > JSXExpressionContainer > :matches(ConditionalExpression, LogicalExpression) > Literal[value=${LETTERS}]`, message: literalAttrMessage },
+      ],
     },
   },
   {

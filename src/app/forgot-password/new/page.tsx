@@ -8,24 +8,26 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import PasswordInput from '@/components/PasswordInput';
 import fieldStyles from '@/components/form/TextField.module.css';
 import { ButtonPrimary } from '@/components/form/buttons';
 import { FormAlert } from '@/components/form/FormAlert';
-import { formatTimeWIB } from '@/lib/format';
+import { useFormat } from '@/i18n/useFormat';
 import styles from '../forgot-password.module.css';
 import {
   BackToLogin,
   LoadingCard,
   LOGIN_PREFILL_KEY,
+  MAX_PASSWORD_BYTES,
   MIN_PASSWORD_LENGTH,
-  PASSWORD_TOO_LONG_MESSAGE,
   passwordProblem,
   RESET_SESSION_TTL_MS,
   ResetCard,
   UnavailableNotice,
   clearResetSession,
   isTransportError,
+  resetErrorMessage,
   resetGql,
   useResetSession,
   type PasswordResetResult,
@@ -37,10 +39,6 @@ const COMPLETE_RESET = `mutation CompletePasswordReset($resetToken: String!, $ne
   }
 }`;
 
-// Gagal transport (bukan penolakan server): kalimat bisa ditindaklanjuti.
-const TRANSPORT_ERROR = 'Tidak bisa terhubung ke server. Periksa koneksi lalu coba lagi.';
-const TOO_SHORT = `Password minimal ${MIN_PASSWORD_LENGTH} karakter.`;
-const MISMATCH = 'Konfirmasi password tidak sama.';
 
 // Markup error identik kontrak text-field (TextField.tsx) — dikomposisi manual
 // karena field-nya PasswordInput + label eksplisit (pola halaman masuk).
@@ -58,6 +56,14 @@ function FieldError({ id, children }: { id: string; children: string }) {
 }
 
 function NewPasswordForm() {
+  const t = useTranslations('forgotPassword');
+  const tc = useTranslations('common');
+  const f = useFormat();
+  // Gagal transport (bukan penolakan server): kalimat bisa ditindaklanjuti.
+  const TRANSPORT_ERROR = t('errors.transport');
+  const TOO_SHORT = t('errors.passwordTooShort', { min: MIN_PASSWORD_LENGTH });
+  const TOO_LONG = t('errors.passwordTooLong', { max: MAX_PASSWORD_BYTES });
+  const MISMATCH = t('errors.passwordMismatch');
   const router = useRouter();
   const session = useResetSession();
   const [newPassword, setNewPassword] = useState('');
@@ -106,10 +112,10 @@ function NewPasswordForm() {
 
   if (expired) {
     return (
-      <ResetCard title="Sesi reset berakhir">
-        <p className={"spine-body-sm " + styles.lead}>Sesi reset berakhir, ulangi dari awal.</p>
+      <ResetCard title={t('newPassword.expiredTitle')}>
+        <p className={"spine-body-sm " + styles.lead}>{t('newPassword.expiredLead')}</p>
         <ButtonPrimary onClick={() => router.push('/forgot-password')} style={{ width: '100%', marginTop: 16 }}>
-          Minta kode baru
+          {t('newPassword.requestNewCode')}
         </ButtonPrimary>
         <BackToLogin />
       </ResetCard>
@@ -128,7 +134,7 @@ function NewPasswordForm() {
     let focusTarget: HTMLInputElement | null = null;
     const pwProblem = passwordProblem(newPassword);
     if (pwProblem === 'PASSWORD_TOO_SHORT') { setPwError(TOO_SHORT); focusTarget = newPwRef.current; }
-    else if (pwProblem === 'PASSWORD_TOO_LONG') { setPwError(PASSWORD_TOO_LONG_MESSAGE); focusTarget = newPwRef.current; }
+    else if (pwProblem === 'PASSWORD_TOO_LONG') { setPwError(TOO_LONG); focusTarget = newPwRef.current; }
     if (confirmPassword !== newPassword) { setConfirmError(MISMATCH); focusTarget ??= confirmRef.current; }
     if (focusTarget) { focusTarget.focus(); return; }
 
@@ -153,14 +159,14 @@ function NewPasswordForm() {
       }
       switch (result.errorCode) {
         case 'UNAVAILABLE': setUnavailable(true); break;
-        // TOKEN_INVALID: pesan server "Sesi reset berakhir, ulangi dari awal" → kartu khusus.
+        // TOKEN_INVALID: sesi reset berakhir → kartu khusus.
         case 'TOKEN_INVALID': setExpired(true); clearResetSession(); break;
-        case 'PASSWORD_TOO_SHORT': setPwError(result.message || TOO_SHORT); newPwRef.current?.focus(); break;
-        case 'PASSWORD_MISMATCH': setConfirmError(result.message || MISMATCH); confirmRef.current?.focus(); break;
-        default: setFormError(result.message || 'Gagal menyimpan password. Coba lagi.');
+        case 'PASSWORD_TOO_SHORT': setPwError(TOO_SHORT); newPwRef.current?.focus(); break;
+        case 'PASSWORD_MISMATCH': setConfirmError(MISMATCH); confirmRef.current?.focus(); break;
+        default: setFormError(resetErrorMessage(t, result.errorCode) ?? t('newPassword.saveFailed'));
       }
     } catch (err) {
-      setFormError(isTransportError(err) ? TRANSPORT_ERROR : err instanceof Error && err.message ? err.message : 'Gagal menyimpan password. Coba lagi.');
+      setFormError(isTransportError(err) ? TRANSPORT_ERROR : t('newPassword.saveFailed'));
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -168,17 +174,19 @@ function NewPasswordForm() {
   };
 
   return (
-    <ResetCard title="Buat password baru">
+    <ResetCard title={t('newPassword.title')}>
       <p className={"spine-body-sm " + styles.lead}>
         {session.email ? (
           <>
-            Password baru untuk <strong>{session.email}</strong>.{' '}
+            {t.rich('newPassword.leadFor', { email: session.email, strong: (c) => <strong>{c}</strong> })}{' '}
           </>
         ) : null}
-        Setelah disimpan, semua perangkat yang sedang login akan keluar.
+        {t('newPassword.leadSignOut')}
       </p>
       <p className={`spine-footnote ${styles.sessionNote}`}>
-        {expiryMs !== null ? `Sesi reset berlaku sampai ${formatTimeWIB(new Date(expiryMs))}.` : 'Sesi reset berlaku 10 menit.'}
+        {expiryMs !== null
+          ? t('newPassword.sessionUntil', { time: f.time(new Date(expiryMs)) })
+          : t('newPassword.sessionFor', { minutes: RESET_SESSION_TTL_MS / 60000 })}
       </p>
       <form className={styles.stack} onSubmit={handleSubmit} noValidate>
         {formError && <FormAlert tone="danger">{formError}</FormAlert>}
@@ -186,9 +194,9 @@ function NewPasswordForm() {
         <input type="text" name="username" autoComplete="username" value={session.email} readOnly hidden />
         <div className={fieldStyles.field}>
           {/* Pola halaman masuk: hint panjang minimal di ATAS label (bukan placeholder). */}
-          <p className={`spine-footnote ${styles.minHint}`}>Minimal {MIN_PASSWORD_LENGTH} karakter.</p>
+          <p className={`spine-footnote ${styles.minHint}`}>{t('newPassword.minHint', { min: MIN_PASSWORD_LENGTH })}</p>
           <label className={`spine-label ${fieldStyles.label}`} htmlFor="new-password">
-            Password baru
+            {t('newPassword.newLabel')}
           </label>
           <PasswordInput
             id="new-password"
@@ -196,7 +204,7 @@ function NewPasswordForm() {
             value={newPassword}
             onChange={(e) => { setNewPassword(e.target.value); setPwError(null); }}
             className={`spine-focus-ring ${fieldStyles.input}`}
-            placeholder="••••••••"
+            placeholder={t('newPassword.placeholder')}
             autoFocus
             autoComplete="new-password"
             aria-invalid={pwError ? true : undefined}
@@ -206,7 +214,7 @@ function NewPasswordForm() {
         </div>
         <div className={fieldStyles.field}>
           <label className={`spine-label ${fieldStyles.label}`} htmlFor="confirm-password">
-            Ulangi password baru
+            {t('newPassword.confirmLabel')}
           </label>
           <PasswordInput
             id="confirm-password"
@@ -214,15 +222,15 @@ function NewPasswordForm() {
             value={confirmPassword}
             onChange={(e) => { setConfirmPassword(e.target.value); setConfirmError(null); }}
             className={`spine-focus-ring ${fieldStyles.input}`}
-            placeholder="••••••••"
+            placeholder={t('newPassword.placeholder')}
             autoComplete="new-password"
             aria-invalid={confirmError ? true : undefined}
             aria-describedby={confirmError ? confirmErrorId : undefined}
           />
           {confirmError && <FieldError id={confirmErrorId}>{confirmError}</FieldError>}
         </div>
-        <ButtonPrimary type="submit" busy={submitting} busyLabel="Menyimpan..." style={{ width: '100%' }}>
-          Simpan password
+        <ButtonPrimary type="submit" busy={submitting} busyLabel={tc('saving')} style={{ width: '100%' }}>
+          {t('newPassword.submit')}
         </ButtonPrimary>
       </form>
       <BackToLogin onClick={() => { startLeave(); clearResetSession(); }} />

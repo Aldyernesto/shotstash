@@ -8,6 +8,7 @@
  */
 
 import React, { useId, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import styles from "./overlay.module.css";
 import { PillButton } from "@/components/form/buttons";
 
@@ -181,7 +182,8 @@ export type OneTimeSecretProps = {
  * komponen ini memakai `dismissOnBackdrop={false}` (rahasia sekali tampil
  * tidak boleh hilang karena klik tak sengaja) — lihat `Dialog`.
  */
-export function OneTimeSecret({ secret, copyLabel = "Salin password", className }: OneTimeSecretProps) {
+export function OneTimeSecret({ secret, copyLabel, className }: OneTimeSecretProps) {
+  const t = useTranslations("fields");
   const [state, setState] = useState<"idle" | "done" | "failed">("idle");
   const fieldId = useId();
 
@@ -203,19 +205,19 @@ export function OneTimeSecret({ secret, copyLabel = "Salin password", className 
         </code>
         <PillButton
           variant="surface"
-          aria-label={copyLabel}
+          aria-label={copyLabel ?? t("copyPassword")}
           className={`${styles.secretCopy} ${state === "done" ? styles.secretCopyDone : ""}`}
           onClick={copy}
         >
-          {state === "done" ? "Tersalin" : "Salin"}
+          {state === "done" ? t("copied") : t("copy")}
         </PillButton>
       </div>
       <p className="spine-visually-hidden" role="status">
-        {state === "done" ? "Password disalin" : ""}
+        {state === "done" ? t("passwordCopied") : ""}
       </p>
       {state === "failed" ? (
         <p className={`spine-footnote ${styles.secretFail}`} role="alert">
-          Gagal menyalin otomatis. Blok teks password lalu salin manual.
+          {t("copyFailed")}
         </p>
       ) : null}
     </div>

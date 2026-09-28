@@ -25,7 +25,7 @@
 
 export type MamRole = "SUPER_ADMIN" | "ADMIN" | "FIELD_CREW" | "EDITOR" | "VIEWER";
 
-/** Bentuk masukan yang diterima: objek user, string role, atau kosong. */
+/** Accepted input: a user object, a role string, or nothing. */
 export type RoleLike = { role?: string | null } | string | null | undefined;
 
 function roleOf(subject: RoleLike): string | null {
@@ -99,8 +99,19 @@ export function canOpenAdminPanel(subject: PermissionSubject): boolean {
 }
 
 /* ------------------------------------------------------------------ */
-/* Tampilan role (bukan gerbang, tetapi sumber katanya juga satu)      */
+/* Role display (not a gate, but one source for the role word)          */
 /* ------------------------------------------------------------------ */
+
+/** Message key under the `roles` namespace for each role. */
+export type RoleKey = "superAdmin" | "admin" | "crew" | "editor" | "viewer";
+
+const ROLE_KEYS: Record<string, RoleKey> = {
+  SUPER_ADMIN: "superAdmin",
+  ADMIN: "admin",
+  FIELD_CREW: "crew",
+  EDITOR: "editor",
+  VIEWER: "viewer",
+};
 
 const INITIALS: Record<string, string> = {
   SUPER_ADMIN: "SA",
@@ -110,28 +121,20 @@ const INITIALS: Record<string, string> = {
   EDITOR: "ED",
 };
 
-const LABELS: Record<string, string> = {
-  SUPER_ADMIN: "SUPER ADMIN",
-  ADMIN: "ADMIN",
-  FIELD_CREW: "CREW",
-  VIEWER: "VIEWER",
-  EDITOR: "EDITOR",
-};
-
-/** Inisial dua huruf untuk `avatar-pill`. */
+/** Two-letter initials for the `avatar-pill`. */
 export function roleInitials(subject: RoleLike): string {
   return INITIALS[roleOf(subject) ?? ""] ?? "ED";
 }
 
-/** Kata role yang ditulis di bawah nama pada `avatar-pill`. */
-export function roleLabel(subject: RoleLike): string {
-  return LABELS[roleOf(subject) ?? ""] ?? "EDITOR";
+/**
+ * The `roles.*` message key for a role; null when the role is missing or
+ * unknown. The UI renders `t(`roles.${key}`)` and never the enum value.
+ */
+export function roleKey(subject: RoleLike): RoleKey | null {
+  return ROLE_KEYS[roleOf(subject) ?? ""] ?? null;
 }
 
-/* Story 3.16: `role-chip` percakapan menulis label role UTUH KAPITAL —
-   "FIELD CREW", bukan "CREW" yang dipakai `avatar-pill` (di sana ruangnya
-   selebar satu kolom kecil). Dua peta, satu berkas: kata rolenya tetap
-   tidak pernah dikarang di layar. */
+/** @deprecated Group C only (chat role chip) until Story 3.4: use roleKey + messages. */
 const CHIP_LABELS: Record<string, string> = {
   SUPER_ADMIN: "SUPER ADMIN",
   ADMIN: "ADMIN",
@@ -140,7 +143,7 @@ const CHIP_LABELS: Record<string, string> = {
   VIEWER: "VIEWER",
 };
 
-/** Kata role untuk `role-chip` di kartu pesan. */
+/** @deprecated Group C only (chat role chip) until Story 3.4: use roleKey + messages. */
 export function roleChipLabel(subject: RoleLike): string {
   const role = roleOf(subject) ?? "";
   return CHIP_LABELS[role] ?? role.replace(/_/g, " ").toUpperCase();

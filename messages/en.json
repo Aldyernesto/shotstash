@@ -1,0 +1,672 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "close": "Close",
+    "save": "Save",
+    "saving": "Saving...",
+    "retry": "Try again",
+    "loading": "Loading..."
+  },
+  "format": {
+    "justNow": "just now",
+    "minutesAgo": "{count, number} min ago",
+    "hoursAgo": "{count, number} h ago",
+    "cameraTime": "(camera time)",
+    "orientation": {
+      "portrait": "Portrait",
+      "landscape": "Landscape",
+      "square": "Square"
+    }
+  },
+  "count": {
+    "files": "{count, plural, =0 {No files} one {# file} other {# files}}",
+    "sections": "{count, plural, =0 {No sections} one {# section} other {# sections}}",
+    "projects": "{count, plural, =0 {No projects} one {# project} other {# projects}}",
+    "items": "{count, plural, =0 {No items} one {# item} other {# items}}",
+    "fileWord": "{count, plural, one {file} other {files}}"
+  },
+  "content": {
+    "photos": "{count, plural, one {# photo} other {# photos}}",
+    "videos": "{count, plural, one {# video} other {# videos}}",
+    "documents": "{count, plural, one {# document} other {# documents}}",
+    "summary": "Contains {parts}"
+  },
+  "roles": {
+    "superAdmin": "super admin",
+    "admin": "admin",
+    "crew": "crew",
+    "editor": "editor",
+    "viewer": "viewer",
+    "unknown": "unknown role"
+  },
+  "language": {
+    "label": "Language",
+    "instanceDefault": "Instance default",
+    "hint": "Used for menus and messages in the app."
+  },
+  "login": {
+    "titleLogin": "Studio Access",
+    "titleSignup": "Create Account",
+    "subtitleSignup": "Join your team's studio in a minute.",
+    "tabLogin": "Login",
+    "tabSignup": "Sign Up",
+    "fullNameLabel": "Full Name",
+    "fullNamePlaceholder": "Full name",
+    "emailLabel": "Email Address",
+    "emailPlaceholder": "you@example.com",
+    "passwordLabel": "Password",
+    "forgotPassword": "Forgot password?",
+    "forgotPasswordFallback": "Forgot password? Ask your {productName} admin",
+    "signupNote": "After signing up, you'll fill in a short <b>onboarding</b> (account type and a few questions). An admin reviews your account before you can use the studio.",
+    "pendingNotice": "<b>Your account is waiting for admin approval.</b> Opening the status page…",
+    "busyLogin": "Signing in...",
+    "busySignup": "Creating account...",
+    "submitLogin": "Sign in",
+    "submitSignup": "Create account",
+    "or": "OR",
+    "orSr": "or",
+    "help": "No access yet? <b>Ask your {productName} admin</b>",
+    "googleButton": "Sign in with Google",
+    "googleHint": "Your account uses Google. Sign in with this button."
+  },
+  "authErrors": {
+    "network": "Can't reach the server. Check your connection and try again.",
+    "rateLimited": "Too many attempts. Wait a moment and try again.",
+    "invalidCredentials": "Wrong email or password.",
+    "googleOnlyWithReset": "This account uses Google sign-in. Use the \"Sign in with Google\" button (not the Google Authenticator app), or set a password with \"Forgot password?\".",
+    "googleOnlyNoReset": "This account uses Google sign-in. Use the \"Sign in with Google\" button (not the Google Authenticator app), or ask your {productName} admin to set a password.",
+    "deactivated": "This account has been deactivated. Ask your {productName} admin.",
+    "rejected": "Your sign-up was rejected. Ask your {productName} admin for details.",
+    "emailTaken": "This email is already registered. Sign in on the Login tab, or use Forgot password?",
+    "signupFailed": "Couldn't create your account. Try again.",
+    "googleCancelled": "Google sign-in was cancelled or its popup couldn't open. Try again, or reload the page.",
+    "googleLoadFailed": "Google sign-in couldn't load. Check your connection, then reload the page.",
+    "googleFailed": "Google sign-in failed. Try again.",
+    "googleNetwork": "Google sign-in failed. Check your connection and try again.",
+    "googleNotVerified": "Google hasn't verified this email address yet.",
+    "server": "Something went wrong on the server. Try again."
+  },
+  "authCard": {
+    "title": "Studio Access",
+    "subtitle": "Sign in and pick up where you left off.",
+    "pill": "FOR TEAMS"
+  },
+  "authTabs": {
+    "label": "Sign in or sign up"
+  },
+  "authCode": {
+    "hint": "The code is checked automatically after {count} characters.",
+    "group": "{count}-character code",
+    "box": "Character {index} of {count}"
+  },
+  "form": {
+    "closeNotice": "Close notice"
+  },
+  "hero": {
+    "tag": "Premium archive",
+    "headline": "Your footage<br></br><sticker>your hardware</sticker><br></br>your cloud",
+    "lead": "All your clips and photos on your own hardware: tidy, quick to find, ready to share with team and clients.",
+    "pauseMotion": "Pause animation"
+  },
+  "password": {
+    "show": "Show password",
+    "hide": "Hide password",
+    "minHint": "At least {min} characters.",
+    "tooShort": "Password must be at least {min} characters.",
+    "tooLong": "Password must be at most {max} bytes (about {max} plain characters; accented letters and emoji count more)."
+  },
+  "pending": {
+    "titleWaiting": "Waiting for Approval",
+    "titleRejected": "Sign-up Rejected",
+    "leadWaiting": "We've received your account and an admin is reviewing it. You can enter the studio once it's approved.",
+    "leadRejected": "Sorry, your sign-up was rejected. Ask your {productName} admin for details.",
+    "emailLabel": "Email",
+    "requestedRole": "Requested account type",
+    "roleNotSet": "Not set yet",
+    "checking": "Checking…",
+    "checkStatus": "Check now",
+    "signOut": "Sign Out",
+    "pollOk": "Status updates automatically every 10 seconds.",
+    "pollFail": "Can't check the status right now. Trying again…"
+  },
+  "onboarding": {
+    "greeting": "Welcome, {name}",
+    "greetingAnon": "Welcome",
+    "subtitle": "A few quick questions so we can set up the studio for you.",
+    "roleQuestion": "How would you like to join?",
+    "rolePlaceholder": "Choose an account type…",
+    "answerPlaceholder": "Choose an answer…",
+    "roleOptions": {
+      "editor": "Editor",
+      "crew": "Crew",
+      "viewer": "Viewer"
+    },
+    "chooseRole": "Choose an account type first.",
+    "answerAll": "Please answer every question first.",
+    "submitFailed": "Couldn't send. Try again.",
+    "submitting": "Sending…",
+    "submit": "Send for Review",
+    "questions": {
+      "discover": {
+        "label": "How did you hear about {productName}?",
+        "options": {
+          "invited": "Invited or recommended by an admin",
+          "friend": "A friend or colleague",
+          "social": "Social media (IG / TikTok / YouTube)",
+          "travelGroup": "A community or group",
+          "google": "Google search",
+          "other": "Other"
+        }
+      },
+      "discover_social": {
+        "label": "Which platform did you hear about us on?",
+        "options": {
+          "instagram": "Instagram",
+          "tiktok": "TikTok",
+          "youtube": "YouTube",
+          "facebook": "Facebook",
+          "other": "Other"
+        }
+      },
+      "discover_other": {
+        "label": "Which of these comes closest?",
+        "options": {
+          "travelPartner": "A partner or client",
+          "event": "An event or exhibition",
+          "website": "A website or blog",
+          "ad": "An ad",
+          "dontRemember": "I don't remember"
+        }
+      },
+      "edit_exp": {
+        "label": "How long have you been editing video?",
+        "options": {
+          "lt1": "Under 1 year",
+          "y1to3": "1 to 3 years",
+          "y3to5": "3 to 5 years",
+          "gt5": "Over 5 years"
+        }
+      },
+      "edit_content": {
+        "label": "What kind of content do you edit most?",
+        "options": {
+          "reels": "Reels / Shorts",
+          "travelDocs": "Travel documentaries",
+          "ads": "Ads / promos",
+          "longVlog": "Long vlogs",
+          "mix": "A mix of everything"
+        }
+      },
+      "edit_reels_dur": {
+        "label": "How long are your edits, on average?",
+        "options": {
+          "lt30": "Under 30 seconds",
+          "s30to60": "30 to 60 seconds",
+          "m1to3": "1 to 3 minutes",
+          "gt3": "Over 3 minutes"
+        }
+      },
+      "edit_software": {
+        "label": "What's your main editing software?",
+        "options": {
+          "premiere": "Adobe Premiere Pro",
+          "resolve": "DaVinci Resolve",
+          "finalCut": "Final Cut Pro",
+          "capcut": "CapCut",
+          "afterEffects": "After Effects",
+          "other": "Other"
+        }
+      },
+      "fc_exp": {
+        "label": "How long have you been shooting in the field?",
+        "options": {
+          "lt1": "Under 1 year",
+          "y1to3": "1 to 3 years",
+          "y3to5": "3 to 5 years",
+          "gt5": "Over 5 years"
+        }
+      },
+      "fc_gear": {
+        "label": "What gear do you usually use?",
+        "options": {
+          "mirrorless": "Mirrorless / DSLR camera",
+          "cinema": "Cinema camera (RED / BMPCC, etc.)",
+          "phone": "Smartphone + gimbal",
+          "action": "Action cam (GoPro / Insta360)",
+          "drone": "Drone",
+          "mix": "A mix"
+        }
+      },
+      "fc_drone_cert": {
+        "label": "Do you have a drone certificate or flight permit?",
+        "options": {
+          "yes": "Yes, I do",
+          "no": "Not yet",
+          "inProgress": "It's in progress"
+        }
+      },
+      "fc_file": {
+        "label": "How do you organize your footage after a shoot?",
+        "options": {
+          "byDate": "A folder per date",
+          "byEvent": "A folder per location or event",
+          "upload": "I upload straight to a NAS / cloud",
+          "none": "No fixed system yet"
+        }
+      },
+      "ag_purpose": {
+        "label": "What do you need footage access for?",
+        "options": {
+          "marketing": "Social media marketing",
+          "clientArchive": "Client archive",
+          "review": "Reviewing productions",
+          "other": "Other"
+        }
+      },
+      "ag_org": {
+        "label": "What kind of team or organization do you represent?",
+        "options": {
+          "client": "A client",
+          "agency": "A partner agency or studio",
+          "media": "Media / content creator",
+          "individual": "Just myself"
+        }
+      }
+    }
+  },
+  "theme": {
+    "group": "Theme",
+    "lightLabel": "Switch to light mode",
+    "lightTitle": "Light mode",
+    "darkLabel": "Switch to dark mode",
+    "darkTitle": "Dark mode"
+  },
+  "select": {
+    "placeholder": "Choose…"
+  },
+  "list": {
+    "column": {
+      "project": "Project",
+      "section": "Section",
+      "contents": "Contents",
+      "date": "Date",
+      "actions": "Actions",
+      "select": "Select",
+      "name": "Name",
+      "type": "Type",
+      "size": "Size",
+      "uploadedBy": "Uploaded by"
+    },
+    "tableLabel": {
+      "projects": "Projects",
+      "sections": "Sections",
+      "files": "Section contents"
+    },
+    "kind": {
+      "subSection": "Sub-Section",
+      "video": "Video",
+      "image": "Photo",
+      "audio": "Audio",
+      "document": "Document",
+      "documentExt": "Document · {ext}"
+    },
+    "none": "None",
+    "noSubSections": "No sub-Sections",
+    "subSectionNames": "Sub-Section: {names}",
+    "subSectionCount": "{count, plural, one {# sub-Section} other {# sub-Sections}}",
+    "subSectionFiles": "Sub-Section · {files}",
+    "errorText": "We couldn't reach the server.",
+    "noResultsTitle": "No results",
+    "noResultsText": "No results for \"{term}\". Try another word or check the spelling.",
+    "emptyTitle": "Nothing here yet",
+    "emptyText": "Drag files here, or upload from your computer.",
+    "fileRowName": "{name}, {kind}, {size}",
+    "fileMeta": "{kind} · {size}"
+  },
+  "cards": {
+    "empty": "Still empty",
+    "emptyDropHint": "Still empty, drag files here",
+    "uploadFirst": "Upload first footage",
+    "number": "Number",
+    "numberPrefix": "NO",
+    "share": "Share {name}",
+    "projectName": "{title}, {files}, {date}",
+    "sectionName": "{title}, {files}",
+    "sectionNameNumbered": "Number {number}, {title}, {files}",
+    "fileName": "{name}, {kind}, {size}",
+    "fileNameDuration": "{name}, {kind}, {size}, {duration}",
+    "kind": {
+      "image": "photo",
+      "video": "video",
+      "audio": "audio",
+      "document": "document"
+    }
+  },
+  "menu": {
+    "actionsFor": "Actions for {name}"
+  },
+  "bulk": {
+    "regionLabel": "Actions for selected items",
+    "selectedFiles": "{count, plural, one {# file selected} other {# files selected}}",
+    "selectedSections": "{count, plural, one {# Section selected} other {# Sections selected}}",
+    "selectedItems": "{count, plural, one {# item selected} other {# items selected}}",
+    "selectAll": "Select all",
+    "trash": "Trash",
+    "downloadZip": "Download ZIP"
+  },
+  "selection": {
+    "select": "Select {name}"
+  },
+  "more": {
+    "actionsFor": "Actions for {name}"
+  },
+  "states": {
+    "errorTitle": "Couldn't load. Try again."
+  },
+  "dashboard": {
+    "levels": {
+      "projects": "Projects",
+      "project": "Project",
+      "section": "Section",
+      "file": "File"
+    },
+    "kind": {
+      "video": "Video",
+      "image": "Photo",
+      "audio": "Audio",
+      "document": "Document",
+      "file": "File"
+    },
+    "units": {
+      "footage": "{count, plural, one {# footage file} other {# footage files}}"
+    },
+    "meta": {
+      "project": "Project · {files} · {sections}",
+      "section": "Section · {files}",
+      "file": "{kind} · {size}"
+    },
+    "head": {
+      "projectSub": "{files} · {sections}",
+      "hoverHint": "hover over a project to peek inside."
+    },
+    "sort": {
+      "group": "Sort",
+      "name": "Name",
+      "date": "Date",
+      "size": "Size",
+      "type": "Type",
+      "asc": "ascending",
+      "desc": "descending"
+    },
+    "toolbar": {
+      "search": "Search footage…",
+      "searchFailed": "Search failed. Try again.",
+      "searching": "Searching…",
+      "noResults": "No results for \"{query}\".",
+      "chat": "Project chat",
+      "viewGroup": "View",
+      "gridView": "Grid view",
+      "listView": "List view",
+      "select": "Select",
+      "newProject": "+ New Project",
+      "newSection": "+ New Section",
+      "uploadTo": "+ Upload to {name}",
+      "uploadFiles": "+ Upload files"
+    },
+    "states": {
+      "loadError": "Couldn't load from the server.",
+      "noProjectsTitle": "No projects yet.",
+      "noProjectsText": "New projects show up here once they're created.",
+      "newProject": "New Project",
+      "emptySectionTitle": "Still empty. Drag files here",
+      "emptySectionText": "No files in this Section yet.",
+      "uploadFirst": "Upload your first footage"
+    },
+    "drag": {
+      "pickSection": "Drop to choose a Section",
+      "moveTo": "Drop to move to {target}",
+      "uploadTo": "Drop to upload to {target}",
+      "uploadHere": "Drop to upload to this Section"
+    },
+    "menu": {
+      "preview": "Preview",
+      "fastDownload": "Download (fast)",
+      "download": "Download",
+      "share": "Share",
+      "shareProject": "Share Project",
+      "moveTo": "Move to…",
+      "copyTo": "Copy to…",
+      "trash": "Move to Trash",
+      "open": "Open",
+      "rename": "Rename",
+      "deleteProject": "Delete Project",
+      "days30": "30 days",
+      "permanent": "Permanent"
+    },
+    "picker": {
+      "titleMove": "Move {icon} \"{name}\"",
+      "titleCopy": "Copy {icon} \"{name}\"",
+      "hint": "Go to the destination Section",
+      "emptySections": "No Sections here",
+      "emptyProjects": "No projects found",
+      "openSection": "Open Section",
+      "tapHint": "Tap a Section to select it, › to open",
+      "openProject": "Open a project",
+      "moveHere": "Move here",
+      "copyHere": "Copy here"
+    },
+    "toasts": {
+      "projectDeleted": "Project deleted.",
+      "projectDeleteFailed": "Couldn't delete the project.",
+      "fileTrashed": "File moved to Trash.",
+      "fileTrashFailed": "Couldn't move the file to Trash.",
+      "sectionTrashed": "Section moved to Trash.",
+      "sectionTrashFailed": "Couldn't move the Section to Trash."
+    },
+    "alerts": {
+      "trashFailed": "Couldn't move to Trash. Try again.",
+      "trashError": "Couldn't move to Trash: {cause}",
+      "moveFailed": "Couldn't move: {cause}",
+      "operationFailed": "Couldn't finish: {cause}",
+      "bulkTrash": "Some items couldn't be moved to Trash:\n\n{reasons}",
+      "bulkReason": "{name}: {cause}",
+      "zipOneSection": "Downloading several Sections at once isn't supported yet. Downloading the first one."
+    },
+    "bulk": {
+      "failedAll": "Failed: {count, plural, one {# item} other {# items}} still selected",
+      "failedSome": "{failed, number} of {total, number} failed, still selected"
+    },
+    "live": {
+      "results": "{count, plural, one {# result} other {# results}} for \"{query}\".",
+      "moved": "{count, plural, one {# item} other {# items}} moved to {target}",
+      "readyToUpload": "{count, plural, one {# file} other {# files}} ready to upload.",
+      "selected": "{count, number} selected",
+      "sorted": "Sorted by {field}, {dir, select, asc {ascending} other {descending}}",
+      "selectOn": "Select mode on.",
+      "selectOff": "Select mode off."
+    },
+    "dialogs": {
+      "renameLead": "Enter a new name for \"{name}\".",
+      "renameProject": "Rename Project",
+      "renameSection": "Rename Section",
+      "rename": "Rename",
+      "deleteProjectTitle": "Delete this project?",
+      "deleteProjectLead": "Every Section and file in <b>{name}</b> will be deleted <b>permanently</b>. This can't be undone.",
+      "deleteForever": "Delete forever",
+      "createProjectTitle": "New Project",
+      "createProjectLead": "A new card appears on your dashboard, with its own storage space on the server.",
+      "projectTitlePlaceholder": "Project title (e.g. Summer Shoot 2026)",
+      "descriptionPlaceholder": "Description (optional)",
+      "create": "Create",
+      "createSectionTitle": "New Section",
+      "createSectionLead": "Create a new Section inside {name}.",
+      "createSectionLeadFallback": "Create a new Section inside this project.",
+      "sectionPlaceholder": "Section name (e.g. B-Roll, Thumbnails)",
+      "trashTitle": "Move to Trash?",
+      "trashLeadBulk": "<b>{name}</b> will move to Trash. You can restore them within 30 days.",
+      "trashLeadSection": "Section <b>{name}</b> and everything in it will move to Trash. You can restore it within 30 days.",
+      "trashLeadFile": "File <b>{name}</b> will move to Trash. You can restore it within 30 days.",
+      "trashConfirm": "Move to Trash"
+    }
+  },
+  "forgotPassword": {
+    "metaTitle": "Reset password | {productName}",
+    "resetTitle": "Reset password",
+    "backToLogin": "Back to sign in",
+    "unavailable": "Password reset isn't available yet. For now, ask your {productName} admin to set a new password for you.",
+    "sending": "Sending...",
+    "errors": {
+      "transport": "Couldn't reach the server. Check your connection and try again.",
+      "requestFailed": "Request failed. Try again.",
+      "unavailable": "Password reset isn't available yet.",
+      "rateLimited": "Too many attempts. Try again later.",
+      "invalidEmail": "Enter a valid email address.",
+      "invalidCode": "Wrong or expired code. Check it and try again.",
+      "codeLocked": "Too many wrong tries, so this code was cancelled. Request a new code.",
+      "tokenInvalid": "Your reset session has ended. Start again.",
+      "passwordTooShort": "Use at least {min} characters.",
+      "passwordTooLong": "Use at most {max} bytes (about {max} plain characters; accented letters and emoji count more).",
+      "passwordMismatch": "The passwords don't match.",
+      "internal": "Something went wrong. Try again."
+    },
+    "request": {
+      "title": "Forgot your password?",
+      "lead": "Enter the email for your {productName} account. We'll send a {length}-character code so you can set a new password.",
+      "emailLabel": "Email",
+      "emailPlaceholder": "name@email.com",
+      "submit": "Send code"
+    },
+    "verify": {
+      "title": "Enter the code",
+      "lead": "If <strong>{email}</strong> is registered, we sent a {length}-character code to it.",
+      "validUntil": "Code valid until {time}.",
+      "validFor": "Code valid for {minutes} minutes.",
+      "spamHint": "Not in your inbox? Check your spam folder.",
+      "codeIncomplete": "Enter the {length}-character code from the email.",
+      "storageBlocked": "Your browser is blocking session storage, so the reset can't continue. Open this page in a normal window (not private mode) and request a new code.",
+      "checking": "Checking...",
+      "submit": "Verify code",
+      "resent": "If the email is registered, a new code is on its way. Use the code from the latest email you get.",
+      "resendFailed": "Couldn't resend the code. Try again.",
+      "noCode": "Didn't get a code?",
+      "resendIn": "Resend in {time}",
+      "resend": "Resend code",
+      "changeEmail": "Change email"
+    },
+    "newPassword": {
+      "title": "Create a new password",
+      "expiredTitle": "Reset session ended",
+      "expiredLead": "Your reset session has ended. Start again.",
+      "requestNewCode": "Request a new code",
+      "leadFor": "New password for <strong>{email}</strong>.",
+      "leadSignOut": "Once saved, every signed-in device will be signed out.",
+      "sessionUntil": "Reset session valid until {time}.",
+      "sessionFor": "Reset session valid for {minutes} minutes.",
+      "minHint": "At least {min} characters.",
+      "newLabel": "New password",
+      "confirmLabel": "Repeat new password",
+      "placeholder": "••••••••",
+      "submit": "Save password",
+      "saveFailed": "Couldn't save the password. Try again."
+    },
+    "done": {
+      "title": "WELL <sticker>DONE!</sticker>",
+      "body": "Your password has been changed, and old sessions on your other devices are signed out. Sign in with your new password.",
+      "signIn": "Sign in"
+    }
+  },
+  "setup": {
+    "metaTitle": "Set up | {productName}",
+    "title": "Set up {productName}",
+    "subtitle": "Create the owner account. It becomes the super admin of this installation.",
+    "storageOk": "Storage check passed: the media folder is writable.",
+    "storageFailed": "Storage check failed: {reason} Fix STORAGE_LOCAL_ROOT, then reload this page.",
+    "tokenLabel": "Setup token",
+    "nameLabel": "Name",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@example.com",
+    "passwordLabel": "Password",
+    "confirmLabel": "Confirm password",
+    "minHint": "At least {min} characters.",
+    "creating": "Creating...",
+    "submit": "Create owner",
+    "done": "Setup complete. Sign in with the new account.",
+    "errors": {
+      "tokenRequired": "Enter the setup token from the server configuration.",
+      "tokenInvalid": "The setup token is missing or wrong.",
+      "nameRequired": "Enter your name.",
+      "emailInvalid": "Enter a valid email address.",
+      "passwordTooShort": "Use at least {min} characters.",
+      "passwordTooLong": "Use at most {max} bytes (about {max} plain characters; accented letters and emoji count more).",
+      "passwordMismatch": "The passwords do not match.",
+      "checkField": "Check this field.",
+      "alreadyDone": "Setup is already complete. Sign in instead.",
+      "storageUnavailable": "The media folder is not writable: {reason}.",
+      "storageUnavailableGeneric": "The media folder is not writable. Check STORAGE_LOCAL_ROOT.",
+      "failed": "Setup failed. Try again.",
+      "transport": "Can't reach the server. Check the connection and try again."
+    }
+  },
+  "shell": {
+    "skipToContent": "Skip to content",
+    "mainNav": "Main",
+    "more": "More",
+    "navigation": "Navigation",
+    "upload": "Upload",
+    "search": "Search",
+    "profile": "Profile",
+    "pickProject": "Pick a Project",
+    "userFallback": "User"
+  },
+  "nav": {
+    "myMedia": "My Media",
+    "shared": "Shared",
+    "trash": "Trash",
+    "adminPanel": "Admin Panel"
+  },
+  "account": {
+    "profileSettings": "Profile settings",
+    "logout": "Log out",
+    "logoutTitle": "Log out?",
+    "logoutBody": "This ends your session. You'll need to sign in again to open the dashboard.",
+    "logoutConfirm": "Yes, log out"
+  },
+  "profile": {
+    "title": "Profile settings",
+    "changePhotoTitle": "Click to change photo",
+    "uploading": "Uploading...",
+    "changePhotoHint": "Click the photo to change it",
+    "removePhoto": "Remove",
+    "name": "Name",
+    "email": "Email",
+    "role": "Role",
+    "roleHint": "Only an admin can change your role.",
+    "photoTooLarge": "The photo must be 5 MB or smaller.",
+    "nameRequired": "Name can't be empty.",
+    "uploadFailed": "Couldn't upload the photo. Try again.",
+    "saveFailed": "Couldn't save your profile. Try again."
+  },
+  "dialog": {
+    "busy": "Working..."
+  },
+  "fields": {
+    "copyPassword": "Copy password",
+    "copy": "Copy",
+    "copied": "Copied",
+    "passwordCopied": "Password copied",
+    "copyFailed": "Couldn't copy automatically. Select the password and copy it by hand."
+  },
+  "errors": {
+    "offline": "Can't reach the server. Check your connection.",
+    "session": "Your session has expired. Sign in again.",
+    "notFound": "That item no longer exists.",
+    "timeout": "The server took too long. Try again.",
+    "server": "The server has a problem. Try again later.",
+    "generic": "Something went wrong. Try again."
+  },
+  "copyPill": {
+    "copyLink": "Copy link {path}",
+    "copied": "Link copied to clipboard.",
+    "copyFailed": "Couldn't copy automatically. Select the link and copy it by hand."
+  }
+}

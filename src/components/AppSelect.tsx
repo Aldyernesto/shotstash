@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useId, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from './form/SelectField.module.css';
 
 export type Opt = { value: string; label: string };
@@ -32,7 +33,7 @@ const CHECK = (
 export default function AppSelect({
   value,
   options,
-  placeholder = 'Pilih…',
+  placeholder: placeholderProp,
   onChange,
   invalid = false,
   describedBy,
@@ -49,6 +50,8 @@ export default function AppSelect({
   labelledBy?: string;
   buttonRef?: React.RefObject<HTMLButtonElement | null>;
 }) {
+  const t = useTranslations('select');
+  const placeholder = placeholderProp ?? t('placeholder');
   const uid = useId();
   const listId = `${uid}-listbox`;
   const [open, setOpen] = useState(false);

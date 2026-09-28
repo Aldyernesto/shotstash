@@ -28,7 +28,10 @@ export const POST = defineRoute({
     try {
       user = await AuthService.loginUser(email, password);
     } catch (err) {
-      return jsonError(401, 'INVALID_CREDENTIALS', (err as Error)?.message || 'Invalid email or password');
+      // A LoginError names the case (Google-only, deactivated, rejected);
+      // anything else stays a plain credentials failure. Status stays 401.
+      const code = err instanceof AuthService.LoginError ? err.code : 'INVALID_CREDENTIALS';
+      return jsonError(401, code, (err as Error)?.message || 'Invalid email or password');
     }
 
     const session = await AuthService.createSession(user.id, {

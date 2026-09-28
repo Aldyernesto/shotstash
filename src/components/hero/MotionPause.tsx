@@ -9,6 +9,7 @@
 // Mode kalem (data-motion="calm", termasuk perubahan prefers-reduced-
 // motion saat halaman terbuka) = tombol tidak dirender.
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from './hero.module.css';
 
 function PauseIcon() {
@@ -31,6 +32,7 @@ function PlayIcon() {
 export default function MotionPause({ paused, onToggle }: { paused: boolean; onToggle: () => void }) {
   // Pra-hidrasi & SSR: dianggap kalem → tidak dirender (jujur daripada
   // muncul-hilang; konsisten dengan pola ThemeToggle Story 1.12).
+  const t = useTranslations('hero');
   const [calm, setCalm] = useState(true);
 
   useEffect(() => {
@@ -49,8 +51,8 @@ export default function MotionPause({ paused, onToggle }: { paused: boolean; onT
       type="button"
       className={`spine-hit-area spine-focus-ring ${styles.pauseBtn}`}
       aria-pressed={paused}
-      aria-label="Jeda animasi"
-      title="Jeda animasi"
+      aria-label={t('pauseMotion')}
+      title={t('pauseMotion')}
       onClick={onToggle}
     >
       {paused ? <PlayIcon /> : <PauseIcon />}

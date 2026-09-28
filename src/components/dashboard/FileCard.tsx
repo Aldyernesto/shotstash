@@ -2,19 +2,12 @@
 
 import React from "react";
 import styles from "./FileCard.module.css";
-import { formatFileSize } from "@/lib/format";
+import { useTranslations } from "next-intl";
+import { useFormat } from "@/i18n/useFormat";
 import SelectCheck from "./SelectCheck";
 import MoreButton from "./MoreButton";
 
 export type FileKind = "image" | "video" | "audio" | "document";
-
-/** Kata jenis berbahasa Indonesia untuk nama aksesibel kartu. */
-const KIND_LABEL: Record<FileKind, string> = {
-  image: "foto",
-  video: "video",
-  audio: "audio",
-  document: "dokumen",
-};
 
 export type FileCardProps = {
   id: string;
@@ -79,12 +72,16 @@ export default function FileCard({
 }: FileCardProps) {
   const isDoc = kind === "document";
   const isVideo = kind === "video";
-  const sizeText = formatFileSize(Number(sizeBytes) || 0);
+  const t = useTranslations("cards");
+  const f = useFormat();
+  const sizeText = f.fileSize(Number(sizeBytes) || 0);
   const ext = extensionOf(name);
   // "{nama file}, {jenis}, {ukuran}" (+ durasi untuk video)
-  const accessibleName = [name, KIND_LABEL[kind], sizeText, isVideo && duration ? duration : null]
-    .filter(Boolean)
-    .join(", ");
+  const kindText = t(`kind.${kind}`);
+  const accessibleName =
+    isVideo && duration
+      ? t("fileNameDuration", { name, kind: kindText, size: sizeText, duration })
+      : t("fileName", { name, kind: kindText, size: sizeText });
 
   return (
     <article
@@ -182,7 +179,7 @@ export default function FileCard({
         <button
           type="button"
           className={`spine-focus-ring ${styles.shareButton}`}
-          aria-label={`Bagikan ${name}`}
+          aria-label={t("share", { name })}
           onClick={(e) => {
             e.stopPropagation();
             onShare(id, name);

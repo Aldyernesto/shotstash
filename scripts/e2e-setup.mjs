@@ -56,7 +56,7 @@ r = await fetch(`${B}/api/v1/auth/login`, { method: 'POST', headers: { 'content-
 ok(r.status === 503, 'REST login 503 before setup', r.status);
 r = await fetch(`${B}/setup`);
 const html = await r.text();
-ok(r.status === 200 && html.includes('Create owner account') && /Storage check passed/.test(html), 'setup page renders with storage probe', r.status);
+ok(r.status === 200 && /Set up Shotstash/.test(html) && /Storage check passed/.test(html), 'setup page renders with storage probe', r.status);
 ok(r.headers.get('x-frame-options') === 'DENY' && r.headers.get('x-content-type-options') === 'nosniff', 'security headers on the setup page');
 
 // ---- validation

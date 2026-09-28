@@ -44,6 +44,8 @@ export const typeDefs = `#graphql
     onboardedAt: DateTime
     avatarUrl: String
     signupAnswers: String
+    # UI locale; null = instance default (DEFAULT_LOCALE, then en).
+    locale: String
     # false = akun Google-only (belum punya password)
     hasPassword: Boolean!
     # Denies every write when true.
@@ -349,7 +351,7 @@ export const typeDefs = `#graphql
     completePasswordReset(resetToken: String!, newPassword: String!, confirmPassword: String!): PasswordResetResult!
 
     # Profile
-    updateProfile(name: String, avatarUrl: String): User!
+    updateProfile(name: String, avatarUrl: String, locale: String): User!
 
     # Projects
     createProject(input: CreateProjectInput!): Project!

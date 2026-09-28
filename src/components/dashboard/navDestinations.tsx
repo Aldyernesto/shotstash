@@ -7,9 +7,12 @@ import * as perm from "@/lib/permissions";
 // boleh untuk role itu TIDAK PERNAH dirender (tanpa disabled/aria-disabled/
 // redup) — AC 2.2.
 
+/** Key under the `nav` messages namespace; frames translate it at render. */
+export type NavLabelKey = "myMedia" | "shared" | "trash" | "adminPanel";
+
 export type NavDestination = {
   href: string;
-  label: string;
+  labelKey: NavLabelKey;
   icon: ReactNode;
   /** Cocok persis (default: startsWith). */
   exact?: boolean;
@@ -43,7 +46,7 @@ export function navDestinations(user: perm.PermissionSubject): NavDestination[] 
   const list: (NavDestination | null)[] = [
     {
       href: "/dashboard",
-      label: "My Media",
+      labelKey: "myMedia",
       exact: true,
       icon: (
         <Icon>
@@ -53,7 +56,7 @@ export function navDestinations(user: perm.PermissionSubject): NavDestination[] 
     },
     {
       href: "/dashboard/shared",
-      label: "Shared",
+      labelKey: "shared",
       icon: (
         <Icon>
           <circle cx="18" cy="5" r="3" />
@@ -67,7 +70,7 @@ export function navDestinations(user: perm.PermissionSubject): NavDestination[] 
     showTrash
       ? {
           href: "/dashboard/trash",
-          label: "Trash",
+          labelKey: "trash",
           icon: (
             <Icon>
               <polyline points="3 6 5 6 21 6" />
@@ -81,7 +84,7 @@ export function navDestinations(user: perm.PermissionSubject): NavDestination[] 
     showAdminPanel
       ? {
           href: "/dashboard/admin",
-          label: "Admin Panel",
+          labelKey: "adminPanel",
           icon: (
             <Icon>
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />

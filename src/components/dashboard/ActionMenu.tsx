@@ -13,6 +13,7 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import styles from "./ActionMenu.module.css";
 import { useFocusTrap, useModalLayer } from "@/components/overlay/modalStack";
 
@@ -82,6 +83,8 @@ const CLOSE_ICON = (
 );
 
 export default function ActionMenu({ anchor, target, entries, onClose }: ActionMenuProps) {
+  const t = useTranslations("menu");
+  const tCommon = useTranslations("common");
   const desktop = useIsDesktop();
   const rootRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -280,7 +283,7 @@ export default function ActionMenu({ anchor, target, entries, onClose }: ActionM
         ref={rootRef}
         role="dialog"
         aria-modal="true"
-        aria-label={`Aksi untuk ${target.name}`}
+        aria-label={t("actionsFor", { name: target.name })}
         className={styles.sheet}
         onKeyDown={onKeyDown}
       >
@@ -297,14 +300,14 @@ export default function ActionMenu({ anchor, target, entries, onClose }: ActionM
           </div>
           <button
             type="button"
-            aria-label="Tutup"
+            aria-label={tCommon("close")}
             className={`spine-focus-ring ${styles.sheetClose}`}
             onClick={onClose}
           >
             {CLOSE_ICON}
           </button>
         </div>
-        <div ref={listRef} role="menu" aria-label={`Aksi untuk ${target.name}`} className={styles.sheetList}>
+        <div ref={listRef} role="menu" aria-label={t("actionsFor", { name: target.name })} className={styles.sheetList}>
           {renderEntries(true)}
         </div>
       </section>

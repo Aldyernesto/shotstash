@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQuery, gql } from '@apollo/client';
+import { useLocale, useTranslations } from 'next-intl';
 import styles from './page.module.css';
 import { useAuth } from '@/components/AuthContext';
 import AuthPage from '@/components/auth/AuthPage';
@@ -9,31 +10,92 @@ import AuthCard from '@/components/auth/AuthCard';
 import AuthTabs from '@/components/auth/AuthTabs';
 import PasswordInput from '@/components/PasswordInput';
 import HeroStage from '@/components/hero/HeroStage';
-import { MIN_PASSWORD_LENGTH } from '@/lib/passwordRule';
+import { MAX_PASSWORD_BYTES, MIN_PASSWORD_LENGTH } from '@/lib/passwordRule';
 import TextField from '@/components/form/TextField';
 // Komposisi field password memakai kelas kontrak text-field (pola yang
 // sama dengan PasswordInput: .field/.label/.input — bukan duplikasi gaya).
 import fieldStyles from '@/components/form/TextField.module.css';
 import { FormAlert } from '@/components/form/FormAlert';
 import { ButtonPrimary, TextLink } from '@/components/form/buttons';
-import { GOOGLE_ONLY_MARKER } from '@/lib/authMessages';
+import { EMAIL_TAKEN, LOGIN_ERROR_CODES } from '@/lib/authMessages';
+import { brand } from '@/lib/brand';
 import { issueMediaCookie } from '@/lib/authClient';
 // Story 1.31: email hasil reset dibawa lewat sessionStorage (bukan query param).
 import { LOGIN_PREFILL_KEY } from '@/app/forgot-password/shared';
 
-// Story 1.15: kalimat mentah jaringan ("Failed to fetch" dll.) tidak boleh
-// sampai ke pengguna — dipetakan ke kalimat yang bisa ditindaklanjuti.
-const NETWORK_ERROR = 'Tidak bisa terhubung ke server. Periksa koneksi lalu coba lagi.';
-function mapAuthError(message: string | undefined | null): string {
-  if (!message) return NETWORK_ERROR;
-  if (/failed to fetch|load failed|networkerror|backend tidak merespon/i.test(message)) return NETWORK_ERROR;
-  return message;
+/**
+ * Every message the form alert can show: a key, never server text. The copy
+ * lives in `authErrors` (plus `password.*` for the password rule) and is
+ * picked at render time, so raw server or network text never reaches the
+ * user (Story 1.15).
+ */
+type AuthAlert =
+  | 'network'
+  | 'rateLimited'
+  | 'invalidCredentials'
+  | 'googleOnly'
+  | 'deactivated'
+  | 'rejected'
+  | 'emailTaken'
+  | 'signupFailed'
+  | 'passwordTooShort'
+  | 'passwordTooLong'
+  | 'googleCancelled'
+  | 'googleLoadFailed'
+  | 'googleFailed'
+  | 'googleNetwork'
+  | 'googleNotVerified'
+  | 'server';
+
+// Raw transport failures ("Failed to fetch" and friends).
+const NETWORK_PATTERN = /failed to fetch|load failed|networkerror|backend tidak merespon/i;
+
+
+/** Failed `login` payload: its stable `errorCode` picks the message. */
+function loginAlert(code: string | null | undefined): AuthAlert {
+  switch (code) {
+    case LOGIN_ERROR_CODES.googleOnly:
+      return 'googleOnly';
+    case LOGIN_ERROR_CODES.deactivated:
+      return 'deactivated';
+    case LOGIN_ERROR_CODES.rejected:
+      return 'rejected';
+    case LOGIN_ERROR_CODES.invalidCredentials:
+      return 'invalidCredentials';
+    default:
+      // INTERNAL or a code this client does not know: not the user's fault.
+      return 'server';
+  }
 }
 
-// Story 1.21: server melempar "Email sudah terdaftar" (auth.service) —
-// pesan ini mendapat jalan keluar di form-alert dan fokus kembali ke
-// field EMAIL (bukan ke password seperti kegagalan lain).
-const EMAIL_TAKEN_PATTERN = /email sudah terdaftar/i;
+/** Failed `register`: password-rule or taken-email code, network, else generic. */
+function registerAlert(code: string | null | undefined, message: string | null | undefined): AuthAlert {
+  if (code === 'PASSWORD_TOO_SHORT') return 'passwordTooShort';
+  if (code === 'PASSWORD_TOO_LONG') return 'passwordTooLong';
+  if (code === EMAIL_TAKEN) return 'emailTaken';
+  if (message && NETWORK_PATTERN.test(message)) return 'network';
+  return 'signupFailed';
+}
+
+/** Thrown request (transport or GraphQL error): network or rate limit when it is one. */
+function mapAuthError(
+  err: { message?: string; graphQLErrors?: { extensions?: { code?: unknown } }[] } | undefined,
+  fallback: AuthAlert,
+): AuthAlert {
+  if (err?.graphQLErrors?.some((e) => e?.extensions?.code === 'RATE_LIMITED')) return 'rateLimited';
+  const message = err?.message;
+  if (!message || NETWORK_PATTERN.test(message)) return 'network';
+  if (/too many attempts/i.test(message)) return 'rateLimited';
+  return fallback;
+}
+
+/** Failed `googleAuth`: known server cases by code or text, else generic. */
+function googleAlert(error: { message?: string; extensions?: { code?: string } } | undefined): AuthAlert {
+  if (error?.extensions?.code === 'EMAIL_NOT_VERIFIED') return 'googleNotVerified';
+  if (error?.extensions?.code === 'RATE_LIMITED') return 'rateLimited';
+  if (error?.extensions?.code === LOGIN_ERROR_CODES.deactivated) return 'deactivated';
+  return 'googleFailed';
+}
 
 // ============================================
 // Google Identity Services (GSI)
@@ -64,11 +126,11 @@ function loadGsi(): Promise<GsiId> {
       script.onload = () => {
         const gsi = getGsi();
         if (gsi) resolve(gsi);
-        else reject(new Error('GSI tidak tersedia'));
+        else reject(new Error('GSI unavailable'));
       };
       script.onerror = () => {
         script.remove();
-        reject(new Error('GSI gagal dimuat'));
+        reject(new Error('GSI failed to load'));
       };
       document.head.appendChild(script);
     }).catch((err) => {
@@ -109,9 +171,11 @@ function ClockIcon() {
 
 function GoogleLoginButton({ onSuccess, onError, highlight = false }: {
   onSuccess: (token: string) => void;
-  onError: (message: string) => void;
+  onError: (alert: AuthAlert) => void;
   highlight?: boolean;
 }) {
+  const t = useTranslations('login');
+  const locale = useLocale();
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
   const wrapperRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLDivElement>(null);
@@ -168,17 +232,17 @@ function GoogleLoginButton({ onSuccess, onError, highlight = false }: {
           text: 'signin_with',
           shape: 'pill',
           logo_alignment: 'center',
-          locale: 'id',
+          locale,
           width,
         });
         watchVisibility();
       } catch (err) {
-        console.warn('[GoogleLogin] renderButton gagal, pakai prompt()', err);
+        console.warn('[GoogleLogin] renderButton failed, using prompt()', err);
         setGsiVisible(false);
       }
     };
 
-    loadGsi().then(render).catch((err) => console.warn('[GoogleLogin] GSI gagal dimuat', err));
+    loadGsi().then(render).catch((err) => console.warn('[GoogleLogin] GSI failed to load', err));
 
     const observer = typeof ResizeObserver !== 'undefined'
       ? new ResizeObserver(() => { clearTimeout(timer); timer = setTimeout(render, 150); })
@@ -192,7 +256,7 @@ function GoogleLoginButton({ onSuccess, onError, highlight = false }: {
       observer?.disconnect();
       setGsiCredentialHandler(null);
     };
-  }, [clientId]);
+  }, [clientId, locale]);
 
   useEffect(() => {
     if (highlight) wrapperRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -205,11 +269,11 @@ function GoogleLoginButton({ onSuccess, onError, highlight = false }: {
         ensureGsiInitialized(gsi, clientId);
         gsi.prompt((notification) => {
           if (notification?.isNotDisplayed?.() || notification?.isSkippedMoment?.()) {
-            handlersRef.current.onError('Login Google dibatalkan atau popup Google tidak bisa tampil. Coba lagi, atau muat ulang halaman.');
+            handlersRef.current.onError('googleCancelled');
           }
         });
       })
-      .catch(() => handlersRef.current.onError('Google Sign-In gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.'));
+      .catch(() => handlersRef.current.onError('googleLoadFailed'));
   };
 
   if (!clientId) return null;
@@ -220,7 +284,7 @@ function GoogleLoginButton({ onSuccess, onError, highlight = false }: {
         /* Kalimat pendamping WAJIB bersama outline (AC 1.22 — sorotan
            tidak pernah berupa warna saja). */
         <p className={`spine-footnote ${styles.ghint}`}>
-          Akun kamu terdaftar via Google — masuk lewat tombol ini.
+          {t('googleHint')}
         </p>
       )}
       {/* Story 1.22: kotak 40px dicadangkan sejak render pertama (AC —
@@ -238,7 +302,7 @@ function GoogleLoginButton({ onSuccess, onError, highlight = false }: {
         {!gsiVisible && (
           <button type="button" onClick={handleFallbackClick} className={`spine-focus-ring ${styles.gsiFallback}`}>
             <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-            Login dengan Google
+            {t('googleButton')}
           </button>
         )}
       </div>
@@ -251,6 +315,7 @@ const LOGIN_MUTATION = gql`
     login(email: $email, password: $password) {
       success
       message
+      errorCode
       token
       user {
         id
@@ -261,6 +326,7 @@ const LOGIN_MUTATION = gql`
         accountStatus
         onboardedAt
         permissions
+        locale
       }
     }
   }
@@ -278,6 +344,7 @@ const REGISTER_MUTATION = gql`
     register(input: $input) {
       success
       message
+      errorCode
       token
       user { id email name role avatarUrl }
     }
@@ -289,6 +356,11 @@ const REGISTER_MUTATION = gql`
 // /onboarding; markupnya sudah lama tak dirender.
 
 export default function LandingPage() {
+  const t = useTranslations('login');
+  const tErr = useTranslations('authErrors');
+  const tPw = useTranslations('password');
+  const tc = useTranslations('common');
+  const productName = brand.productName;
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -300,7 +372,9 @@ export default function LandingPage() {
   // (implicit submission) TIDAK selalu men-klik tombol di WebKit, jadi guard
   // tombol saja tidak cukup. Ref, bukan state, agar bebas dari closure basi.
   const submittingRef = useRef(false);
-  const [loginMessage, setLoginMessage] = useState<string | null>(null);
+  const [loginMessage, setLoginMessage] = useState<AuthAlert | null>(null);
+  // Stable code of the last failed password login (drives the Google highlight).
+  const [loginErrorCode, setLoginErrorCode] = useState<string | null>(null);
   // Story 1.23: akun non-ACTIVE sukses login — BUKAN error. Selama pengalihan
   // ke /pending atau /onboarding, tampil baris status peringatan (role="status").
   const [pendingNotice, setPendingNotice] = useState(false);
@@ -357,6 +431,7 @@ export default function LandingPage() {
     submittingRef.current = true;
     setIsSubmitting(true);
     setLoginMessage(null);
+    setLoginErrorCode(null);
 
     // Story 1.23: saat pengalihan akun non-ACTIVE, status busy DITAHAN —
     // tombol MASUK tetap aria-busy dan kiriman kedua diabaikan sampai
@@ -365,7 +440,7 @@ export default function LandingPage() {
     try {
       console.warn('[Login] Attempting login for:', email);
       const { data } = await login({ variables: { email, password } });
-      console.warn('[Login] Response:', JSON.stringify(data?.login?.success), data?.login?.message);
+      console.warn('[Login] Response:', JSON.stringify(data?.login?.success), data?.login?.errorCode);
 
       if (data?.login?.success && data?.login?.token && data?.login?.user) {
         const lu = data.login.user;
@@ -385,14 +460,15 @@ export default function LandingPage() {
       }
 
       // Backend returned success:false — show error message
-      const msg = data?.login?.message || "Email atau password salah";
-      setLoginMessage(msg);
+      const code: string | null = data?.login?.errorCode ?? null;
+      setLoginErrorCode(code);
+      setLoginMessage(loginAlert(code));
       // Story 1.13/1.15: fokus pindah ke field yang perlu diperbaiki —
       // pada kegagalan kredensial itu field password (email sudah terisi).
       passwordInputRef.current?.focus();
     } catch (err: any) {
       console.error('Login request failed:', err);
-      setLoginMessage(mapAuthError(err?.message));
+      setLoginMessage(mapAuthError(err, 'server'));
       passwordInputRef.current?.focus();
     } finally {
       if (!holdBusy) {
@@ -409,6 +485,7 @@ export default function LandingPage() {
     submittingRef.current = true;
     setIsSubmitting(true);
     setLoginMessage(null);
+    setLoginErrorCode(null);
     try {
       // Signup MINIMAL: nama + email + password. Role & onboarding diisi di halaman /onboarding.
       // Akun dibuat berstatus PENDING; role asli ditentukan admin saat approve.
@@ -422,23 +499,44 @@ export default function LandingPage() {
       }
       // Story 1.21: "Email sudah terdaftar" memfokuskan field EMAIL —
       // jalan keluarnya ("Masuk lewat tab Login, ...") dirender di form-alert.
-      const msg = data?.register?.message || 'Sign up gagal.';
-      setLoginMessage(msg);
-      if (EMAIL_TAKEN_PATTERN.test(msg)) document.getElementById('email')?.focus();
+      const alert = registerAlert(data?.register?.errorCode, data?.register?.message);
+      setLoginMessage(alert);
+      if (alert === 'emailTaken') document.getElementById('email')?.focus();
     } catch (err: any) {
-      // Server melempar "Email sudah terdaftar" sebagai GraphQL error,
-      // jadi jalur catch juga harus mengenali pola ini.
-      const msg = mapAuthError(err?.message || 'Sign up gagal.');
-      setLoginMessage(msg);
-      if (EMAIL_TAKEN_PATTERN.test(msg)) document.getElementById('email')?.focus();
+      // EMAIL_TAKEN may also arrive as a GraphQL error code,
+      // so the catch path checks the code too.
+      const alert = err?.graphQLErrors?.some((e: { extensions?: { code?: unknown } }) => e?.extensions?.code === EMAIL_TAKEN)
+        ? 'emailTaken'
+        : mapAuthError(err, 'signupFailed');
+      setLoginMessage(alert);
+      if (alert === 'emailTaken') document.getElementById('email')?.focus();
     } finally {
       submittingRef.current = false;
       setIsSubmitting(false);
     }
   };
 
-  if (isLoading) return <AuthPage variant="centered"><p style={{ margin: 'auto', padding: '48px 0', color: 'var(--color-on-surface-variant)' }}>Loading...</p></AuthPage>;
+  if (isLoading) return <AuthPage variant="centered"><p style={{ margin: 'auto', padding: '48px 0', color: 'var(--color-on-surface-variant)' }}>{tc('loading')}</p></AuthPage>;
   if (isAuthenticated) return null; // auto-redirect handles this
+
+  const alertText = (alert: AuthAlert): string => {
+    switch (alert) {
+      case 'googleOnly':
+        return passwordResetAvailable
+          ? tErr('googleOnlyWithReset')
+          : tErr('googleOnlyNoReset', { productName });
+      case 'deactivated':
+        return tErr('deactivated', { productName });
+      case 'rejected':
+        return tErr('rejected', { productName });
+      case 'passwordTooShort':
+        return tPw('tooShort', { min: MIN_PASSWORD_LENGTH });
+      case 'passwordTooLong':
+        return tPw('tooLong', { max: MAX_PASSWORD_BYTES });
+      default:
+        return tErr(alert);
+    }
+  };
 
   return (
     <AuthPage variant="split" stage={<HeroStage />}>
@@ -450,16 +548,16 @@ export default function LandingPage() {
           Panggung hero tetap milik '/' — foto hanya dirender bila lolos gerbang
           REVIEW.md (src/lib/hero-photos.ts). */}
       <AuthCard
-        title={mode === 'login' ? 'Studio Access' : 'Create Account'}
-        titleLang={mode === 'login' ? undefined : 'en'}
+        title={mode === 'login' ? t('titleLogin') : t('titleSignup')}
+        subtitle={mode === 'login' ? undefined : t('subtitleSignup')}
         tabs={
           /* Story 1.21: AuthTabs mengisi slot-tabs (tablist + aria-selected +
              panah kiri/kanan). Ganti tab hanya menghapus PESAN form; email,
              password, dan nama dipertahankan (AC: email tidak terhapus). */
           <AuthTabs
             tabs={[
-              { key: 'login', label: 'Login' },
-              { key: 'signup', label: 'Sign Up' },
+              { key: 'login', label: t('tabLogin') },
+              { key: 'signup', label: t('tabSignup') },
             ]}
             value={mode}
             /* Ganti tab menghapus PESAN form DAN baris status PENDING (1.23);
@@ -468,6 +566,7 @@ export default function LandingPage() {
             onChange={(next) => {
               setMode(next);
               setLoginMessage(null);
+              setLoginErrorCode(null);
               setPendingNotice(false);
             }}
           />
@@ -481,29 +580,29 @@ export default function LandingPage() {
             {mode === 'signup' && (
               <TextField
                 id="signupName"
-                label="Full Name"
+                label={t('fullNameLabel')}
                 type="text"
                 value={signupName}
                 onChange={(e) => setSignupName(e.target.value)}
-                placeholder="Nama lengkap"
+                placeholder={t('fullNamePlaceholder')}
                 autoComplete="name"
                 required
               />
             )}
             <TextField
               id="email"
-              label="Email Address"
+              label={t('emailLabel')}
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="user@example.com"
+              placeholder={t('emailPlaceholder')}
               autoComplete="email"
               required
             />
             <div className={fieldStyles.field}>
-              {mode === 'signup' && <p className={`spine-footnote ${styles.minHint}`}>Minimal {MIN_PASSWORD_LENGTH} karakter.</p>}
+              {mode === 'signup' && <p className={`spine-footnote ${styles.minHint}`}>{tPw('minHint', { min: MIN_PASSWORD_LENGTH })}</p>}
               <label className={`spine-label ${fieldStyles.label}`} htmlFor="password">
-                Password
+                {t('passwordLabel')}
               </label>
               <PasswordInput
                 id="password"
@@ -523,7 +622,7 @@ export default function LandingPage() {
                   <TextLink
                     href={email.trim() ? `/forgot-password?email=${encodeURIComponent(email.trim())}` : '/forgot-password'}
                   >
-                    Lupa password?
+                    {t('forgotPassword')}
                   </TextLink>
                 </div>
               ) : (
@@ -533,25 +632,21 @@ export default function LandingPage() {
                     className={`spine-footnote ${styles.linkFallback}`}
                     style={{ visibility: resetAvailabilityLoading ? 'hidden' : 'visible' }}
                   >
-                    Lupa password? Hubungi admin Shotstash
+                    {t('forgotPasswordFallback', { productName })}
                   </p>
                 </div>
               ))}
             {mode === 'signup' && (
               // Copy signup dipertahankan (AC 1.21 — hanya gayanya yang baru).
               <p className={`spine-footnote ${styles.signupNote}`}>
-                Setelah daftar, kamu akan mengisi <strong>onboarding</strong> (jenis akun &amp; beberapa
-                pertanyaan). Akun ditinjau admin dulu sebelum bisa mengakses studio.
+                {t.rich('signupNote', { b: (chunks) => <strong>{chunks}</strong> })}
               </p>
             )}
             {/* Story 1.15/1.21: form-alert tepat di atas tombol utama (role="alert").
                 "Email sudah terdaftar" diberi jalan keluar eksplisit. */}
             {loginMessage && (
               <FormAlert tone="danger">
-                {loginMessage}
-                {EMAIL_TAKEN_PATTERN.test(loginMessage)
-                  ? ' Masuk lewat tab Login, atau pakai Lupa password?'
-                  : null}
+                {alertText(loginMessage)}
               </FormAlert>
             )}
             {/* Story 1.23: baris status PENDING — login sukses, bukan error.
@@ -562,7 +657,7 @@ export default function LandingPage() {
               <div className={styles.pendingRow} role="status">
                 <ClockIcon />
                 <span className="spine-body-sm">
-                  <strong>Akunmu masih menunggu persetujuan admin.</strong> Membuka halaman status…
+                  {t.rich('pendingNotice', { b: (chunks) => <strong>{chunks}</strong> })}
                 </span>
               </div>
             )}
@@ -571,10 +666,10 @@ export default function LandingPage() {
             <ButtonPrimary
               type="submit"
               busy={isSubmitting}
-              busyLabel={mode === 'login' ? 'Memproses...' : 'Creating account...'}
+              busyLabel={mode === 'login' ? t('busyLogin') : t('busySignup')}
               style={{ width: '100%' }}
             >
-              {mode === 'login' ? 'MASUK' : 'CREATE ACCOUNT'}
+              {mode === 'login' ? t('submitLogin') : t('submitSignup')}
             </ButtonPrimary>
           </form>
         )}
@@ -586,19 +681,20 @@ export default function LandingPage() {
                 pseudo kosong, tak terdapat teks yang dibacakan. Slot ini
                 sama di tab Login maupun Sign Up. */}
             <div className={`spine-micro ${styles.divider}`}>
-              <span aria-hidden="true">OR</span>
-              <span className={styles.srOnly}>atau</span>
+              <span aria-hidden="true">{t('or')}</span>
+              <span className={styles.srOnly}>{t('orSr')}</span>
             </div>
 
             <GoogleLoginButton
-              highlight={mode === 'login' && !!loginMessage?.includes(GOOGLE_ONLY_MARKER)}
-              onError={(message) => setLoginMessage(message)}
+              highlight={mode === 'login' && loginErrorCode === LOGIN_ERROR_CODES.googleOnly}
+              onError={(alert) => { setLoginErrorCode(null); setLoginMessage(alert); }}
               onSuccess={async (token: string) => {
                 setLoginMessage(null);
+                setLoginErrorCode(null);
                 try {
                   const res = await fetch('/api/graphql', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: 'mutation GoogleAuth($idToken:String!){googleAuth(idToken:$idToken){token user{id name email role avatarUrl accountStatus onboardedAt permissions}}}', variables: { idToken: token } }),
+                    body: JSON.stringify({ query: 'mutation GoogleAuth($idToken:String!){googleAuth(idToken:$idToken){token user{id name email role avatarUrl accountStatus onboardedAt permissions locale}}}', variables: { idToken: token } }),
                   });
                   const json = await res.json();
                   if (json.data?.googleAuth?.token) {
@@ -615,10 +711,10 @@ export default function LandingPage() {
                       authLogin(gu, json.data.googleAuth.token);
                     }
                   } else {
-                    // Tampilkan alasan dari server (mis. "Akun telah dinonaktifkan. Hubungi admin.").
-                    setLoginMessage(json.errors?.[0]?.message || 'Login Google gagal. Coba lagi.');
+                    // Known server reasons map to our own copy; never raw server text.
+                    setLoginMessage(googleAlert(json.errors?.[0]));
                   }
-                } catch { setLoginMessage('Login Google gagal. Periksa koneksi lalu coba lagi.'); }
+                } catch { setLoginMessage('googleNetwork'); }
               }}
             />
           </>
@@ -629,7 +725,7 @@ export default function LandingPage() {
              sekali (slot tanpa isi tidak menyisakan ruang). */
           mode === 'login' ? (
             <p className={`spine-footnote ${styles.helpText}`}>
-              Belum punya akses? <strong>Minta ke admin Shotstash</strong>
+              {t.rich('help', { productName, b: (chunks) => <strong>{chunks}</strong> })}
             </p>
           ) : undefined
         }
