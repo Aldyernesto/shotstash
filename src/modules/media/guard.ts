@@ -11,6 +11,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import prisma from '@/lib/prisma';
+import { storageRoot } from '@/lib/storageRoot';
 import { folderChainTrashed, findLiveShare, shareFileInScope, shareZipPlan } from '@/lib/shareLink';
 import { zipFileName, zipPlanForFolders } from '@/lib/mediaTree';
 import { can, type Actor } from '@/modules/auth';
@@ -166,7 +167,7 @@ export const COVER_EXTENSIONS = Object.keys(COVER_EXT);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export function coversDir(): string {
-  return path.join(process.env.STORAGE_LOCAL_ROOT || './data/media', 'covers');
+  return path.join(storageRoot(), 'covers');
 }
 
 export function coverUrl(kind: CoverKind, id: string): string {

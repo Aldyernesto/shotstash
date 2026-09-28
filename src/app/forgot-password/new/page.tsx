@@ -19,6 +19,8 @@ import {
   LoadingCard,
   LOGIN_PREFILL_KEY,
   MIN_PASSWORD_LENGTH,
+  PASSWORD_TOO_LONG_MESSAGE,
+  passwordProblem,
   RESET_SESSION_TTL_MS,
   ResetCard,
   UnavailableNotice,
@@ -124,7 +126,9 @@ function NewPasswordForm() {
     if (submittingRef.current) return;
     // Fokus ke field invalid pertama, seperti kontrak form spine.
     let focusTarget: HTMLInputElement | null = null;
-    if (newPassword.length < MIN_PASSWORD_LENGTH) { setPwError(TOO_SHORT); focusTarget = newPwRef.current; }
+    const pwProblem = passwordProblem(newPassword);
+    if (pwProblem === 'PASSWORD_TOO_SHORT') { setPwError(TOO_SHORT); focusTarget = newPwRef.current; }
+    else if (pwProblem === 'PASSWORD_TOO_LONG') { setPwError(PASSWORD_TOO_LONG_MESSAGE); focusTarget = newPwRef.current; }
     if (confirmPassword !== newPassword) { setConfirmError(MISMATCH); focusTarget ??= confirmRef.current; }
     if (focusTarget) { focusTarget.focus(); return; }
 

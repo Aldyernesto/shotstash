@@ -49,9 +49,13 @@ cp .env.example .env   # set SESSION_SECRET and MEDIA_SIGNING_SECRET (openssl ra
 npx prisma generate
 npm run dev:db      # embedded PostgreSQL (PGlite) on port 55433; keep it running
 npx prisma migrate deploy   # in a second terminal: apply the migrations
-npm run dev:seed    # then create the demo data
+npm run dev:seed    # then create the development accounts (refuses NODE_ENV=production)
 npm run dev         # app on http://localhost:3005
 ```
+
+A fresh install without the seed starts at `/setup`: until the first super admin exists, every page redirects there and `/api/*` and `/media/*` answer `503 SETUP_REQUIRED`. The wizard checks that the storage folder (`STORAGE_LOCAL_ROOT`) is writable and creates the owner account. Whoever submits it first becomes the super admin: set `SETUP_TOKEN` (the form then asks for it) or finish setup before exposing the instance. `GET /api/health` answers `{ ok, setupRequired }`; from the server itself (loopback) or with a super admin session it also reports version, database, cache, storage and `schemeMismatch`.
+
+Demo instances: after setup, `SHOTSTASH_DEMO_MODE=true DEMO_ADMIN_PASSWORD=... npm run demo:seed` adds read-only demo accounts and a sample project. Trashed items are deleted for good after `TRASH_RETENTION_DAYS` (default 30) by an hourly sweeper.
 
 Before you push, run the same checks CI runs:
 
@@ -66,7 +70,7 @@ node scripts/privacy-scan.mjs --all   # uses gitleaks when installed
 npm run build
 ```
 
-Local end-to-end security check (not in CI): with `npm run dev:db`, `npx prisma migrate deploy`, `npx tsx prisma/seed.ts` and `npm run dev` running, `npm run e2e:security` exercises login, cookie media, signed shares, access codes and role checks against `http://localhost:3005` (override with `E2E_BASE_URL`). It refuses to run unless the base URL and `DATABASE_URL` point at localhost, and it writes test data into that database.
+Local end-to-end checks (not in CI). First-run setup on an empty database: `npm run dev:db:reset`, `npm run dev:db`, `npx prisma migrate deploy`, `npm run dev`, then `npm run e2e:setup` (gate redirect and 503, setup, concurrent 409, redirect after setup). Security: with `npm run dev:db`, `npx prisma migrate deploy`, `npx tsx prisma/seed.ts` and `npm run dev` running, `npm run e2e:security` exercises login, cookie media, signed shares, access codes, role checks, rate limits, security headers, health and the trash lifecycle (start the server with `EMAIL_TRANSPORT=log` to include the reset-limit rows; login limits mean a second run needs 15 minutes or a server restart) against `http://localhost:3005` (override with `E2E_BASE_URL`). Both refuse to run unless the base URL and `DATABASE_URL` point at localhost, and they write test data into that database.
 
 Every route handler is wrapped in `defineRoute({ auth })` and every GraphQL root field has an entry in `src/graphql/auth-map.ts`; the generated table lives in [docs/security/route-matrix.md](docs/security/route-matrix.md). Media bytes are served only under `/media/*` with an HttpOnly session cookie or a signed share URL; `MEDIA_SIGNING_SECRET` signs those URLs.
 

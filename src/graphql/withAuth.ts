@@ -4,6 +4,8 @@
  *
  *   - `session` fields throw UNAUTHENTICATED without an active actor;
  *   - session mutations of a read-only account throw FORBIDDEN (reads work);
+ *   - PENDING and REJECTED accounts reach only the onboarding fields
+ *     (`PRE_APPROVAL_FIELDS`); every other session field throws FORBIDDEN;
  *   - a resolver without an entry in the map stops the server at startup;
  *   - a map entry without a resolver gets one that answers NOT_IMPLEMENTED.
  */
@@ -17,10 +19,22 @@ import { AUTH_MAP, ROOT_TYPES, type FieldAuth } from './auth-map.ts';
 type AnyFn = (...args: never[]) => unknown;
 type Ctx = { actor?: Actor | null } | undefined;
 
-function guard(type: string, entry: FieldAuth, ctx: Ctx) {
+/** Fields an account awaiting approval (or rejected) may still call. */
+export const PRE_APPROVAL_FIELDS: ReadonlySet<string> = new Set([
+  'Query.me',
+  'Query.passwordResetAvailable',
+  'Mutation.completeOnboarding',
+  'Mutation.updateProfile',
+  'Mutation.logout',
+]);
+
+function guard(type: string, field: string, entry: FieldAuth, ctx: Ctx) {
   if (entry.auth === 'public') return;
   const actor = ctx?.actor;
   if (!actor || !actor.active) throw unauthenticated();
+  if ((actor.accountStatus ?? 'ACTIVE') !== 'ACTIVE' && !PRE_APPROVAL_FIELDS.has(`${type}.${field}`)) {
+    throw forbidden('Forbidden: account awaiting approval');
+  }
   if (type === 'Mutation' && actor.readOnly) throw forbidden('Forbidden: read-only account');
 }
 
@@ -32,9 +46,9 @@ function notImplemented(type: string, field: string) {
   };
 }
 
-function wrapFn(type: string, entry: FieldAuth, fn: AnyFn): AnyFn {
+function wrapFn(type: string, field: string, entry: FieldAuth, fn: AnyFn): AnyFn {
   return ((parent: unknown, args: unknown, ctx: Ctx, info: unknown) => {
-    guard(type, entry, ctx);
+    guard(type, field, entry, ctx);
     return (fn as unknown as (p: unknown, a: unknown, c: Ctx, i: unknown) => unknown)(parent, args, ctx, info);
   }) as unknown as AnyFn;
 }
@@ -53,9 +67,9 @@ export function applyAuthMap<R extends Record<string, any>>(resolvers: R): R {
       const r = given[field];
       if (type === 'Subscription') {
         const sub = (r ?? { subscribe: notImplemented(type, field) }) as { subscribe: AnyFn; resolve?: AnyFn };
-        wrapped[field] = { ...sub, subscribe: wrapFn(type, entry, sub.subscribe) };
+        wrapped[field] = { ...sub, subscribe: wrapFn(type, field, entry, sub.subscribe) };
       } else {
-        wrapped[field] = wrapFn(type, entry, (typeof r === 'function' ? r : notImplemented(type, field)) as AnyFn);
+        wrapped[field] = wrapFn(type, field, entry, (typeof r === 'function' ? r : notImplemented(type, field)) as AnyFn);
       }
     }
     out[type] = wrapped;

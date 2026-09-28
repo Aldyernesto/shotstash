@@ -135,11 +135,16 @@ model Folder {
   files     MediaFile[]
   shareLinks ShareLink[]
   trashedAt DateTime?
+  // Set on every descendant trashed together with a Section: the id of that
+  // Section (the trash root). Null for a trash root and for live rows.
+  trashRootId String?  @map("trash_root_id")
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
   @@index([projectId])
   @@index([parentId])
+  @@index([trashedAt])
+  @@index([trashRootId])
   @@map("folders")
 }
 
@@ -161,10 +166,14 @@ model MediaFile {
   shareLinks    ShareLink[]
   chatMentions  ProjectChat[]
   trashedAt     DateTime?
+  // See Folder.trashRootId.
+  trashRootId   String?      @map("trash_root_id")
   createdAt     DateTime     @default(now())
 
   @@index([projectId, folderId])
   @@index([md5Checksum])
+  @@index([trashedAt])
+  @@index([trashRootId])
   @@map("media_files")
 }
 
@@ -244,4 +253,14 @@ model PasswordResetRequest {
 
   @@index([userId, createdAt])
   @@map("password_reset_requests")
+}
+
+// First-run setup (Story 2.6): a single row (id = 1, enforced by a CHECK in
+// migration 0003). While it is missing the app only serves /setup.
+model InstanceSetting {
+  id               Int      @id @default(1)
+  setupCompletedAt DateTime @map("setup_completed_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@map("instance_settings")
 }

@@ -6,8 +6,8 @@
  */
 import { NextResponse } from 'next/server';
 import { defineRoute, jsonError } from '@/lib/defineRoute';
-import { clientIp } from '@/lib/clientIp';
-import { LIMITS, rateLimit, rateLimitedResponse } from '@/lib/rateLimit';
+import { clientIp } from '@/lib/request';
+import { limitBy, rateLimitedResponse } from '@/lib/rateLimit';
 import { isHttpsRequest } from '@/lib/sessionStore';
 import { findLiveShare, resolveShare } from '@/lib/shareLink';
 import { mintShareAccess, shareCookieName, shareCookiePath, shareSigner, verifyAccessCode } from '@/modules/share';
@@ -18,14 +18,10 @@ export const POST = defineRoute<{ slug: string }>({
   auth: 'public',
   handler: async ({ req, params }) => {
     const ip = clientIp(req.headers) ?? 'unknown';
-    const limited = await rateLimit(`share-unlock:${ip}`, LIMITS.shareUnlock.limit, LIMITS.shareUnlock.windowMs);
+    const limited = await limitBy('shareUnlock', ip);
     if (!limited.ok) return rateLimitedResponse(limited.retryAfter);
     // A distributed guess against one link is capped too (20 per hour per slug).
-    const perSlug = await rateLimit(
-      `share-unlock-slug:${params.slug}`,
-      LIMITS.shareUnlockPerSlug.limit,
-      LIMITS.shareUnlockPerSlug.windowMs,
-    );
+    const perSlug = await limitBy('shareUnlockPerSlug', params.slug);
     if (!perSlug.ok) return rateLimitedResponse(perSlug.retryAfter);
 
     const link = await findLiveShare({ slug: params.slug });

@@ -94,3 +94,18 @@ test('only the documented fields are public', async () => {
     'Query.passwordResetAvailable',
   ]);
 });
+
+test('only health and setup are served before first-run setup (Story 2.6)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { routePathOf } = await import('./route-matrix-lib.mjs');
+  const early = routeFiles()
+    .filter((f) => /allowBeforeSetup\s*:\s*true/.test(readFileSync(f, 'utf8')))
+    .map((f) => routePathOf(f))
+    .sort();
+  assert.deepEqual(early, ['/api/health', '/api/v1/setup']);
+  // Nothing else may opt in by any other spelling.
+  for (const f of routeFiles()) {
+    const src = readFileSync(f, 'utf8');
+    if (/allowBeforeSetup/.test(src)) assert.ok(early.includes(routePathOf(f)), routePathOf(f));
+  }
+});

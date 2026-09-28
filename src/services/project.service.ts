@@ -2,9 +2,9 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import prisma from '../lib/prisma';
 import { createNotification } from './notification.service';
+import { storageRoot } from '../lib/storageRoot';
 
-const STORAGE_LOCAL_ROOT = process.env.STORAGE_LOCAL_ROOT || './data/media';
-const PROJECTS_PATH = path.join(STORAGE_LOCAL_ROOT, 'projects');
+const projectsPath = () => path.join(storageRoot(), 'projects');
 
 // Utility to sanitize strings for folder names
 export function sanitizeName(name: string): string {
@@ -25,7 +25,7 @@ export async function createProject(title: string, description?: string, coverIm
   // 2. Create Physical Directory on NAS
   // Format: [SanitizedTitle]-[ProjectID]
   const dirName = `${sanitizeName(title)}-${project.id}`;
-  const dirPath = path.join(PROJECTS_PATH, dirName);
+  const dirPath = path.join(projectsPath(), dirName);
 
   await fs.mkdir(dirPath, { recursive: true });
 
@@ -64,5 +64,5 @@ export async function getProjectPhysicalPath(projectId: string) {
   if (!project) throw new Error('Project not found');
   
   const dirName = `${sanitizeName(project.title)}-${project.id}`;
-  return path.join(PROJECTS_PATH, dirName);
+  return path.join(projectsPath(), dirName);
 }

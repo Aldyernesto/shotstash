@@ -1,0 +1,14 @@
+/* First-run setup (Story 2.6): layout only; the card, fields, alerts and
+   notes come from the shared auth-card / text-field / form-alert / info-note
+   components. Colors are spine tokens. */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hint {
+  margin: -4px 0 0;
+  color: var(--app-spine-muted);
+}

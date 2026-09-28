@@ -12,7 +12,12 @@
  * The declared `auth` and optional `action` are attached to the handler and
  * read by `scripts/gen-route-matrix.ts` for `docs/security/route-matrix.md`.
  *
- * No Next middleware / proxy is used: this wrapper is the only gate.
+ * Setup gate (Story 2.6): until the first super admin exists every route
+ * answers `503 { code: 'SETUP_REQUIRED' }` unless it opts in with
+ * `allowBeforeSetup: true` (setup and health). `server.ts` applies the same
+ * gate in front of Next; this is the second layer.
+ *
+ * No Next middleware / proxy is used: this wrapper and the custom server are the only gates.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -23,6 +28,7 @@ import {
   type SessionActor,
   type ValidSession,
 } from '@/lib/sessionStore';
+import { isSetupComplete } from '@/lib/setupState';
 
 export type AuthMode = 'public' | 'session' | 'cookie' | 'signed' | 'share';
 
@@ -42,6 +48,8 @@ export type RouteDefinition<P extends RouteParams> = {
   auth: AuthMode;
   /** Permission the handler checks with `can()`, for the route matrix only. */
   action?: string;
+  /** Serve this route before first-run setup is complete (setup and health only). */
+  allowBeforeSetup?: boolean;
   handler: (ctx: RouteContext<P>) => Promise<Response> | Response;
 };
 
@@ -64,6 +72,10 @@ export function defineRoute<P extends RouteParams = Record<string, never>>(def: 
 
   const route = async (req: NextRequest, context: { params: Promise<P> }): Promise<Response> => {
     try {
+      if (!def.allowBeforeSetup && !(await isSetupComplete())) {
+        return jsonError(503, 'SETUP_REQUIRED', 'First-run setup is required');
+      }
+
       if (def.auth === 'cookie' && !req.nextUrl.pathname.startsWith('/media/')) {
         // The media cookie is scoped to /media; anywhere else it would be a CSRF vector.
         console.error(`[defineRoute] cookie auth declared outside /media: ${req.nextUrl.pathname}`);
@@ -84,5 +96,9 @@ export function defineRoute<P extends RouteParams = Record<string, never>>(def: 
     }
   };
 
-  return Object.assign(route, { auth: def.auth, action: def.action ?? null });
+  return Object.assign(route, {
+    auth: def.auth,
+    action: def.action ?? null,
+    allowBeforeSetup: def.allowBeforeSetup === true,
+  });
 }

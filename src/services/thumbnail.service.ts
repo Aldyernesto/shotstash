@@ -6,11 +6,11 @@ import { promises as fs } from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 
+import { storageRoot } from '../lib/storageRoot';
+
 const execFileAsync = promisify(execFile);
 
-const THUMB_DIR = process.env.STORAGE_LOCAL_ROOT
-  ? path.join(process.env.STORAGE_LOCAL_ROOT, 'thumbnails')
-  : './data/media/thumbnails';
+const THUMB_DIR = path.join(storageRoot(), 'thumbnails');
 
 const THUMB_WIDTH = 480;
 const THUMB_HEIGHT = 360;

@@ -7,6 +7,26 @@ import prisma from '@/lib/prisma';
 import { createSessionRow, destroySessionToken, validateSessionToken } from '@/lib/sessionStore';
 import { GOOGLE_ONLY_MARKER } from '@/lib/authMessages';
 import { isEmailConfigured } from './email.service';
+import {
+  MIN_PASSWORD_LENGTH,
+  PASSWORD_TOO_LONG_MESSAGE,
+  passwordProblem,
+  type PasswordProblem,
+} from '@/lib/passwordRule';
+
+export { MIN_PASSWORD_LENGTH };
+
+export function passwordProblemMessage(problem: PasswordProblem): string {
+  return problem === 'PASSWORD_TOO_LONG' ? PASSWORD_TOO_LONG_MESSAGE : `Password minimal ${MIN_PASSWORD_LENGTH} karakter`;
+}
+
+/** Thrown when a password breaks the rule (code PASSWORD_TOO_SHORT or PASSWORD_TOO_LONG). */
+export class PasswordRuleError extends Error {
+  constructor(public code: PasswordProblem) {
+    super(passwordProblemMessage(code));
+    this.name = 'PasswordRuleError';
+  }
+}
 
 export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'FIELD_CREW' | 'EDITOR' | 'VIEWER';
 
@@ -55,6 +75,10 @@ export async function registerUser(data: {
   signupAnswers?: any;
   approved?: boolean;  // true kalau dibuat admin (langsung ACTIVE)
 }) {
+  // Server-side rule (Story 2.5): the client form only mirrors it.
+  const problem = passwordProblem(data.password);
+  if (problem) throw new PasswordRuleError(problem);
+
   const existingUser = await prisma.user.findUnique({
     where: { email: data.email },
   });
@@ -122,11 +146,28 @@ export async function loginUser(email: string, password: string) {
   return user;
 }
 
+/** Deactivates the account and revokes every session it has (Story 2.5). */
 export async function deactivateUser(userId: string) {
-  return prisma.user.update({
-    where: { id: userId },
-    data: { active: false },
-  });
+  const [user] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { active: false },
+    }),
+    prisma.session.deleteMany({ where: { userId } }),
+  ]);
+  return user;
+}
+
+/** Rejects a pending account and revokes every session it has (Story 2.5). */
+export async function rejectUser(userId: string) {
+  const [user] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { accountStatus: 'REJECTED', active: false },
+    }),
+    prisma.session.deleteMany({ where: { userId } }),
+  ]);
+  return user;
 }
 
 export async function reactivateUser(userId: string) {
@@ -162,7 +203,6 @@ export class AdminActionError extends Error {
   }
 }
 
-export const MIN_PASSWORD_LENGTH = 8;
 const GENERATED_PASSWORD_LENGTH = 10;
 // No ambiguous characters: 0/O/o, 1/l/I/i. An alphabet, not a secret.
 const GENERATED_PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'; // gitleaks:allow
@@ -195,9 +235,8 @@ async function findAdminTarget(targetId: string, db: Prisma.TransactionClient = 
  */
 export async function adminSetPassword(targetId: string, newPassword?: string | null) {
   const isManual = newPassword !== undefined && newPassword !== null;
-  if (isManual && newPassword.length < MIN_PASSWORD_LENGTH) {
-    throw new AdminActionError(`Password minimal ${MIN_PASSWORD_LENGTH} karakter`);
-  }
+  const problem = isManual ? passwordProblem(newPassword) : null;
+  if (problem) throw new AdminActionError(passwordProblemMessage(problem));
 
   const target = await findAdminTarget(targetId);
   const password = isManual ? newPassword : generateReadablePassword();

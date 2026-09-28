@@ -18,7 +18,8 @@
   "scripts": {
     "dev": "tsx server.ts",
     "dev:db": "pglite-server --db=./.devdb/pgdata --port=55433 --max-connections=10",
-    "dev:seed": "prisma db push && tsx prisma/seed.ts",
+    "dev:seed": "node -e \"if(process.env.NODE_ENV==='production'){console.error('Refusing to seed: NODE_ENV=production');process.exit(2)}\" && prisma migrate deploy && tsx prisma/seed.ts",
+    "demo:seed": "tsx prisma/demo-seed.ts",
     "dev:db:reset": "node -e \"require('fs').rmSync('.devdb/pgdata',{recursive:true,force:true})\"",
     "build": "node scripts/check-folder-shell.mjs && next build",
     "build:folder-shell": "node scripts/build-folder-shell-geometry.mjs",
@@ -32,6 +33,7 @@
     "privacy:hash": "node scripts/privacy-hash.mjs",
     "security:matrix": "tsx scripts/gen-route-matrix.ts",
     "e2e:security": "node scripts/e2e-security.mjs",
+    "e2e:setup": "node scripts/e2e-setup.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test \"scripts/**/*.test.mjs\""
   },

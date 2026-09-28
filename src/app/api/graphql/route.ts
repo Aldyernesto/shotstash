@@ -18,7 +18,7 @@ import {
   validateSessionToken,
   type ValidSession,
 } from '@/lib/sessionStore';
-import { clientIp } from '../../../lib/clientIp';
+import { clientIp } from '@/lib/request';
 import { defineRoute } from '@/lib/defineRoute';
 
 const server = new ApolloServer<GraphQLContext>({

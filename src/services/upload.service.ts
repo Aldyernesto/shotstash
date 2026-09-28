@@ -14,12 +14,13 @@ import { getFolderPhysicalPath } from './folder.service';
 import { generateThumbnail, needsThumbnail } from './thumbnail.service';
 import { createNotification } from './notification.service';
 import { maybeConvertHeicToJpg } from './heic-convert.service';
+import { storageRoot } from '@/lib/storageRoot';
 
 // ============================================
 // Configuration
 // ============================================
 
-const STORAGE_LOCAL_ROOT = process.env.STORAGE_LOCAL_ROOT || './data/media';
+const STORAGE_LOCAL_ROOT = storageRoot();
 const DEFAULT_CHUNK_SIZE = 50 * 1024 * 1024; // 50MB per chunk (web default)
 
 export const STORAGE_PATHS = {
@@ -325,4 +326,13 @@ export async function cleanupExpiredSessions() {
   }
 
   return expired.length;
+}
+
+/**
+ * Gives up an upload whose target is gone (Story 2.5): temporary chunks are
+ * removed and the session is marked FAILED.
+ */
+export async function abandonUpload(sessionId: string) {
+  await fs.rm(path.join(STORAGE_PATHS.tempUploads, sessionId), { recursive: true, force: true }).catch(() => {});
+  await prisma.uploadSession.updateMany({ where: { id: sessionId }, data: { status: 'FAILED' } }).catch(() => {});
 }

@@ -9,6 +9,7 @@ import AuthCard from '@/components/auth/AuthCard';
 import AuthTabs from '@/components/auth/AuthTabs';
 import PasswordInput from '@/components/PasswordInput';
 import HeroStage from '@/components/hero/HeroStage';
+import { MIN_PASSWORD_LENGTH } from '@/lib/passwordRule';
 import TextField from '@/components/form/TextField';
 // Komposisi field password memakai kelas kontrak text-field (pola yang
 // sama dengan PasswordInput: .field/.label/.input — bukan duplikasi gaya).
@@ -475,7 +476,7 @@ export default function LandingPage() {
           /* Satu <form> untuk kedua tab — Enter di field mana pun mengirim
              form tab yang sedang aktif (AC 1.21). Urutan Login: EMAIL →
              PASSWORD → "Lupa password?" rata kanan → MASUK. Urutan Sign Up:
-             FULL NAME → EMAIL → hint minimal 8 → PASSWORD → CREATE ACCOUNT. */
+             FULL NAME → EMAIL → hint minimal 10 → PASSWORD → CREATE ACCOUNT. */
           <form key={mode} onSubmit={mode === 'login' ? handleLogin : handleSignup} className={styles.formStack}>
             {mode === 'signup' && (
               <TextField
@@ -500,7 +501,7 @@ export default function LandingPage() {
               required
             />
             <div className={fieldStyles.field}>
-              {mode === 'signup' && <p className={`spine-footnote ${styles.minHint}`}>Minimal 8 karakter.</p>}
+              {mode === 'signup' && <p className={`spine-footnote ${styles.minHint}`}>Minimal {MIN_PASSWORD_LENGTH} karakter.</p>}
               <label className={`spine-label ${fieldStyles.label}`} htmlFor="password">
                 Password
               </label>
@@ -512,7 +513,7 @@ export default function LandingPage() {
                 className={`spine-focus-ring ${fieldStyles.input}`}
                 placeholder="••••••••"
                 required
-                minLength={mode === 'signup' ? 8 : undefined}
+                minLength={mode === 'signup' ? MIN_PASSWORD_LENGTH : undefined}
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
               />
             </div>

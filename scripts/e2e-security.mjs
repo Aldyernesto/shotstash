@@ -1,7 +1,9 @@
-// Local end-to-end check of Stories 2.1-2.4 (route auth, cookie media,
-// signed shares, permissions). NOT part of CI.
+// Local end-to-end check of Stories 2.1-2.8 (route auth, cookie media,
+// signed shares, permissions, holes, limits, headers, health, trash
+// lifecycle). NOT part of CI.
 //
-//   npm run dev:db; npx prisma migrate deploy; npx tsx prisma/seed.ts; npm run dev
+//   npm run dev:db; npx prisma migrate deploy; npx tsx prisma/seed.ts
+//   EMAIL_TRANSPORT=log npm run dev   # reset-limit rows are skipped without an email transport
 //   npm run e2e:security            # E2E_BASE_URL defaults to http://localhost:3005
 //
 // Refuses to run unless the base URL and DATABASE_URL both point at
@@ -11,6 +13,7 @@
 import 'dotenv/config';
 import { randomBytes } from 'node:crypto';
 import sharp from 'sharp';
+import pg from 'pg';
 
 const LOCAL = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 const B = process.env.E2E_BASE_URL || 'http://localhost:3005';
@@ -50,6 +53,8 @@ async function gql(token, query, variables) {
   return r.json();
 }
 const code = (res) => res.errors?.[0]?.extensions?.code;
+/** Per-run suffix so rows that count per user or per email can run again. */
+const RUN = `${Date.now().toString(36)}${randomBytes(2).toString('hex')}`;
 
 const sa = await login('superadmin@example.com');
 ok(sa.status === 200 && sa.token, 'login REST 200 + token');
@@ -70,9 +75,9 @@ ok(!vme.data.me.permissions.includes('upload'), 'viewer permissions', JSON.strin
 const proj = await gql(editor.token, '{ projects { id title folders { id name } } }');
 const project = proj.data.projects.find((p) => p.title === 'Sample project');
 const folder = project.folders[0];
-async function upload(tok, path, name) {
+async function upload(tok, path, name, folderId = folder.id) {
   const buf = FIXTURES[path];
-  const init = await gql(tok, 'mutation($i: InitiateUploadInput!){ initiateUpload(input:$i){ id chunkSize totalChunks } }', { i: { filename: name, totalSize: buf.length, projectId: project.id, folderId: folder.id } });
+  const init = await gql(tok, 'mutation($i: InitiateUploadInput!){ initiateUpload(input:$i){ id chunkSize totalChunks } }', { i: { filename: name, totalSize: buf.length, projectId: project.id, folderId } });
   if (init.errors) return { init };
   const s = init.data.initiateUpload;
   const fd = new FormData();
@@ -205,20 +210,180 @@ ok(r.status === 404, 'trashed file media 404', r.status);
 html = await (await fetch(`${B}/s/${pl.slug}`)).text();
 ok(!/\/media\/s\//.test(html), 'page for trashed target shows no media');
 ok((await gql(editor.token, `mutation { restoreFile(fileId:"${vid.id}") { id } }`)).data?.restoreFile, 'editor restores');
+ok(code(await gql(admin.token, `mutation { permanentDelete(fileId:"${pic.id}") }`)) === 'NOT_IN_TRASH', 'permanentDelete needs the Trash first');
+ok((await gql(editor.token, `mutation { moveToTrash(fileId:"${pic.id}") }`)).data?.moveToTrash === true, 'editor trashes photo');
 const purge = await gql(admin.token, `mutation { permanentDelete(fileId:"${pic.id}") }`);
 ok(purge.data?.permanentDelete === true, 'admin permanentDelete allowed (link revoked first)', JSON.stringify(purge.errors ?? ''));
+r = await fetch(`${B}/s/${p2.slug}`);
+ok(r.status === 404, 'link to purged file 404', r.status);
 
-// deactivation
+// deactivation deletes sessions: the old token stays dead after reactivation
 const ro = await gql(sa.token, `mutation { deactivateUser(id:"${crew.user.id}") { id active } }`);
 ok(ro.data?.deactivateUser?.active === false, 'SA deactivates crew');
 ok(code(await gql(crew.token, '{ projects { id } }')) === 'UNAUTHENTICATED', 'deactivated user rejected');
+r = await fetch(`${B}/media/i/${vid.id}`, { headers: { cookie: crew.cookie } });
+ok(r.status === 401, 'deactivated user media 401', r.status);
 await gql(sa.token, `mutation { reactivateUser(id:"${crew.user.id}") { id } }`);
+ok(code(await gql(crew.token, '{ projects { id } }')) === 'UNAUTHENTICATED', 'old session gone even after reactivation');
+
+// ================= Stories 2.5-2.8 =================
+
+// ---- security headers and health
+r = await fetch(`${B}/api/ping`);
+ok(r.headers.get('x-content-type-options') === 'nosniff' && r.headers.get('referrer-policy') === 'strict-origin-when-cross-origin' && !!r.headers.get('permissions-policy') && r.headers.get('x-frame-options') === 'DENY', 'security headers on an API response');
+ok(!r.headers.get('strict-transport-security'), 'no HSTS over plain http');
+r = await fetch(`${B}/`);
+ok(r.headers.get('x-frame-options') === 'DENY' && r.headers.get('x-content-type-options') === 'nosniff', 'security headers on a page');
+r = await fetch(`${B}/media/t/${vid.id}`);
+ok(r.headers.get('x-frame-options') === 'DENY', 'security headers on media 401');
+r = await fetch(`${B}/api/health`);
+const health = await r.json();
+ok(['ok', 'version', 'db', 'cache', 'storage', 'setupRequired', 'schemeMismatch'].every((k) => k in health) && health.setupRequired === false && health.db === true && health.schemeMismatch === false, 'health body', JSON.stringify(health));
+ok(r.status === (health.ok ? 200 : 503), 'health status matches ok (503 when a dependency is down)', r.status);
+
+// ---- projects list carries no chats
+const pc = await gql(viewer.token, '{ projects { id chats { id } } }');
+ok(pc.errors?.length && !pc.data, 'projects { chats } is a schema error', JSON.stringify(pc.errors?.[0]?.message ?? ''));
+const pchat = await gql(viewer.token, `{ project(id:"${project.id}") { chats { id } } }`);
+ok(Array.isArray(pchat.data?.project?.chats), 'project(id){ chats } works for a viewer');
+
+// ---- chat fan-out: only the mentioned active user is notified
+const unread = async (tok) => (await gql(tok, '{ unreadNotificationCount }')).data?.unreadNotificationCount;
+const before = { viewer: await unread(viewer.token), admin: await unread(admin.token) };
+const sent = await gql(editor.token, `mutation { sendMessage(projectId:"${project.id}", message:"hi @Viewer") { id } }`);
+ok(sent.data?.sendMessage?.id, 'editor sends a chat message', JSON.stringify(sent.errors ?? ''));
+await new Promise((res) => setTimeout(res, 500));
+ok((await unread(viewer.token)) === before.viewer + 1, 'mentioned viewer notified');
+ok((await unread(admin.token)) === before.admin, 'unmentioned admin not notified');
+ok(code(await gql(editor.token, 'mutation { sendMessage(projectId:"00000000-0000-4000-8000-000000000000", message:"x") { id } }')) === 'NOT_FOUND', 'sendMessage to a missing project NOT_FOUND');
+
+// ---- inactive / pending mentioned users are not notified
+const dvi = await gql(sa.token, `mutation { deactivateUser(id:"${viewer.user.id}") { id } }`);
+ok(dvi.data?.deactivateUser, 'viewer deactivated for fan-out check');
+await gql(editor.token, `mutation { sendMessage(projectId:"${project.id}", message:"again @Viewer") { id } }`);
+await gql(sa.token, `mutation { reactivateUser(id:"${viewer.user.id}") { id } }`);
+const viewer2 = await login('viewer@example.com');
+await new Promise((res) => setTimeout(res, 500));
+ok((await unread(viewer2.token)) === before.viewer + 1, 'inactive mentioned user not notified');
+
+// ---- Google path (needs a real Google id token): skipped locally
+console.log('SKIP Google email_verified linking (covered by code review; needs a Google-signed id token)');
+
+// ---- password length and pending accounts
+const shortReg = await gql(null, 'mutation { register(input:{name:"S", email:"short-pw@example.com", password:"123456789"}) { success errorCode } }');
+ok(shortReg.data?.register?.success === false && shortReg.data?.register?.errorCode === 'PASSWORD_TOO_SHORT', 'register with 9 chars PASSWORD_TOO_SHORT', JSON.stringify(shortReg));
+const pendEmail = `pending-${Date.now()}@example.com`;
+const pend = await gql(null, `mutation { register(input:{name:"Pending", email:"${pendEmail}", password:"pending-password"}) { success token } }`);
+ok(pend.data?.register?.success && pend.data.register.token, 'public register returns a PENDING session');
+ok(code(await gql(pend.data.register.token, '{ projects { id } }')) === 'FORBIDDEN', 'PENDING account cannot list projects');
+ok((await gql(pend.data.register.token, '{ me { accountStatus } }')).data?.me?.accountStatus === 'PENDING', 'PENDING account reads me');
+// reject revokes sessions: a later approval does not revive the old token
+const pendId = (await gql(pend.data.register.token, '{ me { id } }')).data.me.id;
+ok((await gql(sa.token, `mutation { rejectUser(userId:"${pendId}") { id accountStatus } }`)).data?.rejectUser?.accountStatus === 'REJECTED', 'SA rejects pending account');
+ok((await gql(sa.token, `mutation { approveUser(userId:"${pendId}", role:VIEWER) { id accountStatus } }`)).data?.approveUser?.accountStatus === 'ACTIVE', 'SA approves it afterwards');
+ok(code(await gql(pend.data.register.token, '{ projects { id } }')) === 'UNAUTHENTICATED', 'reject -> approve: old token UNAUTHENTICATED');
+const longMsg = await gql(editor.token, `mutation { sendMessage(projectId:"${project.id}", message:"${'x'.repeat(5001)}") { id } }`);
+ok(code(longMsg) === 'MESSAGE_TOO_LONG', 'chat message over 5000 characters MESSAGE_TOO_LONG');
+
+// ---- password reset flood (needs EMAIL_TRANSPORT=log on the server)
+const avail = (await gql(null, '{ passwordResetAvailable }')).data?.passwordResetAvailable;
+if (avail) {
+  const floodEmail = `flood-${RUN}@example.com`;
+  const codes = [];
+  for (let i = 0; i < 6; i++) {
+    const x = await gql(null, `mutation { requestPasswordReset(email:"${floodEmail}") { success errorCode } }`);
+    codes.push(x.data?.requestPasswordReset?.errorCode ?? 'OK');
+  }
+  // An earlier run within the hour may already have used this IP's bucket,
+  // so the first refusal can come sooner; the 6th is always refused.
+  const firstLimited = codes.indexOf('RATE_LIMITED');
+  ok(codes[5] === 'RATE_LIMITED' && firstLimited >= 0 && codes.slice(firstLimited).every((c) => c === 'RATE_LIMITED') && codes.slice(0, firstLimited).every((c) => c === 'OK'), '6th reset request within 1 h RATE_LIMITED', codes.join(','));
+} else {
+  console.log('SKIP reset flood (password reset unavailable: start the server with EMAIL_TRANSPORT=log)');
+}
+
+// ---- share creation flood: 61st link within 1 h by one user
+const floodEmail2 = `share-flood-${RUN}@example.com`;
+const mkFlood = await gql(sa.token, `mutation { register(input:{name:"Flood ${RUN}", email:"${floodEmail2}", password:"flood-password-1", role:EDITOR}) { success message } }`);
+ok(mkFlood.data?.register?.success, 'per-run flood user created', JSON.stringify(mkFlood.data?.register?.message ?? mkFlood.errors ?? ''));
+const flooder = await login(floodEmail2, 'flood-password-1');
+const shareTarget = await gql(flooder.token, `mutation { createFolder(projectId:"${project.id}", name:"Flood ${RUN}") { id } }`);
+const floodFolder = shareTarget.data.createFolder.id;
+ok(code(await gql(flooder.token, `mutation { createShareLink(input:{folderId:"00000000-0000-4000-8000-000000000000", mode:PUBLIC}) { id } }`)) === 'NOT_FOUND', 'invalid target refused before a rate-limit slot is used');
+let created = 0;
+let floodCode = null;
+for (let i = 0; i < 61; i++) {
+  const x = await gql(flooder.token, `mutation { createShareLink(input:{folderId:"${floodFolder}", mode:PUBLIC}) { id } }`);
+  if (x.data?.createShareLink?.id) created++;
+  else { floodCode = code(x); break; }
+}
+ok(created === 60 && floodCode === 'RATE_LIMITED', '61st createShareLink RATE_LIMITED', `${created} ${floodCode}`);
+
+// ---- trash cascade / restore / purge
+const mk = async (name, parentId) => (await gql(editor.token, `mutation { createFolder(projectId:"${project.id}", name:"${name}"${parentId ? `, parentId:"${parentId}"` : ''}) { id } }`)).data.createFolder.id;
+const secS = await mk('Cascade');
+const secS1 = await mk('Inner', secS);
+const secS2 = await mk('Own', secS);
+const inFile = (await upload(editor.token, 'photo.jpg', 'inner.jpg', secS1)).done.data.completeUpload;
+const ownFile = (await upload(editor.token, 'photo.jpg', 'own.jpg', secS2)).done.data.completeUpload;
+ok(inFile?.id && ownFile?.id, 'files uploaded into nested Sections');
+const link = (await gql(editor.token, `mutation { createShareLink(input:{folderId:"${secS1}", mode:PUBLIC}) { id slug } }`)).data.createShareLink;
+html = await (await fetch(`${B}/s/${link.slug}`)).text();
+const innerSigned = (html.match(/\/media\/s\/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g) || [])[0];
+ok(!!innerSigned, 'share of inner Section renders media');
+// S2 trashed on its own first, then the parent S
+ok((await gql(editor.token, `mutation { moveFolderToTrash(folderId:"${secS2}") }`)).data?.moveFolderToTrash === true, 'trash inner Section on its own');
+ok((await gql(editor.token, `mutation { moveFolderToTrash(folderId:"${secS}") }`)).data?.moveFolderToTrash === true, 'trash parent Section');
+ok((await gql(editor.token, `{ folder(id:"${secS1}") { id } }`)).data?.folder === null, 'cascaded Section hidden from folder(id)');
+r = await fetch(`${B}/media/i/${inFile.id}`, { headers: { cookie: editor.cookie } });
+ok(r.status === 404, 'cascaded file media 404', r.status);
+r = await fetch(`${B}${innerSigned}`);
+ok(r.status === 404, 'cascaded file signed URL 404', r.status);
+r = await fetch(`${B}/s/${link.slug}`);
+ok(r.status === 404, 'share page of trashed target 404', r.status);
+const search = await gql(editor.token, `{ searchFiles(query:"inner") { id } }`);
+ok(!(search.data?.searchFiles ?? []).some((f) => f.id === inFile.id), 'search hides cascaded file');
+const trashList = await gql(editor.token, '{ allTrashedFolders { id } allTrashedFiles { id } }');
+const troots = trashList.data.allTrashedFolders.map((f) => f.id);
+ok(troots.includes(secS) && troots.includes(secS2) && !troots.includes(secS1) && !trashList.data.allTrashedFiles.some((f) => f.id === inFile.id), 'Trash lists roots only');
+ok(code(await gql(editor.token, `mutation { restoreFolder(folderId:"${secS1}") { id } }`)) === 'ANCESTOR_TRASHED', 'restoring a cascaded child refused');
+ok(code(await gql(editor.token, `mutation { restoreFolder(folderId:"${secS2}") { id } }`)) === 'ANCESTOR_TRASHED', 'restoring a root inside a trashed Section refused');
+ok(code(await gql(editor.token, `mutation { createFolder(projectId:"${project.id}", name:"x", parentId:"${secS1}") { id } }`)) === 'NOT_FOUND', 'createFolder into trashed Section NOT_FOUND');
+ok(code(await gql(editor.token, `mutation { createShareLink(input:{fileId:"${inFile.id}", mode:PUBLIC}) { id } }`)) === 'NOT_FOUND', 'createShareLink on trashed file NOT_FOUND');
+ok(code(await gql(editor.token, `mutation { moveFile(fileId:"${vid.id}", targetFolderId:"${secS1}") { id } }`)) === 'NOT_FOUND', 'moveFile into trashed Section NOT_FOUND');
+ok((await gql(editor.token, `mutation { restoreFolder(folderId:"${secS}") { id } }`)).data?.restoreFolder?.id === secS, 'restore parent Section');
+ok((await gql(editor.token, `{ folder(id:"${secS1}") { id } }`)).data?.folder?.id === secS1, 'cascaded Section restored');
+r = await fetch(`${B}/media/i/${inFile.id}`, { headers: { cookie: editor.cookie } });
+ok(r.status === 200, 'cascaded file media back', r.status);
+r = await fetch(`${B}/s/${link.slug}`);
+ok(r.status === 200, 'share link works again after restore', r.status);
+ok((await gql(editor.token, `{ folder(id:"${secS2}") { id } }`)).data?.folder === null, 'Section trashed on its own stays in Trash');
+// purge the parent (with S2 still in Trash inside it)
+ok((await gql(editor.token, `mutation { moveFolderToTrash(folderId:"${secS}") }`)).data?.moveFolderToTrash === true, 'trash parent again');
+ok(code(await gql(editor.token, `mutation { permanentDeleteFolder(folderId:"${secS}") }`)) === 'FORBIDDEN', 'editor cannot purge');
+const pf = await gql(admin.token, `mutation { permanentDeleteFolder(folderId:"${secS}") }`);
+ok(pf.data?.permanentDeleteFolder === true, 'admin purges Section', JSON.stringify(pf.errors ?? ''));
+r = await fetch(`${B}/s/${link.slug}`);
+ok(r.status === 404, 'purged target share page 404', r.status);
+const listed = (await gql(admin.token, '{ shareLinks { id } }')).data.shareLinks.some((l) => l.id === link.id);
+ok(!listed, 'purged link no longer listed');
+{
+  const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await db.connect();
+  const row = await db.query('SELECT revoked_reason FROM share_links WHERE id = $1', [link.id]);
+  await db.end();
+  ok(row.rows[0]?.revoked_reason === 'target_deleted', 'purged link revoked with target_deleted', row.rows[0]?.revoked_reason);
+}
+ok((await gql(editor.token, `{ folder(id:"${secS2}") { id } }`)).data?.folder === null && (await gql(admin.token, '{ allTrashedFolders { id } }')).data.allTrashedFolders.every((f) => f.id !== secS2), 'nested trashed Section purged with its parent');
+r = await fetch(`${B}/media/i/${ownFile.id}`, { headers: { cookie: editor.cookie } });
+ok(r.status === 404, 'purged file media 404', r.status);
 
 // logout
-r = await fetch(`${B}/api/v1/auth/logout`, { method: 'POST', headers: { authorization: `Bearer ${viewer.token}` } });
+r = await fetch(`${B}/api/v1/auth/logout`, { method: 'POST', headers: { authorization: `Bearer ${viewer2.token}` } });
 ok(r.status === 200 && /shotstash_session=;/.test(r.headers.get('set-cookie') || ''), 'logout clears cookie', r.headers.get('set-cookie'));
-ok(code(await gql(viewer.token, '{ projects { id } }')) === 'UNAUTHENTICATED', 'old token fails GraphQL');
-r = await fetch(`${B}/media/i/${vid.id}`, { headers: { cookie: viewer.cookie } });
+ok(code(await gql(viewer2.token, '{ projects { id } }')) === 'UNAUTHENTICATED', 'old token fails GraphQL');
+r = await fetch(`${B}/media/i/${vid.id}`, { headers: { cookie: viewer2.cookie } });
 ok(r.status === 401, 'old token fails media', r.status);
 
 console.log(fails ? `${fails} FAILED` : 'ALL PASS');
+process.exit(fails ? 1 : 0);

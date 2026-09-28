@@ -29,6 +29,7 @@ export function makeApolloClient() {
       cache: new InMemoryCache({
         typePolicies: {
           Project: { fields: { folders: { merge: false }, chats: { merge: false } } },
+          ProjectSummary: { fields: { folders: { merge: false } } },
           Folder: { fields: { children: { merge: false }, files: { merge: false } } },
         },
       }),

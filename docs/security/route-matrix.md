@@ -12,12 +12,14 @@ Actions are the `can()` actions of `src/modules/auth/permissions.ts` (`self` = a
 | --- | --- | --- | --- |
 | `/api/graphql` | GET | public | per field (src/graphql/auth-map.ts) |
 | `/api/graphql` | POST | public | per field (src/graphql/auth-map.ts) |
+| `/api/health` | GET | public |  |
 | `/api/ping` | GET | public |  |
 | `/api/upload/chunk` | POST | session | upload |
 | `/api/upload/cover` | POST | session | section.create (project) / self (user) |
 | `/api/v1/auth/cookie` | POST | session |  |
 | `/api/v1/auth/login` | POST | public |  |
 | `/api/v1/auth/logout` | POST | session |  |
+| `/api/v1/setup` | POST | public | first-run only |
 | `/media/c/[kind]/[id]` | GET | cookie | project.view |
 | `/media/d/[fileId]` | GET | cookie | media.download |
 | `/media/d/[fileId]` | HEAD | cookie | media.download |

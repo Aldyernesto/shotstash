@@ -12,7 +12,7 @@ import styles from './forgot-password.module.css';
 // 1.26) — duplikasi server di password-reset.service.ts disengaja (batas
 // server/klien), duplikasi antar-modul klien tidak.
 export { CODE_LENGTH as RESET_CODE_LENGTH, CODE_ALPHABET as RESET_CODE_ALPHABET } from '@/components/auth/CodeInput';
-export const MIN_PASSWORD_LENGTH = 8;
+export { MIN_PASSWORD_LENGTH, PASSWORD_TOO_LONG_MESSAGE, passwordProblem } from '@/lib/passwordRule';
 export const RESEND_COOLDOWN_SECONDS = 60;
 // Paritas konstanta server (password-reset.service.ts) untuk jam kedaluwarsa
 // yang dihitung di perangkat (AC 1.28/1.30 — harus cocok dengan isi email).

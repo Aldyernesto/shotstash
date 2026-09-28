@@ -71,3 +71,34 @@ export const MENTION_TYPE_WORD: Record<MentionTagType, "Project" | "Section" | "
   folder: "Section",
   file: "File",
 };
+
+/* ------------------------------------------------------------------ */
+/* Story 2.5: people mentions for chat notifications                   */
+/* ------------------------------------------------------------------ */
+
+/* "@Name" in plain text (not an entity tag "@[...]"): letters, digits,
+   dot, underscore and hyphen. Must start the message or follow a
+   non-word character, so "a@b.c" email addresses are not mentions. */
+const HANDLE_RE = /(^|[^\w@])@([\p{L}\p{N}][\p{L}\p{N}._-]{0,63})/gu;
+
+/** Lowercased "@handle" words of a message, entity tags excluded. */
+export function mentionHandles(message: string): string[] {
+  const out = new Set<string>();
+  if (!message) return [];
+  const text = message.replace(TAG_RE, " ");
+  HANDLE_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = HANDLE_RE.exec(text)) !== null) out.add(m[2].replace(/[._-]+$/, "").toLowerCase());
+  return [...out].filter(Boolean);
+}
+
+/**
+ * Whether a handle names this user: the display name with spaces removed
+ * ("@FieldCrew", "@viewer") or the local part of the email.
+ */
+export function handleMatchesUser(handle: string, user: { name: string; email: string }): boolean {
+  const h = handle.toLowerCase();
+  const name = user.name.replace(/\s+/g, "").toLowerCase();
+  const local = user.email.split("@")[0]?.toLowerCase() ?? "";
+  return h === name || h === local;
+}

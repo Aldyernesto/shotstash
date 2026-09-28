@@ -78,3 +78,20 @@ test('shareUnlocked: PUBLIC open, PRIVATE needs this link\'s cookie', () => {
   assert.equal(shareUnlocked(jar({ [shareCookieName(other.slug)]: good }), other), false, 'cookie minted for another link');
   assert.equal(shareUnlocked(jar({ [shareCookieName(priv.slug)]: `${good}x` }), priv), false, 'tampered cookie');
 });
+
+test('PENDING and REJECTED accounts reach only the onboarding fields (Story 2.5)', () => {
+  const r = applyAuthMap({
+    Query: { projects: () => 'projects', me: () => 'me' },
+    Mutation: { createFolder: () => 'created', completeOnboarding: () => 'onboarded', updateProfile: () => 'profile' },
+    Subscription: { chatMessages: { subscribe: () => 'iterator' } },
+  });
+  for (const accountStatus of ['PENDING', 'REJECTED']) {
+    const ctx = { actor: actor({ accountStatus }) };
+    assert.equal(code(() => r.Query.projects(null, {}, ctx, null)), 'FORBIDDEN');
+    assert.equal(code(() => r.Mutation.createFolder(null, {}, ctx, null)), 'FORBIDDEN');
+    assert.equal(code(() => r.Subscription.chatMessages.subscribe(null, {}, ctx, null)), 'FORBIDDEN');
+    assert.equal(r.Mutation.completeOnboarding(null, {}, ctx, null), 'onboarded');
+    assert.equal(r.Mutation.updateProfile(null, {}, ctx, null), 'profile');
+    assert.equal(r.Query.me(null, {}, ctx, null), 'me');
+  }
+});

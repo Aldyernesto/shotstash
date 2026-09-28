@@ -145,7 +145,7 @@ type User = {
 type Notice = { type: "success" | "error"; text: string };
 type ResetResult = { message: string; password: string | null; googleOnly: boolean };
 
-const MIN_PASSWORD_LENGTH = 8;
+import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_LONG_MESSAGE, passwordProblem } from "@/lib/passwordRule";
 
 const ROLE_LABEL_MAP: Record<string,string> = { EDITOR: 'Editor', FIELD_CREW: 'Field Crew', VIEWER: 'Viewer', ADMIN: 'Admin', SUPER_ADMIN: 'Super Admin' };
 
@@ -399,7 +399,12 @@ export default function AdminPanel() {
     if (!resetTarget || resetLoading) return;
     setResetError("");
     setResetFormError(null);
-    if (resetMode === "manual" && resetPassword.length < MIN_PASSWORD_LENGTH) {
+    const pwProblem = resetMode === "manual" ? passwordProblem(resetPassword) : null;
+    if (pwProblem === "PASSWORD_TOO_LONG") {
+      setResetError(PASSWORD_TOO_LONG_MESSAGE);
+      return;
+    }
+    if (pwProblem) {
       setResetError(`Password minimal ${MIN_PASSWORD_LENGTH} karakter`);
       return;
     }

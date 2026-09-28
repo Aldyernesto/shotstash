@@ -15,6 +15,7 @@ import prisma from '../lib/prisma';
 import { esClient } from '../lib/elasticsearch';
 import { pubsub } from '../lib/pubsub';
 import { isRenderableImageUrl, mediaUrl } from '../lib/mediaUrls';
+import { storageRoot } from '../lib/storageRoot';
 import {
   assertCan,
   assertCanWriteSelf,
@@ -27,15 +28,47 @@ import {
   type UserChange,
 } from '@/modules/auth';
 import { applyAuthMap } from './withAuth';
-import { loginLimit } from '../lib/rateLimit';
+import { limitBy, loginLimit } from '../lib/rateLimit';
+import { folderChainTrashed } from '../lib/shareLink';
+import * as Trash from '@/modules/trash';
 import { GraphQLError } from 'graphql';
+
+function rateLimited(retryAfter: number) {
+  return new GraphQLError('Too many attempts', { extensions: { code: 'RATE_LIMITED', retryAfter } });
+}
+
+/** Longest chat message accepted (Story 2.5). */
+const MAX_CHAT_MESSAGE_LENGTH = 5000;
+
+function notFound(message: string) {
+  return new GraphQLError(message, { extensions: { code: 'NOT_FOUND' } });
+}
+
+// Story 2.5: writes that target a Section, file or project require a live
+// (existing, not trashed) target. `folderChainTrashed` stays as a defense in
+// depth although the trash cascade marks every descendant.
+async function assertLiveFolder(folderId: string, label = 'Section') {
+  const folder = await prisma.folder.findUnique({ where: { id: folderId } });
+  if (!folder || folder.trashedAt || (await folderChainTrashed(folder.parentId))) throw notFound(`${label} not found`);
+  return folder;
+}
+
+async function assertLiveFile(fileId: string) {
+  const file = await prisma.mediaFile.findUnique({ where: { id: fileId } });
+  if (!file || file.trashedAt || (await folderChainTrashed(file.folderId))) throw notFound('File not found');
+  return file;
+}
+
+async function assertProject(projectId: string) {
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+  if (!project) throw notFound('Project not found');
+  return project;
+}
 
 // Same throttle as REST login (10 per 15 min per IP, plus per email for passwords).
 async function assertLoginRate(context: GraphQLContext, email?: string | null) {
   const retryAfter = await loginLimit(context.ip, email);
-  if (retryAfter !== null) {
-    throw new GraphQLError('Too many attempts', { extensions: { code: 'RATE_LIMITED', retryAfter } });
-  }
+  if (retryAfter !== null) throw rateLimited(retryAfter);
 }
 
 export interface GraphQLContext {
@@ -80,19 +113,6 @@ async function assertManageUser(context: GraphQLContext, targetId: string, chang
     throw forbidden(`Forbidden: users.manage (${change.kind})`);
   }
   return target;
-}
-
-// Every folder id in a subtree, trashed or not (hard deletes revoke links first).
-async function allSubtreeFolderIds(rootId: string): Promise<string[]> {
-  const ids = [rootId];
-  let frontier = [rootId];
-  let guard = 0;
-  while (frontier.length && guard++ < 64) {
-    const children = await prisma.folder.findMany({ where: { parentId: { in: frontier } }, select: { id: true } });
-    frontier = children.map((c) => c.id);
-    ids.push(...frontier);
-  }
-  return ids;
 }
 
 async function assertUploadOwner(context: GraphQLContext, sessionId: string) {
@@ -375,9 +395,11 @@ const rawResolvers = {
 
     projects: async (_: any, __: any, context: GraphQLContext) => {
       assertCan(context.actor, 'project.view');
+      // Story 2.5: the list carries no chats (ProjectSummary has no such
+      // field) and no trashed Sections; files load through their resolver.
       const projects = await prisma.project.findMany({
         orderBy: { createdAt: 'desc' },
-        include: { files: true, folders: true, chats: { include: { sender: true }, orderBy: { createdAt: 'asc' } } },
+        include: { folders: { where: { trashedAt: null } } },
       });
       // Keep only covers the browser can load: absolute http(s) or our /media/ path.
       return projects.map((p) => ({
@@ -399,14 +421,17 @@ const rawResolvers = {
 
     folder: async (_: any, { id }: { id: string }, context: GraphQLContext) => {
       assertCan(context.actor, 'project.view');
-      return prisma.folder.findUnique({
-        where: { id },
+      // A trashed Section (or one inside a trashed Section) answers null.
+      const folder = await prisma.folder.findFirst({
+        where: { id, trashedAt: null },
         include: {
           files: { where: { trashedAt: null } },
           children: { where: { trashedAt: null } },
           project: true,
         },
       });
+      if (!folder || (await folderChainTrashed(folder.parentId))) return null;
+      return folder;
     },
 
     searchFolders: async (_: any, { query, projectId }: { query: string; projectId?: string }, context: GraphQLContext) => {
@@ -449,13 +474,15 @@ const rawResolvers = {
         };
         return prisma.mediaFile.findMany({ where, take: 20, include: { folder: true, project: true } });
       }
-      const results = (await Promise.all(hits.map(async (hit: any) => {
-        return prisma.mediaFile.findUnique({
-          where: { id: hit._id },
-          include: { folder: true, project: true },
-        });
-      }))).filter(Boolean);
-      return results;
+      // The index may lag behind the Trash: re-read the rows with the same
+      // trash filter as the DB branch, keeping the ES ranking.
+      const ids = hits.map((hit: any) => String(hit._id));
+      const rows = await prisma.mediaFile.findMany({
+        where: { id: { in: ids }, trashedAt: null, ...(projectId ? { projectId } : {}) },
+        include: { folder: true, project: true },
+      });
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      return ids.map((id) => byId.get(id)).filter(Boolean);
     },
 
     shareLinks: async (_: any, __: any, context: GraphQLContext) => {
@@ -527,7 +554,7 @@ const rawResolvers = {
       try {
         const fs = await import('fs/promises');
         const { execSync } = await import('child_process');
-        const nasPath = process.env.STORAGE_LOCAL_ROOT || './data/media';
+        const nasPath = storageRoot();
         // Use --output for machine-parseable columns (avoids path-with-spaces issue)
         const dfOut = execSync(`df -B1 --output=size,avail "${nasPath}" | tail -1`, { encoding: 'utf8', timeout: 3000 });
         const parts = dfOut.trim().split(/\s+/);
@@ -555,20 +582,12 @@ const rawResolvers = {
 
     allTrashedFiles: async (_: any, __: any, context: GraphQLContext) => {
       assertCan(context.actor, 'trash.view');
-      return prisma.mediaFile.findMany({
-        where: { trashedAt: { not: null } },
-        include: { folder: { include: { project: true } } },
-        orderBy: { trashedAt: 'desc' },
-      });
+      return Trash.trashedFileRoots();
     },
 
     allTrashedFolders: async (_: any, __: any, context: GraphQLContext) => {
       assertCan(context.actor, 'trash.view');
-      return prisma.folder.findMany({
-        where: { trashedAt: { not: null } },
-        include: { project: true },
-        orderBy: { trashedAt: 'desc' },
-      });
+      return Trash.trashedFolderRoots();
     },
   },
 
@@ -596,10 +615,10 @@ const rawResolvers = {
     },
 
     // ---- Reset password mandiri (publik) ----
-    requestPasswordReset: (_: unknown, { email }: { email: string }, context: GraphQLContext) => {
+    requestPasswordReset: async (_: unknown, { email }: { email: string }, context: GraphQLContext) => {
       try {
         // Tidak menunggu pengiriman email → isi & waktu respons sama untuk email apa pun.
-        PasswordReset.requestReset(email, { ip: context.ip });
+        await PasswordReset.requestReset(email, { ip: context.ip });
         return { success: true, message: PasswordReset.PASSWORD_RESET_MESSAGES.requested, resetToken: null, errorCode: null };
       } catch (error) {
         return passwordResetFailure('requestPasswordReset', error);
@@ -669,6 +688,9 @@ const rawResolvers = {
         }
         return { success: true, user };
       } catch (error: any) {
+        if (error instanceof AuthService.PasswordRuleError) {
+          return { success: false, message: error.message, errorCode: error.code };
+        }
         return { success: false, message: error.message };
       }
     },
@@ -681,13 +703,17 @@ const rawResolvers = {
 
     createFolder: async (_: any, { projectId, name, parentId }: any, context: GraphQLContext) => {
       assertCan(context.actor, 'section.create');
+      await assertProject(projectId);
+      if (parentId) {
+        const parent = await assertLiveFolder(parentId, 'Parent Section');
+        if (parent.projectId !== projectId) throw notFound('Parent Section not found');
+      }
       return FolderService.createFolder(projectId, name, parentId);
     },
 
     renameFolder: async (_: any, { folderId, name }: { folderId: string; name: string }, context: GraphQLContext) => {
       assertCan(context.actor, 'item.move');
-      const folder = await prisma.folder.findUnique({ where: { id: folderId } });
-      if (!folder) throw new Error('Folder not found');
+      await assertLiveFolder(folderId);
       return prisma.folder.update({
         where: { id: folderId },
         data: { name },
@@ -698,6 +724,11 @@ const rawResolvers = {
     initiateUpload: async (_: any, { input }: any, context: GraphQLContext) => {
       const actor = actorOf(context);
       assertCan(actor, 'upload');
+      await assertProject(input.projectId);
+      if (input.folderId) {
+        const target = await assertLiveFolder(input.folderId);
+        if (target.projectId !== input.projectId) throw notFound('Section not found');
+      }
 
       // Validate file type — check inherited folder rules from root default folders
       if (input.folderId) {
@@ -735,12 +766,30 @@ const rawResolvers = {
 
     completeUpload: async (_: any, { sessionId, r2Key, convertHeic }: any, context: GraphQLContext) => {
       await assertUploadOwner(context, sessionId);
+      // The target may have been trashed or deleted since initiateUpload.
+      const upload = await prisma.uploadSession.findUnique({ where: { id: sessionId }, select: { projectId: true, folderId: true } });
+      try {
+        if (!upload) throw notFound('Upload session not found');
+        await assertProject(upload.projectId);
+        const target = await assertLiveFolder(upload.folderId);
+        if (target.projectId !== upload.projectId) throw notFound('Section not found');
+      } catch (err) {
+        await UploadService.abandonUpload(sessionId);
+        throw err;
+      }
       return UploadService.completeUpload(sessionId, r2Key, convertHeic);
     },
 
     createShareLink: async (_: any, { input }: any, context: GraphQLContext) => {
       const actor = actorOf(context);
       assertCan(actor, 'share.manage');
+      // Story 2.5: only a live target can be shared (checked before a slot is used).
+      if (input.fileId) await assertLiveFile(input.fileId);
+      if (input.folderId) await assertLiveFolder(input.folderId);
+      if (input.projectId) await assertProject(input.projectId);
+      // Story 2.7: 60 links per hour per user.
+      const limited = await limitBy('shareCreate', actor.id);
+      if (!limited.ok) throw rateLimited(limited.retryAfter);
       return ShareService.createShareLink({
         createdById: actor.id,
         mode: input.mode,
@@ -802,11 +851,9 @@ const rawResolvers = {
 
     rejectUser: async (_: any, { userId }: any, context: GraphQLContext) => {
       await assertManageUser(context, userId, { kind: 'reject' });
-      const user = await prisma.user.update({
-        where: { id: userId },
-        data: { accountStatus: 'REJECTED', active: false },
-      });
-      return user;
+      // Same as deactivation: the account's sessions go, so a later approval
+      // cannot revive an old token.
+      return AuthService.rejectUser(userId);
     },
 
     googleAuth: async (_: any, { idToken }: any, context: GraphQLContext) => {
@@ -817,19 +864,24 @@ const rawResolvers = {
     sendMessage: async (_: any, { projectId, message, referencedFileId }: any, context: GraphQLContext) => {
       const actor = actorOf(context);
       assertCan(actor, 'discussion.use');
-      // Auto-use or create "Community" project for global chat
-      let pid = projectId;
-      if (!pid) {
-        const existing = await prisma.project.findFirst({ where: { title: 'Community' } });
-        if (existing) {
-          pid = existing.id;
-        } else {
-          const created = await prisma.project.create({ data: { title: 'Community', description: 'Global community chat' } });
-          pid = created.id;
-        }
+      assertCan(actor, 'project.view');
+      // Story 2.5: a real project only (no auto-created "Community" project),
+      // and a referenced file must be a live file of that project.
+      if (!projectId) throw notFound('Project not found');
+      await assertProject(projectId);
+      if (referencedFileId) {
+        const file = await assertLiveFile(referencedFileId);
+        if (file.projectId !== projectId) throw notFound('File not found');
       }
-      const chat = await ChatService.sendMessage(actor.id, pid, message, referencedFileId);
-      return chat;
+      if (typeof message !== 'string' || !message.trim()) {
+        throw new GraphQLError('Message is empty', { extensions: { code: 'BAD_USER_INPUT' } });
+      }
+      if (message.length > MAX_CHAT_MESSAGE_LENGTH) {
+        throw new GraphQLError(`Message is longer than ${MAX_CHAT_MESSAGE_LENGTH} characters`, {
+          extensions: { code: 'MESSAGE_TOO_LONG', maxLength: MAX_CHAT_MESSAGE_LENGTH },
+        });
+      }
+      return ChatService.sendMessage(actor.id, projectId, message, referencedFileId || undefined);
     },
 
     updateProfile: async (_: any, { name, avatarUrl }: { name?: string; avatarUrl?: string }, context: GraphQLContext) => {
@@ -906,6 +958,7 @@ const rawResolvers = {
 
     updateProject: async (_: any, { id, input }: any, context: GraphQLContext) => {
       assertCan(context.actor, 'item.move');
+      await assertProject(id);
       return prisma.project.update({
         where: { id },
         data: { title: input.title, description: input.description },
@@ -914,92 +967,46 @@ const rawResolvers = {
 
     deleteProject: async (_: any, { id }: { id: string }, context: GraphQLContext) => {
       assertCan(context.actor, 'trash.purge');
-      // Revoke and delete in one transaction: a link created in between makes
-      // the delete fail on the one-target CHECK instead of slipping through.
-      await prisma.$transaction(async (tx) => {
-        const folders = await tx.folder.findMany({ where: { projectId: id }, select: { id: true } });
-        const files = await tx.mediaFile.findMany({ where: { projectId: id }, select: { id: true } });
-        await ShareService.revokeLinksForTargets(
-          { projectIds: [id], folderIds: folders.map((f) => f.id), fileIds: files.map((f) => f.id) },
-          'target_deleted',
-          tx,
-        );
-        await tx.project.delete({ where: { id } });
-      });
-      return true;
+      // Story 2.8: links revoked, rows deleted, then bytes and the project directory.
+      return Trash.purgeProject(id);
     },
 
+    // Story 2.8: every trash operation goes through the trash module.
     moveToTrash: async (_: any, { fileId }: { fileId: string }, context: GraphQLContext) => {
       assertCan(context.actor, 'item.trash');
-      await prisma.mediaFile.update({ where: { id: fileId }, data: { trashedAt: new Date() } });
-      return true;
+      return Trash.trashFile(fileId);
     },
 
     restoreFile: async (_: any, { fileId }: { fileId: string }, context: GraphQLContext) => {
       assertCan(context.actor, 'item.trash');
-      return prisma.mediaFile.update({
-        where: { id: fileId },
-        data: { trashedAt: null },
-        include: { folder: true, project: true },
-      });
+      return Trash.restoreFile(fileId);
     },
 
     permanentDelete: async (_: any, { fileId }: { fileId: string }, context: GraphQLContext) => {
       assertCan(context.actor, 'trash.purge');
-      const file = await prisma.mediaFile.findUnique({ where: { id: fileId } });
-      if (file) {
-        await prisma.$transaction(async (tx) => {
-          await ShareService.revokeLinksForTargets({ fileIds: [fileId] }, 'target_deleted', tx);
-          await tx.mediaFile.delete({ where: { id: fileId } });
-        });
-        const fs = await import('fs/promises');
-        fs.unlink(file.storagePath).catch(() => { });
-      }
+      const file = await prisma.mediaFile.findUnique({ where: { id: fileId }, select: { trashedAt: true } });
+      if (!file) return true;
+      if (!file.trashedAt) throw Trash.trashError('NOT_IN_TRASH', 'Move the file to the Trash first');
+      await Trash.purgeRoots({ fileIds: [fileId] });
       return true;
     },
 
     moveFolderToTrash: async (_: any, { folderId }: { folderId: string }, context: GraphQLContext) => {
       assertCan(context.actor, 'item.trash');
-      await prisma.folder.update({ where: { id: folderId }, data: { trashedAt: new Date() } });
-      return true;
+      return Trash.trashFolder(folderId);
     },
 
     restoreFolder: async (_: any, { folderId }: { folderId: string }, context: GraphQLContext) => {
       assertCan(context.actor, 'item.trash');
-      return prisma.folder.update({
-        where: { id: folderId },
-        data: { trashedAt: null },
-        include: { children: true, files: true },
-      });
+      return Trash.restoreFolder(folderId);
     },
 
     permanentDeleteFolder: async (_: any, { folderId }: { folderId: string }, context: GraphQLContext) => {
       assertCan(context.actor, 'trash.purge');
-
-      const subtree = await allSubtreeFolderIds(folderId);
-      const files = await prisma.mediaFile.findMany({
-        where: { folderId: { in: subtree } },
-        select: { id: true, storagePath: true },
-      });
-      // Resolved before the rows go (the path is derived from them).
-      const folderPath = await FolderService.getFolderPhysicalPath(folderId).catch(() => null);
-
-      // Revoke links and delete rows in one transaction (see deleteProject).
-      await prisma.$transaction(async (tx) => {
-        await ShareService.revokeLinksForTargets(
-          { folderIds: subtree, fileIds: files.map((f) => f.id) },
-          'target_deleted',
-          tx,
-        );
-        await tx.mediaFile.deleteMany({ where: { folderId: { in: subtree } } });
-        await tx.folder.deleteMany({ where: { id: { in: subtree } } });
-      });
-
-      // Bytes go after the rows are committed.
-      const fs = await import('fs/promises');
-      for (const f of files) fs.unlink(f.storagePath).catch(() => {});
-      if (folderPath) await fs.rm(folderPath, { recursive: true, force: true }).catch(() => {});
-
+      const folder = await prisma.folder.findUnique({ where: { id: folderId }, select: { trashedAt: true } });
+      if (!folder) return true;
+      if (!folder.trashedAt) throw Trash.trashError('NOT_IN_TRASH', 'Move the Section to the Trash first');
+      await Trash.purgeRoots({ folderIds: [folderId] });
       return true;
     },
 
@@ -1014,10 +1021,8 @@ const rawResolvers = {
 
     moveFile: async (_: any, { fileId, targetFolderId }: { fileId: string; targetFolderId: string }, context: GraphQLContext) => {
       assertCan(context.actor, 'item.move');
-      const file = await prisma.mediaFile.findUnique({ where: { id: fileId } });
-      if (!file) throw new Error('File not found');
-      const targetFolder = await prisma.folder.findUnique({ where: { id: targetFolderId } });
-      if (!targetFolder) throw new Error('Target folder not found');
+      const file = await assertLiveFile(fileId);
+      const targetFolder = await assertLiveFolder(targetFolderId, 'Target Section');
 
       // Move file on NAS — use proper folder physical path
       const path = await import('path');
@@ -1037,10 +1042,8 @@ const rawResolvers = {
     copyFile: async (_: any, { fileId, targetFolderId }: { fileId: string; targetFolderId: string }, context: GraphQLContext) => {
       const actor = actorOf(context);
       assertCan(actor, 'upload');
-      const file = await prisma.mediaFile.findUnique({ where: { id: fileId } });
-      if (!file) throw new Error('File not found');
-      const targetFolder = await prisma.folder.findUnique({ where: { id: targetFolderId } });
-      if (!targetFolder) throw new Error('Target folder not found');
+      const file = await assertLiveFile(fileId);
+      const targetFolder = await assertLiveFolder(targetFolderId, 'Target Section');
 
       const path = await import('path');
       const fs = await import('fs/promises');
@@ -1075,8 +1078,7 @@ const rawResolvers = {
       context: GraphQLContext,
     ) => {
       assertCan(context.actor, 'item.move');
-      const folder = await prisma.folder.findUnique({ where: { id: folderId } });
-      if (!folder) throw new Error('Folder not found');
+      const folder = await assertLiveFolder(folderId);
 
       if (!targetFolderId && !targetProjectId) {
         throw new Error('Provide either targetFolderId or targetProjectId');
@@ -1088,8 +1090,7 @@ const rawResolvers = {
       // Resolve destination: either inside a folder or at a project root
       let destProjectId: string;
       if (targetFolderId) {
-        const targetFolder = await prisma.folder.findUnique({ where: { id: targetFolderId } });
-        if (!targetFolder) throw new Error('Target folder not found');
+        const targetFolder = await assertLiveFolder(targetFolderId, 'Target Section');
         destProjectId = targetFolder.projectId;
 
         // Prevent cycle: target must not be a descendant of the folder being moved
@@ -1313,7 +1314,7 @@ const rawResolvers = {
           parent.file !== undefined
             ? parent.file
             : await prisma.mediaFile.findUnique({ where: { id: parent.fileId } });
-        return file ? [toRepFile(file)] : [];
+        return file && !file.trashedAt ? [toRepFile(file)] : [];
       }
 
       if (parent.folderId) {
@@ -1321,7 +1322,8 @@ const rawResolvers = {
           parent.folder !== undefined
             ? parent.folder
             : await prisma.folder.findUnique({ where: { id: parent.folderId } });
-        if (!folder) return [];
+        // A trashed target shows no thumbnails (Story 2.8).
+        if (!folder || folder.trashedAt) return [];
         return folderRepFiles(folder, k);
       }
 
@@ -1353,10 +1355,15 @@ const rawResolvers = {
       if (!parent.senderId) return null;
       return prisma.user.findUnique({ where: { id: parent.senderId } });
     },
+    // A trashed file is not shown as an attachment (Story 2.5).
     referencedFile: async (parent: any) => {
-      if (parent.referencedFile !== undefined) return parent.referencedFile;
-      if (!parent.referencedFileId) return null;
-      return prisma.mediaFile.findUnique({ where: { id: parent.referencedFileId } });
+      const file =
+        parent.referencedFile !== undefined
+          ? parent.referencedFile
+          : parent.referencedFileId
+            ? await prisma.mediaFile.findUnique({ where: { id: parent.referencedFileId } })
+            : null;
+      return file && !file.trashedAt ? file : null;
     },
   },
 
@@ -1383,8 +1390,10 @@ const rawResolvers = {
       // diisi `server.ts` dari `connectionParams.authorization` yang dicek
       // terhadap tabel `Session` (AuthService.validateSession). Tanpa sesi
       // valid tidak satu pun pesan, nama, atau role mengalir lewat WS.
-      subscribe: (_: any, { projectId }: { projectId: string }, context: GraphQLContext) => {
+      subscribe: async (_: any, { projectId }: { projectId: string }, context: GraphQLContext) => {
         assertCan(context?.actor, 'project.view');
+        // Story 2.5: only an existing project (projects themselves are never trashed).
+        await assertProject(projectId);
         return pubsub.asyncIterator(`CHAT_MESSAGES_${projectId}`);
       },
     },
@@ -1398,5 +1407,8 @@ const rawResolvers = {
   },
 };
 
+// Story 2.5: the project list type shares every Project resolver (it has no chats).
+const withSummary = { ...rawResolvers, ProjectSummary: rawResolvers.Project };
+
 // Story 2.1: every root field passes the auth mode declared in auth-map.ts.
-export const resolvers = applyAuthMap(rawResolvers);
+export const resolvers = applyAuthMap(withSummary);

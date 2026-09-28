@@ -50,7 +50,6 @@ export const typeDefs = `#graphql
     readOnly: Boolean!
     # Story 2.4: actions this user may perform (can()); the UI reads only this.
     permissions: [String!]!
-    chats: [ProjectChat!]!
     createdAt: DateTime!
   }
 
@@ -67,6 +66,25 @@ export const typeDefs = `#graphql
     totalSize: BigInt!
     # Story 2.4 (aditif): ringkasan isi per jenis + sampel Kartu Perwakilan
     # harian — deterministik per tanggal Asia/Jakarta.
+    contentSummary: ContentSummary!
+    repFiles(limit: Int!): [RepFile!]!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  # Story 2.5: the project list. Same fields as Project except chats, so
+  # "projects { chats }" is a schema error: discussion loads per project
+  # through project(id) only.
+  type ProjectSummary {
+    id: ID!
+    title: String!
+    description: String
+    coverImage: String
+    status: ProjectStatus!
+    files: [MediaFile!]!
+    folders: [Folder!]!
+    totalFiles: Int!
+    totalSize: BigInt!
     contentSummary: ContentSummary!
     repFiles(limit: Int!): [RepFile!]!
     createdAt: DateTime!
@@ -198,6 +216,8 @@ export const typeDefs = `#graphql
     success: Boolean!
     token: String
     message: String
+    # Stable failure code, e.g. PASSWORD_TOO_SHORT. null on success.
+    errorCode: String
   }
 
   type AdminActionResult {
@@ -214,7 +234,7 @@ export const typeDefs = `#graphql
     # Hanya diisi verifyPasswordResetCode yang berhasil. Sekali pakai, berlaku 10 menit.
     resetToken: String
     # Jenis kegagalan untuk UI: UNAVAILABLE | RATE_LIMITED | INVALID_EMAIL | INVALID_CODE | CODE_LOCKED |
-    # TOKEN_INVALID | PASSWORD_TOO_SHORT | PASSWORD_MISMATCH | INTERNAL. null saat sukses.
+    # TOKEN_INVALID | PASSWORD_TOO_SHORT | PASSWORD_TOO_LONG | PASSWORD_MISMATCH | INTERNAL. null saat sukses.
     errorCode: String
   }
 
@@ -286,7 +306,7 @@ export const typeDefs = `#graphql
     passwordResetAvailable: Boolean!
 
     # Projects & Folders
-    projects(filter: ProjectFilter): [Project!]!
+    projects(filter: ProjectFilter): [ProjectSummary!]!
     project(id: ID!): Project
     folder(id: ID!): Folder
 
@@ -360,7 +380,7 @@ export const typeDefs = `#graphql
     googleAuth(idToken: String!): AuthPayload!
 
     # Chat
-    sendMessage(projectId: ID, message: String!, referencedFileId: ID): ProjectChat!
+    sendMessage(projectId: ID!, message: String!, referencedFileId: ID): ProjectChat!
 
     # Trash
     moveToTrash(fileId: ID!): Boolean!

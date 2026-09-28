@@ -6,7 +6,7 @@
  */
 import { NextResponse } from 'next/server';
 import { defineRoute, jsonError } from '@/lib/defineRoute';
-import { clientIp } from '@/lib/clientIp';
+import { clientIp } from '@/lib/request';
 import { loginLimit, rateLimitedResponse } from '@/lib/rateLimit';
 import { SESSION_COOKIE, sessionCookieOptions } from '@/lib/sessionStore';
 import * as AuthService from '@/services/auth.service';

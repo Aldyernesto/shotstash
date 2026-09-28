@@ -1,4 +1,5 @@
 import Redis from 'ioredis';
+import { withLockOn, type LockClient, type LockResult } from './lock';
 
 // Create a Dragonfly (Redis-compatible) client
 // Dragonfly is a drop-in replacement for Redis with much higher throughput
@@ -38,3 +39,8 @@ export const dfPublisher = new Redis({
   port: dragonflyPort,
   password: dragonflyPassword,
 });
+
+/** Runs `fn` only on the instance holding `key` (see `src/lib/lock.ts`). */
+export function withLock<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<LockResult<T>> {
+  return withLockOn(dfClient as unknown as LockClient, key, ttlMs, fn);
+}

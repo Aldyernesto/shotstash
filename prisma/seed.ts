@@ -1,13 +1,15 @@
 /*
  * Local development seed for Shotstash.
  *
- * Safety gate: the script refuses to run unless the DATABASE_URL host is
- * 127.0.0.1 or localhost (exit code 2), so it can never touch a shared or
- * production database by accident.
+ * Safety gates (exit code 2): the script refuses to run when
+ * NODE_ENV=production, and unless the DATABASE_URL host is 127.0.0.1 or
+ * localhost, so it can never touch a shared or production database by
+ * accident.
  *
  * What it creates (idempotent, safe to re-run):
  *   - one account per role, all with the same development password
  *   - one sample project with one empty section
+ *   - the setup-complete marker (instance_settings), since accounts exist
  *
  * Usage (from the repo root):
  *   npm run dev:db      # terminal 1: embedded PGlite on port 55433
@@ -15,6 +17,13 @@
  */
 import 'dotenv/config';
 import * as bcrypt from 'bcryptjs';
+
+function assertNotProduction() {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('Refusing to seed: NODE_ENV=production. Production installs start with the /setup wizard.');
+    process.exit(2);
+  }
+}
 
 function assertLocalDatabase() {
   const raw = process.env.DATABASE_URL;
@@ -41,6 +50,7 @@ const DEV_USERS = [
 const SAMPLE_PROJECT_ID = 'a0000000-0000-4000-8000-000000000001';
 
 async function main() {
+  assertNotProduction();
   assertLocalDatabase();
   const { default: prisma } = await import('../src/lib/prisma');
 
@@ -81,6 +91,13 @@ async function main() {
     },
   });
   await prisma.folder.create({ data: { name: 'Footage', projectId: project.id } });
+
+  // The seed creates accounts, so first-run setup is done.
+  await prisma.instanceSetting.upsert({
+    where: { id: 1 },
+    update: {},
+    create: { id: 1, setupCompletedAt: now },
+  });
 
   console.log('[seed] done');
   console.log(`[seed] password for every account: ${DEV_PASSWORD}`);

@@ -75,18 +75,29 @@ export default async function SharePageRoute({
 }) {
   const { slug } = await params;
   const { section } = await searchParams;
-  const sectionId = section ?? null;
+  let sectionId = section ?? null;
 
   // PRIVATE links open only with the `shotstash_share_<slug>` cookie set by
   // `POST /s/<slug>/unlock`; media URLs in the payload are signed.
   const link = await findLiveShare({ slug });
   const unlocked = link ? shareUnlocked(await cookies(), link) : false;
 
-  const resolution = await resolveShare(slug, { sectionId, unlocked, signer: shareSigner });
+  let resolution = await resolveShare(slug, { sectionId, unlocked, signer: shareSigner });
+  // A stale or trashed `?section=` inside a live share: ignore it and show
+  // the share itself instead of answering 404 for the whole link.
+  if (sectionId && resolution.state === "gone") {
+    const whole = await resolveShare(slug, { unlocked, signer: shareSigner });
+    if (whole.state !== "gone") {
+      resolution = whole;
+      sectionId = null;
+    }
+  }
 
   // Story 4.5: `prisma.shareLink.findUnique({ where: { slug } })` null →
   // 404 lewat `not-found.tsx`, bukan 200 dengan tampilan yang sama.
-  if (resolution.state === "not-found") notFound();
+  // Story 2.8: a trashed or deleted target answers 404 like a revoked link;
+  // the page never says whether the item still exists.
+  if (resolution.state === "not-found" || resolution.state === "gone") notFound();
   // One view per successful page render (media requests are not counted).
   if (resolution.state === "ok") await recordShareView(slug);
 

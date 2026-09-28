@@ -13,8 +13,10 @@
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'crypto';
 import prisma from '@/lib/prisma';
 import { hashPassword, MIN_PASSWORD_LENGTH } from './auth.service';
+import { PASSWORD_TOO_LONG_MESSAGE, passwordProblem } from '@/lib/passwordRule';
 import { isEmailConfigured, maskEmail, sendEmail } from './email.service';
 import { renderPasswordResetEmail } from '@/emails/PasswordResetEmail';
+import { passwordResetLimit } from '@/lib/rateLimit';
 
 // ============================================
 // Aturan (lihat matriks di spec)
@@ -34,8 +36,6 @@ export const DAY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const CANCELLED_AT = new Date(0);
 export const RESET_TOKEN_BYTES = 32;
 export const RESET_TOKEN_TTL_MS = 10 * 60 * 1000;
-export const MAX_REQUESTS_PER_IP = 10;
-export const IP_WINDOW_MS = 60 * 60 * 1000;
 
 export const PASSWORD_RESET_MESSAGES = {
   requested: 'Jika email terdaftar, kode sudah dikirim. Cek kotak masuk (dan folder spam) email tersebut.',
@@ -48,6 +48,7 @@ export const PASSWORD_RESET_MESSAGES = {
   invalidCode: 'Kode salah atau kedaluwarsa',
   tokenInvalid: 'Sesi reset berakhir, ulangi dari awal',
   passwordTooShort: `Password minimal ${MIN_PASSWORD_LENGTH} karakter`,
+  passwordTooLong: PASSWORD_TOO_LONG_MESSAGE,
   passwordMismatch: 'Konfirmasi password tidak sama',
 } as const;
 
@@ -59,6 +60,7 @@ export type PasswordResetErrorCode =
   | 'CODE_LOCKED'
   | 'TOKEN_INVALID'
   | 'PASSWORD_TOO_SHORT'
+  | 'PASSWORD_TOO_LONG'
   | 'PASSWORD_MISMATCH';
 
 /** Error yang pesannya aman ditampilkan apa adanya ke user (Bahasa Indonesia). */
@@ -149,29 +151,9 @@ function appUrl() {
   return (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3005').replace(/\/+$/, '');
 }
 
-// ---- Limit per IP (in-memory; valid selama app berjalan sebagai satu proses) ----
-const ipHits = new Map<string, number[]>();
-
-function takeIpSlot(ip: string | undefined, now: number): boolean {
-  const key = ip || 'unknown';
-  const since = now - IP_WINDOW_MS;
-  const hits = (ipHits.get(key) ?? []).filter((t) => t > since);
-  if (hits.length >= MAX_REQUESTS_PER_IP) {
-    ipHits.set(key, hits);
-    return false;
-  }
-  hits.push(now);
-  ipHits.set(key, hits);
-  if (ipHits.size > 5000) {
-    for (const [k, v] of ipHits) if (!v.some((t) => t > since)) ipHits.delete(k);
-  }
-  return true;
-}
-
-/** Hanya untuk test: kosongkan limit per IP. */
-export function resetIpLimiter() {
-  ipHits.clear();
-}
+// Request throttle: the central sliding-window limiter (Story 2.7), 5 per hour
+// per IP and per email. The per-email DB limits below (cooldown, 3 per
+// 15 min, 10 per day) stay: they silently skip sending.
 
 // ---- Antrian kerja di belakang, diserialkan per email (cegah balapan cooldown/limit) ----
 const pendingWork = new Map<string, Promise<void>>();
@@ -204,10 +186,11 @@ export async function waitForPendingResetWork() {
  * fitur belum aktif, format email jelas salah, atau limit per IP — ketiganya tidak bergantung akun.
  * Email hanya dikirim bila user ada, aktif, bukan REJECTED, dan belum kena cooldown/limit per email.
  */
-export function requestReset(email: string, meta: { ip?: string } = {}): void {
+export async function requestReset(email: string, meta: { ip?: string } = {}): Promise<void> {
   assertAvailable();
   const normalized = normalizeEmailInput(email);
-  if (!takeIpSlot(meta.ip, Date.now())) {
+  // Same answer whether or not the email is registered.
+  if ((await passwordResetLimit(meta.ip, normalized)) !== null) {
     throw new PasswordResetError('RATE_LIMITED', PASSWORD_RESET_MESSAGES.rateLimited);
   }
   // Sengaja tidak ditunggu: waktu respons sama untuk semua kasus.
@@ -348,8 +331,12 @@ export async function verifyCode(email: string, codeInput: string): Promise<{ re
 // ============================================
 
 export function validateNewPassword(newPassword: string, confirmPassword: string) {
-  if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD_LENGTH) {
+  const problem = passwordProblem(newPassword);
+  if (problem === 'PASSWORD_TOO_SHORT') {
     throw new PasswordResetError('PASSWORD_TOO_SHORT', PASSWORD_RESET_MESSAGES.passwordTooShort);
+  }
+  if (problem === 'PASSWORD_TOO_LONG') {
+    throw new PasswordResetError('PASSWORD_TOO_LONG', PASSWORD_RESET_MESSAGES.passwordTooLong);
   }
   if (newPassword !== confirmPassword) {
     throw new PasswordResetError('PASSWORD_MISMATCH', PASSWORD_RESET_MESSAGES.passwordMismatch);

@@ -1,7 +1,9 @@
 // Google Sign-In Service
 import { OAuth2Client } from 'google-auth-library';
 import prisma from '@/lib/prisma';
+import { GraphQLError } from 'graphql';
 import { createSession } from './auth.service';
+import { googleEmailDecision } from '@/lib/googleEmail';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
@@ -12,6 +14,15 @@ export async function googleAuth(idToken: string) {
 
   const ticket = await googleClient.verifyIdToken({ idToken, audience: ALLOWED_AUDIENCES });
   const payload = ticket.getPayload();
+  // Story 2.5: an email the provider has not verified never links to (or
+  // creates) an account, otherwise anyone could claim an existing address.
+  const decision = googleEmailDecision(payload);
+  if (!decision.ok) {
+    if (decision.code === 'INVALID_TOKEN') throw new Error('Invalid Google token');
+    throw new GraphQLError('Google has not verified this email address', {
+      extensions: { code: 'EMAIL_NOT_VERIFIED' },
+    });
+  }
   if (!payload?.email) throw new Error('Invalid Google token');
 
   let user = await prisma.user.findUnique({ where: { email: payload.email } });
