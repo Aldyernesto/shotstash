@@ -27,3 +27,14 @@ test('wordmark width and height match brand.logo', () => {
 test('favicon src/app/icon.svg is the brand icon', () => {
   assert.deepEqual(readFileSync(path.join(ROOT, 'src', 'app', 'icon.svg')), readFileSync(pub(brand.icon)));
 });
+
+test('the mark in every brand SVG uses brand.mark', () => {
+  const ogSvg = brand.ogImage.url.replace(/\.png$/, '.svg');
+  for (const p of [brand.icon, brand.logo.onDark, brand.logo.onLight, ogSvg]) {
+    const svg = readFileSync(pub(p), 'utf8');
+    // The mark is the first rounded rect of the 512 grid: <rect width="512" height="512" rx=... fill=...>.
+    const m = svg.match(/<rect width="512" height="512" rx="[\d.]+" fill="(#[0-9a-f]{6})"/i);
+    assert.ok(m, `no mark rect in public${p}`);
+    assert.equal(m[1].toLowerCase(), brand.mark, p);
+  }
+});

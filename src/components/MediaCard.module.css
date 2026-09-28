@@ -13,14 +13,14 @@
 
 .card:hover {
   transform: scale(1.03) translateY(-4px);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6), 0 0 15px rgba(239, 231, 73, 0.1);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6), 0 0 15px var(--app-spine-accent-08);
   z-index: 10;
-  border-color: rgba(239, 231, 73, 0.3);
+  border-color: var(--app-spine-accent-35);
 }
 
 .selected {
   border-color: var(--color-primary) !important;
-  box-shadow: 0 0 0 2px var(--color-primary), 0 8px 24px rgba(239, 231, 73, 0.2) !important;
+  box-shadow: 0 0 0 2px var(--color-primary), 0 8px 24px var(--app-spine-accent-20) !important;
 }
 
 .thumbnail {
@@ -175,7 +175,7 @@
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--color-primary-container);
+  color: var(--app-accent);
 }
 
 .date {

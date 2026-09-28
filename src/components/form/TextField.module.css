@@ -36,8 +36,8 @@
 }
 
 /* SATU penanda fokus saja: cincin .spine-focus-ring. Border kolom sengaja
-   TIDAK ikut berubah warna — dua garis sewarna yang bertumpuk (border kuning
-   + cincin kuning) terbaca sebagai outline ganda. Aturan "focus-ring tunggal"
+   does not change color: two stacked lines of the same color (accent border
+   + ring) read as a double outline. Aturan "focus-ring tunggal"
    dari Story 1.7. */
 .input:focus-visible {
   border-color: var(--app-spine-input-border);

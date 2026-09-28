@@ -26,6 +26,8 @@ export function renderBrandBlock(): string {
     `  --brand-name: ${cssString(brand.productName)};`,
     `  --brand-accent: ${brand.accent};`,
     `  --brand-accent-edge: ${brand.accentEdge};`,
+    `  --brand-on-accent: ${brand.onAccent};`,
+    `  --brand-mark: ${brand.mark};`,
     `  --brand-theme-color: ${brand.themeColor};`,
     `  --brand-logo-on-dark: url(${cssString(brand.logo.onDark)});`,
     `  --brand-logo-on-light: url(${cssString(brand.logo.onLight)});`,

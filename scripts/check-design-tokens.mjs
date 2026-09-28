@@ -12,8 +12,10 @@
  *      that switches value under html[data-theme="light"].
  *   2. The value is exactly the DESIGN.md value (lowercase, no spaces).
  *   3. No --app-spine-* property exists that DESIGN.md does not know.
+ *   4. UNDECLARED: every var(--app-spine-<name>) reference in the .css, .ts
+ *      and .tsx files under src/ names a property that globals.css declares.
  */
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -64,6 +66,18 @@ for (const name of installed.keys()) {
 }
 for (const base of FOLDED) {
   if (installed.has(`${base}-light`)) problems.push(`DUPLICATE --app-spine-${base}-light should be folded into --app-spine-${base}`);
+}
+
+const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+  (e.isDirectory() ? walk(resolve(dir, e.name)) : [resolve(dir, e.name)]));
+for (const file of walk(resolve(root, 'src')).filter((p) => /\.(css|ts|tsx)$/.test(p))) {
+  const text = readFileSync(file, 'utf8');
+  for (const m of text.matchAll(/var\(\s*--app-spine-([a-z0-9-]+)/gi)) {
+    if (installed.has(m[1])) continue;
+    const line = text.slice(0, m.index).split('\n').length;
+    const rel = file.slice(root.length + 1).replaceAll('\\', '/');
+    problems.push(`UNDECLARED --app-spine-${m[1]} used in ${rel}:${line} is not declared in globals.css`);
+  }
 }
 
 const checked = spine.size;

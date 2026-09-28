@@ -1,9 +1,8 @@
 /* Story 1.26: code-input enam kotak (AC epics.md 1.26; mock
    key-forgot-password.html .code). Kotak 56px, radius input HP 14px,
-   surface-2, border input-border, huruf display-code 22px; fokus border
-   kuning (terang: ink) + cincin fokus spine. Caret native penuh — tanpa
-   caretColor kustom (kontrak text-field, review G1: kuning tak terbaca
-   di permukaan terang). */
+   surface-2, border input-border, huruf display-code 22px; focus = the
+   spine focus ring only (the box border does not change). Native caret, no
+   custom caretColor (text-field contract, review G1). */
 
 .wrap {
   display: flex;

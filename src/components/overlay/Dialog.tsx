@@ -240,7 +240,7 @@ export type ConfirmDialogProps = {
   lead?: React.ReactNode;
   preview?: DialogPreview;
   /**
-   * `recoverable` = "Move to Trash" (30 hari), "Restore" → tombol KUNING.
+   * `recoverable` = "Move to Trash" (30 hari), "Restore" -> accent button.
    * `permanent`   = "Delete Forever" → `button-danger.solid`.
    * Aturan ini milik Story 1.14; di sini hanya ditetapkan KAPAN dipakai.
    */
@@ -319,7 +319,7 @@ export function ConfirmDialog({
               )}
             </ButtonDanger>
           ) : (
-            <PillButton variant="yellow" {...confirmProps}>
+            <PillButton variant="accent" {...confirmProps}>
               {busy ? busyLabel : (
                 <>
                   {icon}

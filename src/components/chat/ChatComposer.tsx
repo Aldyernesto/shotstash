@@ -9,7 +9,7 @@
  * TIDAK mengoper `mentions` dan dropdown-nya tidak pernah dirender.
  *
  * Kontrak:
- *  - tombol kirim abu saat kosong (`aria-disabled="true"`), kuning saat
+ *  - tombol kirim abu saat kosong (`aria-disabled="true"`), accent saat
  *    ada isi, spinner saat mengirim (`aria-busy="true"`);
  *  - urutan Tab mengikuti urutan baca: lampiran → input → kirim;
  *  - Enter mengirim, KECUALI saat dropdown mention terbuka — di sana

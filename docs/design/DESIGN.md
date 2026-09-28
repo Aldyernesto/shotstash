@@ -1,7 +1,7 @@
 ---
 name: Shotstash
 status: stub
-updated: '2026-09-27'
+updated: '2026-09-28'
 description: Design spine for Shotstash, a self-hosted media cloud for creators. Dark theme is the default, light theme is secondary; the hero stage and card objects stay dark in both themes.
 colors:
   # Theme rule: a base name is the DARK theme value (default); the -light suffix is the
@@ -30,18 +30,20 @@ colors:
   meta-light: '#6d6a60'
   placeholder: '#8d8b83'
   placeholder-light: '#6d6a60'
-  accent-light: '#8a6508'
-  # == Brand (same in both themes) ==
-  yellow: '#efe749'
-  yellow-edge: '#b9b22c'
-  gold: '#d4a83c'
+  # == Accent (brand blue, same in both themes) ==
+  accent: '#3563f2'
+  accent-edge: '#2446c7'
+  accent-2: '#8aa5ff'
+  accent-text-light: '#2a4fd6'
+  on-accent: '#ffffff'
   ink: '#141310'
   paper: '#ffffff'
-  yellow-08: '#efe74914'
-  yellow-14: '#efe74924'
-  yellow-35: '#efe74959'
-  yellow-45: '#efe74973'
-  yellow-55: '#efe7498c'
+  accent-08: '#3563f214'
+  accent-14: '#3563f224'
+  accent-20: '#3563f233'
+  accent-35: '#3563f259'
+  accent-45: '#3563f273'
+  accent-55: '#3563f28c'
   # == Invariant: hero stage, card objects, scrims, white overlays (never switch theme) ==
   stage-1: '#34322d'
   stage-mid: '#26251f'
@@ -71,7 +73,6 @@ colors:
   white-14: '#ffffff24'
   white-16: '#ffffff29'
   white-25: '#ffffff40'
-  yellow-20: '#efe74933'
   # == Status: fill values are theme-independent; *-text, *-bg, *-border follow theme ==
   danger: '#e5484d'
   danger-text: '#f07a7e'
@@ -87,18 +88,20 @@ colors:
   ok-bg-light: '#3fb68b12'
   ok-border: '#3fb68b59'
   ok-border-light: '#3fb68b66'
-  warning: '#d4a83c'
-  warning-text: '#d4a83c'
+  warning: '#dca43b'
+  warning-text: '#dca43b'
   warning-text-light: '#7a5905'
-  warning-bg: '#d4a83c1a'
-  warning-bg-light: '#d4a83c14'
-  warning-border: '#d4a83c59'
-  warning-border-light: '#d4a83c66'
+  warning-bg: '#dca43b1a'
+  warning-bg-light: '#dca43b14'
+  warning-border: '#dca43b59'
+  warning-border-light: '#dca43b66'
 brand:
   # Mirrors src/lib/brand.ts. The brand module is the source of truth; keep these in sync.
   productName: 'Shotstash'
-  accent: '#efe749'
-  accentEdge: '#b9b22c'
+  mark: '#3d6cff'
+  accent: '#3563f2'
+  accentEdge: '#2446c7'
+  onAccent: '#ffffff'
   themeColor: '#141310'
   logoOnDark: '/brand/logo-on-dark.svg'
   logoOnLight: '/brand/logo-on-light.svg'
@@ -121,7 +124,35 @@ installed in `src/app/globals.css` as `--app-spine-<name>`; `npm run check:token
   `html[data-theme="light"]`.
 - Invariant groups (hero stage, card objects, scrims, white overlays, status fills) never
   switch theme.
-- Text on the yellow accent is always `ink`.
+- Text and icons on the `accent` fill are always `on-accent` (white).
+
+### Accent family
+
+Shotstash's identity is blue (rebrand of 2026-09-28; the product started from a yellow palette).
+The logo keeps `#3d6cff` exactly; the UI accent that carries white text is a slightly deeper blue.
+Contrast ratios are WCAG 2.x and are checked by `scripts/accent-contrast.test.mjs` (part of `npm test`).
+
+| Token | Value | Role | Contrast |
+|---|---|---|---|
+| `accent` | `#3563f2` | Fills: primary buttons, pills, stickers, badges, selection, active nav | white text 4.98:1; as a UI boundary 3.85 / 3.47 / 3.09 on dark bg / surface / surface-2, 4.52 / 4.98 / 4.29 on light |
+| `accent-edge` | `#2446c7` | The darker lip under stickers and marks; never a hover fill (it drops to 2.54:1 on the dark bg) | 6.87 / 7.57 / 6.51 on light bg / surface / surface-2 |
+| `accent-2` | `#8aa5ff` | Accent text and icons on dark surfaces (dark chrome, hero stage, card objects, label pills); dark focus ring; every accent boundary on the invariant dark layers (photo selection frame, drop outlines, video progress, media-layer focus rings) | 8.14 on bg, 6.52 on surface-2, 5.43 on stage-1 |
+| `accent-text-light` | `#2a4fd6` | Accent text and icons on light surfaces (light theme only) | 5.98 on bg, 6.59 on surface, 5.67 on surface-2 |
+| `on-accent` | `#ffffff` | Text and icons on `accent` | 4.98 on `accent`, 7.57 on `accent-edge`, 6.59 on `accent-text-light` |
+| `accent-08` ... `accent-55` | `accent` at 8 to 55 % alpha | Glow, shadows, empty slots | decorative |
+
+- Never use `accent-2` on a light surface or `accent-text-light` on a dark one; theme-aware text
+  should use `--app-accent` (dark: `accent-2`, light: `accent-text-light`).
+- The light theme focus ring stays `ink`; the dark theme ring is `accent-2`.
+- `accent` itself is only 2.57:1 on `stage-1`, so it is never a boundary on the hero stage,
+  card objects or photos; those use `accent-2`.
+- Active and selected states use the same accent in both themes (filled accent pill with white
+  text, accent frames and dots). The state is never color only: a filled shape, weight 700/800,
+  a check or a radio dot always goes with it.
+- Status colors keep their meaning: `warning` is amber, not the brand. In the rebrand it moved to
+  `#dca43b`, because its previous value was also the retired gold brand token; the new value
+  keeps the same amber role (6.90:1 as text on dark surface-2) without reusing a brand hex.
+  The warning pairs are part of the contrast test.
 
 ## Brand tokens
 
@@ -132,13 +163,21 @@ Product identity lives in one module, `src/lib/brand.ts` (AD-11). The generated 
 | Token | Value | CSS custom property |
 |---|---|---|
 | Product name | Shotstash | `--brand-name` |
-| Accent | `#efe749` (same as `yellow`) | `--brand-accent` |
-| Accent edge | `#b9b22c` (same as `yellow-edge`) | `--brand-accent-edge` |
+| Logo blue | `#3d6cff` (the mark; brand assets only) | `--brand-mark` |
+| Accent | `#3563f2` (same as `accent`) | `--brand-accent` |
+| Accent edge | `#2446c7` (same as `accent-edge`) | `--brand-accent-edge` |
+| On accent | `#ffffff` (same as `on-accent`) | `--brand-on-accent` |
 | Theme color | `#141310` (same as `ink`) | `--brand-theme-color` |
-| Wordmark on dark | `/brand/logo-on-dark.svg` | `--brand-logo-on-dark` |
-| Wordmark on light | `/brand/logo-on-light.svg` | `--brand-logo-on-light` |
+| Logo on dark (mark + white wordmark) | `/brand/logo-on-dark.svg` | `--brand-logo-on-dark` |
+| Logo on light (mark + ink wordmark) | `/brand/logo-on-light.svg` | `--brand-logo-on-light` |
 | Icon | `/brand/icon.svg` | `--brand-icon` |
 
-The wordmark is Poppins Black (SIL Open Font License) outlined to paths, so the SVG renders
-without the web font. To rebrand, change `brand.ts`, replace the files in `public/brand/` and the
-favicon `src/app/icon.svg` (a copy of `public/brand/icon.svg`), and run `npm run brand:css`.
+The mark is a `#3d6cff` rounded square with three white bars at opacity 1, 0.7 and 0.4. The
+wordmark is Poppins Black (SIL Open Font License) outlined to paths, so the SVG renders without the
+web font. The logo files are 1314.2 x 250: a 180 px mark, a 36 px gap, then the wordmark.
+
+To rebrand: edit `src/lib/brand.ts` (including `mark`), replace the SVG sources in `public/brand/`
+(`icon.svg`, `logo-on-dark.svg`, `logo-on-light.svg`, `og.svg`), run `npm run brand:assets`
+(copies the favicon to `src/app/icon.svg` and renders `logo.png`, `og.png` and
+`src/app/apple-icon.png`), then `npm run brand:css`. `scripts/brand-assets.test.mjs` checks that
+the mark fill in every SVG equals `brand.mark`.

@@ -43,7 +43,7 @@ export type FileViewerProps = {
   projectTitle?: string | null;
   sectionName?: string | null;
   onShare?: (file: ViewerFile) => void;
-  /** Unduhan biasa (pill kuning bawaan viewer). */
+  /** Regular download (the viewer accent pill). */
   onDownload?: (file: ViewerFile) => void;
   /**
    * Slot aksi unduh. Story 3.7 menaruh `progress-pill` Agen di sini
@@ -323,7 +323,7 @@ export default function FileViewer({
     (onDownload ? (
       <button
         type="button"
-        className={`${styles.pill} ${styles.pillYellow}`}
+        className={`${styles.pill} ${styles.pillAccent}`}
         onClick={() => onDownload(file)}
       >
         {DownloadIcon}

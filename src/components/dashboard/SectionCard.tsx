@@ -206,7 +206,7 @@ export default function SectionCard({
 
       {showUploadCta ? (
         <PillButton
-          variant="yellow"
+          variant="accent"
           className={styles.uploadCta}
           onClick={(e) => {
             e.stopPropagation();

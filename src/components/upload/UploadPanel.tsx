@@ -153,7 +153,7 @@ export default function UploadPanel() {
               Cancel
             </PillButton>
             <PillButton
-              variant="yellow"
+              variant="accent"
               busy={q.running}
               busyLabel="Mengupload..."
               aria-disabled={(!q.tasks.length && !finished) || undefined}

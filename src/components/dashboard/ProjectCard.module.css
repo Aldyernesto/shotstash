@@ -131,7 +131,7 @@
   background: var(--app-spine-rep-placeholder, #222222);
 }
 
-/* penanda video di dalam kipas — pill label-pill + segitiga kuning */
+/* video marker inside the fan: label-pill + accent-2 triangle */
 .repVideo {
   position: absolute;
   left: calc(6 * var(--uf));
@@ -143,7 +143,7 @@
   padding: 0 calc(7 * var(--uf));
   border-radius: var(--spine-radius-full);
   background: var(--app-spine-label-pill, #0b0b0a);
-  color: var(--app-spine-yellow, #efe749);
+  color: var(--app-spine-accent-2);
   /* {typography.tag-mobile} dari kelas .spine-tag-mobile; hanya
      ukurannya yang ikut fan-scale. */
   font-size: calc(9 * var(--uf));
@@ -195,8 +195,8 @@
   top: 54%;
   padding: calc(4 * var(--uf)) calc(6 * var(--uf));
   border-radius: var(--spine-radius-sticker);
-  background: var(--app-spine-yellow, #efe749);
-  color: var(--app-spine-ink, #141310);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   font-size: calc(9 * var(--uf));
   transform: rotate(7deg);
   box-shadow: 0 8px 18px -6px rgba(0, 0, 0, 0.7);
@@ -237,7 +237,7 @@
 
 .link {
   display: block;
-  color: var(--app-spine-yellow, #efe749);
+  color: var(--app-spine-accent-2);
   text-decoration: none;
   text-align: center;
   /* {typography.display-label} dari kelas .spine-display-label. */
@@ -296,8 +296,8 @@
   gap: calc(3 * var(--u));
   padding: calc(8 * var(--u)) calc(12 * var(--u));
   border-radius: var(--spine-radius-full);
-  background: var(--app-spine-yellow, #efe749);
-  color: var(--app-spine-ink, #141310);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   /* {typography.display-sticker} dari kelas .spine-display-sticker. */
   font-size: calc(13 * var(--u));
   white-space: nowrap;
@@ -434,12 +434,12 @@
   width: calc(108 * var(--u));
   height: calc(118 * var(--u));
   margin-left: calc(-54 * var(--u));
-  border: calc(2 * var(--u)) solid var(--app-spine-yellow-35, #efe74959);
+  border: calc(2 * var(--u)) solid var(--app-spine-accent-35);
   border-bottom: 0;
   border-radius: calc(16 * var(--u)) calc(16 * var(--u)) 0 0;
   background: repeating-linear-gradient(
     -45deg,
-    var(--app-spine-yellow-08, #efe74914) 0 10px,
+    var(--app-spine-accent-08) 0 10px,
     transparent 10px 20px
   );
 }

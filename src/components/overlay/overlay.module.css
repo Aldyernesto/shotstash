@@ -393,8 +393,8 @@
   }
 }
 
-/* Ikon garis 15px emas di depan judul (`.rcard b svg` di mock). Tema
-   terang memakai accent-light — emas di atas kertas gagal kontras. */
+/* 15px line icon before the title (`.rcard b svg` in the mock): accent-2
+   on dark, accent-text-light on light (accent-2 fails on paper). */
 .radioIcon {
   flex: none;
   display: grid;
@@ -402,11 +402,11 @@
   width: 15px;
   height: 15px;
   margin-top: 3px;
-  color: var(--app-spine-gold);
+  color: var(--app-spine-accent-2);
 }
 
 :global(html[data-theme="light"]) .radioIcon {
-  color: var(--app-spine-accent-light);
+  color: var(--app-spine-accent-text-light);
 }
 
 .radioIcon svg {
@@ -431,12 +431,12 @@
 /* Bingkai terpilih = border + cincin inset 1px (tebal 2px tanpa
    menggeser tata letak), mengikuti mock `.rcard.on`. */
 .radioCard[aria-checked="true"] {
-  border-color: var(--app-spine-yellow);
-  box-shadow: inset 0 0 0 1px var(--app-spine-yellow);
+  border-color: var(--app-spine-accent);
+  box-shadow: inset 0 0 0 1px var(--app-spine-accent);
 }
 
 .radioCard[aria-checked="true"] .radioDot {
-  border-color: var(--app-spine-yellow);
+  border-color: var(--app-spine-accent);
 }
 
 .radioCard[aria-checked="true"] .radioDot::after {
@@ -448,22 +448,11 @@
   height: 9px;
   translate: -50% -50%;
   border-radius: 50%;
-  background: var(--app-spine-yellow);
+  background: var(--app-spine-accent);
 }
 
-/* Tema terang: kuning di atas kertas tidak terbaca → ink. */
-:global(html[data-theme="light"]) .radioCard[aria-checked="true"],
-:global(html[data-theme="light"]) .radioCard[aria-checked="true"] .radioDot {
-  border-color: var(--app-spine-ink);
-}
-
-:global(html[data-theme="light"]) .radioCard[aria-checked="true"] {
-  box-shadow: inset 0 0 0 1px var(--app-spine-ink);
-}
-
-:global(html[data-theme="light"]) .radioCard[aria-checked="true"] .radioDot::after {
-  background: var(--app-spine-ink);
-}
+/* The selected card is marked by the filled radio dot (shape), not only by
+   the accent frame; the same accent works on both themes (>= 3:1). */
 
 .radioText {
   min-width: 0;

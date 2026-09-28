@@ -16,22 +16,29 @@ export const brand = {
   /** Sender used by transactional email when EMAIL_FROM is unset. */
   emailFrom: 'no-reply@example.com',
   logo: {
-    /** Wordmark for dark backgrounds (also used on the light-theme slate panel). */
+    /** Mark + wordmark for dark backgrounds (white wordmark). */
     onDark: '/brand/logo-on-dark.svg',
-    /** Wordmark for light backgrounds. */
+    /** Mark + wordmark for light backgrounds (ink wordmark). */
     onLight: '/brand/logo-on-light.svg',
     /** Intrinsic aspect ratio (width / height) of both wordmark files. */
-    width: 1098.2,
+    width: 1314.2,
     height: 250,
   },
   icon: '/brand/icon.svg',
   ogImage: { url: '/brand/og.png', width: 1200, height: 630 },
   /** Square PNG (128px, shown at 64px) used by email templates. */
   emailLogo: '/brand/logo.png',
-  /** Brand accent: same value as the design spine token `yellow`. */
-  accent: '#efe749',
-  /** Accent edge: same value as the design spine token `yellow-edge`. */
-  accentEdge: '#b9b22c',
+  /** Logo blue: the rounded square of the three-bar mark. Used by the brand assets only. */
+  mark: '#3d6cff',
+  /**
+   * Brand accent (UI fill): same value as the design spine token `accent`. A slightly
+   * deeper blue than the mark so white text on it reaches 4.98:1 (WCAG AA).
+   */
+  accent: '#3563f2',
+  /** Accent edge: same value as the design spine token `accent-edge`. */
+  accentEdge: '#2446c7',
+  /** Text and icons on the accent fill: same value as the design spine token `on-accent`. */
+  onAccent: '#ffffff',
   /** Browser/PWA chrome color (spine token `ink`). */
   themeColor: '#141310',
 } as const;

@@ -6,8 +6,8 @@ import styles from './AuthTabs.module.css';
 // Story 1.21: auth-tabs — kapsul dua tab yang mengisi slot-tabs kartu auth.
 // Kontrak aksesibilitas: role="tablist" + aria-selected pada tab aktif,
 // panah kiri/kanan memindahkan tab (roving tabindex — hanya tab aktif yang
-// bisa difokus). Penanda aktif tidak hanya warna: pill kuning berat 800,
-// plus outline ink di tema terang (lihat modul css).
+// bisa difokus). The active tab is not marked by color only: a filled accent
+// pill plus weight 800 in both themes (see the css module).
 export default function AuthTabs<T extends string>({
   tabs,
   value,

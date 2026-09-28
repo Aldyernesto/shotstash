@@ -155,11 +155,11 @@
 .kindChip svg {
   width: 13px;
   height: 13px;
-  color: var(--app-spine-gold);
+  color: var(--app-spine-accent-2);
 }
 
 :global(html[data-theme="light"]) .kindChip svg {
-  color: var(--app-spine-accent-light);
+  color: var(--app-spine-accent-text-light);
 }
 
 .close {
@@ -229,16 +229,16 @@
   flex-wrap: wrap;
 }
 
-/* Stiker nomor tetap BLOK KUNING berteks ink di KEDUA tema — ia isian,
-   bukan teks kuning (aturan kontras DESIGN.md). */
+/* The number sticker stays an accent BLOCK with white text in BOTH themes:
+   it is a fill, not accent text (DESIGN.md contrast rule). */
 .numberSticker {
   display: inline-flex;
   align-items: baseline;
   gap: 3px;
   padding: 5px 8px;
   border-radius: var(--spine-radius-sticker);
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   transform: rotate(-6deg);
   white-space: nowrap;
 }
@@ -252,5 +252,5 @@
 }
 
 /* Fokus DI DALAM panel memakai {colors.ink} saat tema terang; fokus di
-   lapisan gelap di sekelilingnya tetap kuning. Nilai itu sudah dipegang
+   lapisan gelap di sekelilingnya tetap accent-2. Nilai itu sudah dipegang
    --spine-ring-color, jadi `.spine-focus-ring` cukup. */

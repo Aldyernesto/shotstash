@@ -13,29 +13,23 @@
   display: block;
   height: 100%;
   width: auto;
-  aspect-ratio: var(--brand-logo-aspect, 1098.2 / 250); /* intrinsic ratio of the wordmark asset */
+  aspect-ratio: var(--brand-logo-aspect, 1314.2 / 250); /* intrinsic ratio of the logo lockup (mark + wordmark) */
 }
 
-/* Light theme: the yellow accent on the light page background is about
-   1.1:1 and never readable. The logo color does not change; instead the
-   wordmark sits on a dark "slate" panel with the same gradient, radius and
-   top highlight as the hero stage below it. */
-:global([data-theme='light']) .logo {
-  box-sizing: content-box;
-  padding: 10px 18px;
-  border-radius: var(--spine-radius-lg); /* a board, not a pill */
-  background: radial-gradient(
-    80% 60% at 50% 34%,
-    var(--app-spine-stage-1) 0%,
-    var(--app-spine-stage-mid) 52%,
-    var(--app-spine-stage-2) 100%
-  );
-  box-shadow:
-    inset 0 1px 0 var(--app-spine-white-12),
-    0 8px 20px -8px rgba(20, 19, 16, .45);
+/* Theme switch: the white wordmark on dark, the ink wordmark on light. */
+.logo .onLight {
+  display: none;
 }
 
-/* Heights: 40 app header / 50 desktop login / 42 phone login. */
+:global([data-theme='light']) .logo .onDark {
+  display: none;
+}
+
+:global([data-theme='light']) .logo .onLight {
+  display: block;
+}
+
+/* Heights: 40 app header / 50 desktop login / 42 phone login and share footer / 30 phone app header. */
 .app {
   height: 40px;
 }
@@ -44,9 +38,16 @@
   height: 50px;
 }
 
-/* App header on phones. */
+/* Share page footer (and other small placements). */
 .mobile {
   height: 42px;
+}
+
+/* Phone app header only. The lockup (mark + wordmark) is wider than the old
+   wordmark, so it is 30px high (about 158px wide): logo, theme toggle and bell
+   with its badge then fit a 360px screen inside the gutter. */
+.appMobile {
+  height: 30px;
 }
 
 @media (max-width: 599px) {

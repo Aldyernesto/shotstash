@@ -164,7 +164,7 @@ export function ViewerInfo({ variant, file, projectTitle, sectionName, onClose }
           {section ? (
             <span className={styles.location}>
               {section.number ? (
-                /* Stiker nomor tetap blok kuning berteks ink di KEDUA tema. */
+                /* The number sticker stays an accent block with white text in BOTH themes. */
                 <span className={`spine-display-label ${styles.numberSticker}`}>
                   <span aria-hidden="true">NO</span>
                   <span className="spine-visually-hidden">Nomor</span> {section.number}

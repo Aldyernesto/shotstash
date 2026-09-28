@@ -109,25 +109,20 @@
   background: var(--app-spine-surface-2);
 }
 
-/* Item aktif: pill kuning + teks ink; di tema terang diberi outline ink
-   supaya status aktif tidak disampaikan lewat warna saja (AC 2.2). */
+/* Active item: filled accent pill with white text and weight 800 (the filled
+   shape and weight keep the state from being color only, AC 2.2). */
 .capsuleOn {
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
 }
 
-:global([data-theme="light"]) .capsuleOn {
-  outline: 1.5px solid var(--app-spine-ink);
-  outline-offset: -1.5px;
-}
-
-/* Titik emas 6px pada pipeline — aria-hidden di markup. */
-.goldDot {
+/* Accent dot 6px on the pipeline (aria-hidden in markup); theme-aware accent. */
+.accentDot {
   flex: none;
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--app-spine-gold);
+  background: var(--app-accent);
 }
 
 .right {
@@ -174,8 +169,8 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   font-size: 12px;
   font-weight: 900;
   overflow: hidden;
@@ -235,6 +230,9 @@
   display: flex;
   align-items: center;
   gap: var(--spine-label-gap);
+  /* The unread badge overhangs the bell by 8px; this keeps the badge 16px
+     from the screen edge instead of 4px. */
+  padding-right: 12px;
 }
 
 /* bottom-bar — menempel penuh di tepi bawah (bukan kapsul mengambang). */
@@ -303,28 +301,23 @@
   white-space: nowrap;
 }
 
-/* Slot aktif: pill kuning di belakang ikon, ikon ink, label 800; tema
-   terang ditambah outline 1.5px ink (status bukan warna saja, AC 2.3). */
+/* Active slot: accent pill behind a white icon, label weight 800 (the
+   weight keeps the state from being color only, AC 2.3). */
 /* HOTFIX isu #3: aturan `color: ink` di sini merambat ke .slotLabel yang
    tidak punya latar — di tema gelap labelnya jadi 1,08 : 1 (tak terbaca).
-   .slotActive .slotPill sudah mengatur ink untuk ikonnya; label ikut warna
+   .slotActive .slotPill sets the on-accent icon color; label ikut warna
    teks biasa. */
 .slotActive {
   color: var(--app-spine-text);
 }
 
 .slotActive .slotPill {
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
 }
 
 .slotActive .slotLabel {
   font-weight: 800;
-}
-
-:global([data-theme="light"]) .slotActive .slotPill {
-  outline: 1.5px solid var(--app-spine-ink);
-  outline-offset: -1.5px;
 }
 
 /* Placeholder sesi belum termuat — 4 slot kosong aria-hidden (markup). */
@@ -432,7 +425,7 @@
   padding: 8px 0 4px;
 }
 
-/* Baris sheet ≥48px — ikon garis 24px; baris aktif kuning/ink. */
+/* Sheet row >= 48px, 24px line icon; active row = accent fill + white text. */
 .sheetRow {
   display: flex;
   align-items: center;
@@ -462,18 +455,14 @@
 }
 
 .sheetRowActive {
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
 }
 
 .sheetRowActive svg {
-  color: var(--app-spine-ink);
+  color: var(--app-spine-on-accent);
 }
 
-:global([data-theme="light"]) .sheetRowActive {
-  outline: 1.5px solid var(--app-spine-ink);
-  outline-offset: -1.5px;
-}
 
 /* ≥900px frame HP hilang — pasangannya app-bar desktop. */
 @media (min-width: 900px) {

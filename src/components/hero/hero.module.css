@@ -28,7 +28,7 @@
   box-shadow: inset 0 1px 0 var(--app-spine-white-12);
 }
 
-/* Glow kuning (cahaya panggung). */
+/* Accent glow (stage light). */
 .stage::before {
   content: '';
   position: absolute;
@@ -108,17 +108,17 @@
   text-shadow: 0 6px 30px rgba(0, 0, 0, 0.45);
 }
 
-/* Stiker kuning "eksklusif" — tebal kertas yellow-edge + pop sekali. */
+/* Accent "exclusive" sticker: accent-edge paper lip + one pop. */
 .sticker {
   display: inline-block;
   margin: 6px 0 4px;
   padding: 0.04em 0.22em 0.02em;
   border-radius: 0.2em;
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   box-shadow:
-    0 0.08em 0 var(--app-spine-yellow-edge),
-    0 0.3em 0.6em -0.2em var(--app-spine-yellow-45);
+    0 0.08em 0 var(--app-spine-accent-edge),
+    0 0.3em 0.6em -0.2em var(--app-spine-accent-45);
   animation: stickerPop var(--spine-motion-sticker-pop);
 }
 

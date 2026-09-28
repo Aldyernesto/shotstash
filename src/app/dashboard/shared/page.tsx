@@ -108,7 +108,7 @@ const THUMB_VARIANT: Record<string, RepThumbVariant> = {
  * Placeholder `rep-thumb`: BENTUK-nya benar per tingkat (satu kartu untuk
  * file, tumpukan tiga untuk Section, saku berkipas untuk Project) dan
  * isinya `{colors.rep-placeholder}` karena tidak ada `thumbnailUrl`.
- * Sengaja BUKAN `empty` — slot hantu berarsir kuning berarti "belum ada
+ * Sengaja BUKAN `empty`: ghost slot with accent hatching means "belum ada
  * isi", bukan "thumbnail belum diambil". Data thumbnail per baris masuk
  * di FR40/Epic 4; story ini tidak menambah permintaan thumbnail apa pun.
  */

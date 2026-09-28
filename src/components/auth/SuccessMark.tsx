@@ -1,4 +1,4 @@
-// Story 1.27: success-mark — centang kuning 72px miring −6° untuk layar
+// Story 1.27: success-mark: accent tile with a white check, 72px, rotated −6° untuk layar
 // selesai (AC epics.md 1.27; mock key-forgot-password.html .done-mark).
 // TANPA animasi apa pun (tanpa stickerPop); ikon aria-hidden; selalu
 // didampingi judul + kalimat di pemakainya. Server-safe (tanpa 'use client').

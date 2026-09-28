@@ -74,7 +74,7 @@
   grid-template-columns: 44px minmax(0, 1fr) 150px 104px 128px 184px 84px;
 }
 
-/* Hover/fokus: bingkai input-border + nama bergaris bawah kuning.
+/* Hover/focus: input-border frame + accent underline under the name.
    Angkat `rep-thumb` diatur di RepThumb.module.css lewat [data-list-row]. */
 @media (hover: hover) {
   .row:hover {
@@ -84,7 +84,7 @@
   .row:hover .projectLabel {
     text-decoration: underline;
     text-decoration-thickness: 2px;
-    text-decoration-color: var(--app-spine-yellow, #efe749);
+    text-decoration-color: var(--app-spine-accent);
     text-underline-offset: 4px;
   }
 }
@@ -98,25 +98,19 @@
 .row:focus-within .projectLabel {
   text-decoration: underline;
   text-decoration-thickness: 2px;
-  text-decoration-color: var(--app-spine-yellow, #efe749);
+  text-decoration-color: var(--app-spine-accent);
   text-underline-offset: 4px;
-}
-:global(html[data-theme="light"]) .row:hover .rowTitle,
-:global(html[data-theme="light"]) .row:hover .projectLabel,
-:global(html[data-theme="light"]) .row:focus-within .rowTitle,
-:global(html[data-theme="light"]) .row:focus-within .projectLabel {
-  text-decoration-color: var(--app-spine-ink, #141310);
 }
 
 /* Terpilih: tint + bingkai; penanda utamanya tetap centang, bukan warna. */
 .selected {
-  background: var(--app-spine-yellow-08, #efe74914);
-  border-color: var(--app-spine-yellow-35, #efe74959);
+  background: var(--app-spine-accent-08);
+  border-color: var(--app-spine-accent-35);
 }
 :global(html[data-theme="light"]) .selected {
   background: var(--app-spine-surface-2);
-  border-color: var(--app-spine-ink, #141310);
-  box-shadow: inset 0 0 0 0.5px var(--app-spine-ink, #141310);
+  border-color: var(--app-spine-accent);
+  box-shadow: inset 0 0 0 0.5px var(--app-spine-accent);
 }
 
 /* ---------- satu kontrol pembuka, seluas baris ---------- */
@@ -200,7 +194,7 @@
   font-weight: 600;
 }
 
-/* Nama Project = pill hitam + teks kuning (invarian di dua tema). */
+/* Project name = black pill + accent-2 text (invariant in both themes). */
 .projectLabel {
   display: inline-flex;
   align-items: center;
@@ -210,7 +204,7 @@
   padding: 0 14px;
   border-radius: var(--spine-radius-full);
   background: var(--app-spine-label-pill, #0b0b0a);
-  color: var(--app-spine-yellow, #efe749);
+  color: var(--app-spine-accent-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -229,8 +223,8 @@
   gap: 3px;
   padding: 5px 8px;
   border-radius: 9px;
-  background: var(--app-spine-yellow, #efe749);
-  color: var(--app-spine-ink, #141310);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   font-size: 0.8125rem; /* 13px */
   transform: rotate(-6deg);
   box-shadow: 0 6px 14px -4px rgba(0, 0, 0, 0.6);
@@ -285,10 +279,10 @@
   flex: none;
   width: 13px;
   height: 13px;
-  color: var(--app-spine-gold, #d4a83c);
+  color: var(--app-spine-accent-2);
 }
 :global(html[data-theme="light"]) .typeChip svg {
-  color: var(--app-spine-accent-light, #8a6508);
+  color: var(--app-spine-accent-text-light);
 }
 .typeChip .playGlyph {
   width: 9px;
@@ -402,16 +396,13 @@
 
 /* ---------- Story 2.17: sorotan seret pada baris ---------- */
 .dropTarget {
-  outline: 2px dashed var(--app-spine-yellow, #efe749);
+  outline: 2px dashed var(--app-spine-accent);
   outline-offset: 3px;
   background-image: repeating-linear-gradient(
     -45deg,
-    var(--app-spine-yellow-08, #efe74914) 0 10px,
+    var(--app-spine-accent-08) 0 10px,
     transparent 10px 20px
   );
-}
-:global(html[data-theme="light"]) .dropTarget {
-  outline-color: var(--app-spine-ink, #141310);
 }
 .dragChip {
   position: absolute;
@@ -437,7 +428,7 @@
   flex: none;
   width: 16px;
   height: 16px;
-  color: var(--app-spine-yellow, #efe749);
+  color: var(--app-spine-accent-2);
 }
 
 /* ---------- Story 2.16: catatan keadaan ---------- */

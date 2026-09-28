@@ -4,7 +4,7 @@
  * Story 3.3 — ikon GARIS 18 px (22 px di sheet HP) untuk `context-menu`,
  * menggantikan ikon emoji 👁 ⚡ ⬇ 🔗 📦 📋 🗑 di `ContextMenu.tsx` lama.
  * Semua memakai `stroke="currentColor"` supaya varian merusak (danger)
- * dan varian aman (perisai emas) cukup mengganti `color`.
+ * dan varian aman (accent shield) cukup mengganti `color`.
  */
 
 import React from "react";
@@ -75,7 +75,7 @@ export const MenuIcon = {
       <path d="M10.4 10.3v6.8M13.6 10.3v6.8" />
     </svg>
   ),
-  /** Perisai "Versi aman (blur)" — emas di tema gelap, emas gelap di terang. */
+  /** "Versi aman (blur)" shield: accent-2 on dark, accent-text-light on light. */
   shield: (
     <svg {...base}>
       <path d="M12 3.2l7 2.6v5.4c0 4.3-2.9 8.1-7 9.6-4.1-1.5-7-5.3-7-9.6V5.8l7-2.6z" />

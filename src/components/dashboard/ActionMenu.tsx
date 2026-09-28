@@ -25,7 +25,7 @@ export type ActionMenuEntry =
       /** Keterangan kanan: "Permanen" / "30 hari". */
       hint?: string;
       danger?: boolean;
-      /** Item "Versi aman (blur)" — ikon perisai emas. */
+      /** "Versi aman (blur)" item: accent shield icon. */
       safe?: boolean;
       /**
        * Item TAUTAN (menu "Lainnya" nav-capsule desktop): dirender sebagai
@@ -33,9 +33,9 @@ export type ActionMenuEntry =
        * (buka di tab baru, salin alamat, Enter = pindah halaman).
        */
       href?: string;
-      /** Tujuan yang sedang aktif — `aria-current="page"` + pill kuning/ink. */
+      /** Tujuan yang sedang aktif: `aria-current="page"` + accent pill with white text. */
       current?: boolean;
-      /** Hiasan setelah label (titik emas worker) — pemanggil memberi aria-hidden. */
+      /** Hiasan setelah label (accent worker dot): pemanggil memberi aria-hidden. */
       trailing?: React.ReactNode;
       /** Wajib untuk item tombol; item tautan boleh tanpa (navigasi = aksinya). */
       onSelect?: () => void;

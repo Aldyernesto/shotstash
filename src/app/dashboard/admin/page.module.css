@@ -11,11 +11,11 @@
    Nilai dari mock `key-admin-panel.html` (desktop 1280 / HP 390):
      .phead h2  56px display, p 15px muted
      .panel     radius 28 (xl), surface + line, padding 28; HP 16
-     .panel.wait border yellow-35 (terang: ink)
+     .panel.wait border accent-35 (light: accent)
      .ph2 h3    27px display + `count-sticker` 15px/7px 12px
      .pgrid     2 kolom, gap 16; HP 1 kolom
      .pc        radius 22, surface-2 + line, padding 20; HP 16
-     .av        44px bulat kuning, teks ink 15px display
+     .av        44px round accent fill, white 15px display text
      .selp      40px pill surface + input-border; HP (.l) 48px
      .stats     4 kolom gap 16; HP 2 x 2
      .stat      radius 22, surface-2 + line, padding 20/22,
@@ -47,14 +47,14 @@
   background: var(--app-spine-surface);
 }
 
-/* Panel "Menunggu Persetujuan" berbingkai kuning; di tema terang kuning
-   di atas kertas terang tidak terbaca, jadi bingkainya menjadi ink. */
+/* "Waiting for approval" panel has an accent frame: a soft accent-35 on
+   dark, the full accent on light (accent-35 would vanish on paper). */
 .panelWait {
-  border-color: var(--app-spine-yellow-35);
+  border-color: var(--app-spine-accent-35);
 }
 
 :global(html[data-theme="light"]) .panelWait {
-  border-color: var(--app-spine-ink);
+  border-color: var(--app-spine-accent);
 }
 
 .panelHead {
@@ -73,7 +73,7 @@
   color: var(--app-spine-text);
 }
 
-/* count-sticker jumlah — pill hitam bernama kuning, seperti Kartu Project. */
+/* Count sticker: black pill with accent-2 text, like the Project card. */
 .countSticker {
   flex: none;
   display: inline-flex;
@@ -81,7 +81,7 @@
   padding: 7px 12px;
   border-radius: var(--spine-radius-full);
   background: var(--app-spine-label-pill);
-  color: var(--app-spine-yellow);
+  color: var(--app-spine-accent-2);
   font-size: 0.9375rem;
 }
 
@@ -122,8 +122,8 @@
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
 }
 
 .apName {
@@ -152,14 +152,14 @@
   gap: 8px;
 }
 
-/* tag-pill "Minta: Agent" — pill kuning berteks ink di kedua tema. */
+/* tag-pill "Minta: Agent": accent pill with white text in both themes. */
 .tagPill {
   display: inline-flex;
   align-items: center;
   padding: 4px 12px;
   border-radius: var(--spine-radius-full);
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   white-space: nowrap;
 }
 

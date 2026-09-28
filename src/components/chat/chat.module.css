@@ -11,14 +11,14 @@
      .ccomp  padding 12/16/16, border-top 1px line
      .inp2   min-height 48, padding 0 18, radius full, surface-2 +
              input-border, 14px
-     .send   48 × 48 bulat, kuning → ink; abu saat kosong; kuning
-             redup saat mengirim
+     .send   48 x 48 round, accent fill + white icon; grey when empty;
+             soft accent tint while sending
      .mdrop  radius 22, surface-2 + input-border, padding 6,
              baris 44 (HP 48), tag tipe 22
-     .mch    23px pill hitam teks kuning
-     .att    min-height 28 (tray 36) surface + line, ikon emas 13
-     .role   22px pill surface + line; varian admin bertint kuning
-     .plab.s 28px pill hitam teks kuning 12.5px
+     .mch    23px black pill, accent-2 text
+     .att    min-height 28 (tray 36) surface + line, accent icon 13
+     .role   22px pill surface + line; admin variant tinted accent
+     .plab.s 28px black pill, accent-2 text 12.5px
 
    Bagian yang SENGAJA menyimpang dari mock dicatat di tempatnya.
    ------------------------------------------------------------ */
@@ -69,7 +69,7 @@
 
 /* SATU penanda fokus saja: cincin `.spine-focus-ring`.
    PERBEDAAN SPINE vs KODE (dilaporkan, bukan dipilih diam-diam):
-   AC 3.16 menulis "fokus = batas kuning + focus-ring", sedangkan
+   AC 3.16 menulis "fokus = batas aksen + focus-ring", sedangkan
    Story 1.7 / `TextField.module.css` sudah menetapkan bahwa border
    kolom TIDAK ikut berganti warna karena dua garis sewarna yang
    bertumpuk terbaca sebagai outline ganda. Kode mengikuti aturan
@@ -87,8 +87,8 @@
   padding: 0;
   border: 1px solid transparent;
   border-radius: 50%;
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   cursor: pointer;
 }
 
@@ -105,11 +105,11 @@
   cursor: default;
 }
 
-/* Mengirim: kuning redup + spinner. */
+/* Sending: soft accent tint + accent-2 spinner. */
 .sendBusy {
-  background: var(--app-spine-yellow-14);
-  border-color: var(--app-spine-yellow-35);
-  color: var(--app-spine-yellow);
+  background: var(--app-spine-accent-14);
+  border-color: var(--app-spine-accent-35);
+  color: var(--app-spine-accent-2);
   cursor: default;
 }
 
@@ -189,12 +189,8 @@
 /* Baris aktif ditandai CINCIN, bukan warna latar saja (AC 3.16). */
 .dropRowOn {
   background: var(--app-spine-surface);
-  outline: 2px solid var(--app-spine-yellow);
+  outline: 2px solid var(--app-spine-accent);
   outline-offset: -2px;
-}
-
-:global(html[data-theme="light"]) .dropRowOn {
-  outline-color: var(--app-spine-ink);
 }
 
 .dropName {
@@ -223,7 +219,7 @@
   padding: 0 12px;
   border-radius: var(--spine-radius-full);
   background: var(--app-spine-label-pill);
-  color: var(--app-spine-yellow);
+  color: var(--app-spine-accent-2);
   letter-spacing: -0.01em;
   white-space: nowrap;
   text-decoration: none;
@@ -235,10 +231,9 @@
   text-overflow: ellipsis;
 }
 
-/* Blok INVARIAN: pill hitam + teks kuning di kedua tema (AC 3.16 —
-   "tidak ada teks kuning maupun emas di tema terang" berlaku untuk teks
-   di atas latar terang; `project-tag` dan `mention-chip` tetap pill
-   hitam sehingga kontrasnya sudah aman). */
+/* INVARIANT block: black pill + accent-2 text in both themes. accent-2 is
+   never used on a light surface; `project-tag` and `mention-chip` stay
+   black pills, so the contrast holds (AC 3.16). */
 
 /* Tipe hasil di `mention-dropdown` (PROJECT / SECTION / FILE) memakai
    bentuk yang sama, tanpa bayangan dalam. */
@@ -250,7 +245,7 @@
   padding: 0 8px;
   border-radius: var(--spine-radius-full);
   background: var(--app-spine-label-pill);
-  color: var(--app-spine-yellow);
+  color: var(--app-spine-accent-2);
   letter-spacing: 0.04em;
 }
 
@@ -265,7 +260,7 @@
   padding: 0 9px;
   border-radius: var(--spine-radius-full);
   background: var(--app-spine-label-pill);
-  color: var(--app-spine-yellow);
+  color: var(--app-spine-accent-2);
   font-size: 0.78125rem;
   font-weight: 800;
   line-height: 1;
@@ -301,7 +296,7 @@
   flex: none;
   width: 13px;
   height: 13px;
-  color: var(--app-spine-gold);
+  color: var(--app-accent);
 }
 
 .attName {
@@ -359,18 +354,18 @@
   background: var(--app-spine-bg);
 }
 
-/* Admin bertint kuning; di tema terang teks INK + bingkai ink 1,5 px —
-   tidak pernah teks kuning di atas latar terang (AC 3.16). */
+/* Admin chip tinted accent: accent-2 text on dark; on light the text and a
+   1.5px frame use accent-text-light, never accent-2 on paper (AC 3.16). */
 .roleChipAdmin {
-  border-color: var(--app-spine-yellow-35);
-  background: var(--app-spine-yellow-08);
-  color: var(--app-spine-yellow);
+  border-color: var(--app-spine-accent-35);
+  background: var(--app-spine-accent-08);
+  color: var(--app-spine-accent-2);
 }
 
 :global(html[data-theme="light"]) .roleChipAdmin {
-  border: 1.5px solid var(--app-spine-ink);
+  border: 1.5px solid var(--app-spine-accent-text-light);
   background: var(--app-spine-surface-2);
-  color: var(--app-spine-ink);
+  color: var(--app-spine-accent-text-light);
 }
 
 /* ------------------------------------------------------------------ */

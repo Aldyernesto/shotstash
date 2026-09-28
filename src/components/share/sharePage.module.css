@@ -77,7 +77,7 @@
   }
 }
 
-/* Glow kuning panggung (cahaya kuning #1 dari aturan Elevation). */
+/* Stage accent glow (accent glow #1 of the Elevation rule). */
 .stage::before {
   content: "";
   position: absolute;
@@ -135,15 +135,15 @@
   }
 }
 
-/* `number-sticker` — kuning/ink, radius 10px, miring −6°. */
+/* `number-sticker`: accent fill + white text, radius 10px, -6deg. */
 .sticker {
   display: inline-flex;
   align-items: baseline;
   gap: 3px;
   padding: 7px 10px;
   border-radius: var(--spine-radius-sticker);
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   transform: rotate(-6deg);
   box-shadow: 0 6px 14px -4px rgba(0, 0, 0, 0.6);
   white-space: nowrap;
@@ -301,11 +301,11 @@
 .chip svg {
   width: 13px;
   height: 13px;
-  color: var(--app-spine-gold);
+  color: var(--app-spine-accent-2);
 }
 
 :global(html[data-theme="light"]) .chip svg {
-  color: var(--app-spine-accent-light);
+  color: var(--app-spine-accent-text-light);
 }
 
 .breakdown {
@@ -330,11 +330,11 @@
   width: 15px;
   height: 15px;
   margin-top: 2px;
-  color: var(--app-spine-gold);
+  color: var(--app-spine-accent-2);
 }
 
 :global(html[data-theme="light"]) .expiry svg {
-  color: var(--app-spine-accent-light);
+  color: var(--app-spine-accent-text-light);
 }
 
 .expiry b {
@@ -505,7 +505,7 @@
   padding: 0 10px 0 9px;
   border-radius: var(--spine-radius-full);
   background: var(--app-spine-label-pill);
-  color: var(--app-spine-yellow);
+  color: var(--app-spine-accent-2);
 }
 
 .videoMarker svg {
@@ -826,11 +826,11 @@
   height: 100px;
   margin-left: -46px;
   border-radius: var(--spine-radius-md) var(--spine-radius-md) 0 0;
-  border: 2px solid var(--app-spine-yellow-35);
+  border: 2px solid var(--app-spine-accent-35);
   border-bottom: 0;
   background: repeating-linear-gradient(
     -45deg,
-    var(--app-spine-yellow-08) 0 10px,
+    var(--app-spine-accent-08) 0 10px,
     transparent 10px 20px
   );
 }

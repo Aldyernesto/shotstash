@@ -47,15 +47,13 @@
   box-shadow: 0 30px 40px -18px rgba(0, 0, 0, 0.95);
 }
 
-/* Terpilih: bingkai kuning + cincin 4 px; penanda utamanya tetap
-   `select-check` yang tercentang, bukan warna bingkai saja. */
+/* Selected: accent-2 frame + 4px ring (the frame sits on the photo edge, where
+   accent-2 keeps >= 3:1 against the dark card object in both themes); the
+   checked `select-check` stays the main cue. */
 .selected .photo {
-  border-color: var(--app-spine-yellow, #efe749);
-  box-shadow: 0 0 0 4px var(--app-spine-yellow-20, #efe74933),
+  border-color: var(--app-spine-accent-2);
+  box-shadow: 0 0 0 4px var(--app-spine-accent-20),
     0 16px 28px -12px rgba(0, 0, 0, 0.85);
-}
-:global(html[data-theme="light"]) .selected .photo {
-  border-color: var(--app-spine-ink, #141310);
 }
 
 /* ---------- nama & ukuran DI BAWAH foto ---------- */
@@ -111,7 +109,7 @@
   padding: 0 10px 0 9px;
   border-radius: var(--spine-radius-full);
   background: var(--app-spine-label-pill, #0b0b0a);
-  color: var(--app-spine-yellow, #efe749);
+  color: var(--app-spine-accent-2);
   box-shadow: 0 6px 14px -6px rgba(0, 0, 0, 0.8);
 }
 .videoMarker svg {
@@ -169,10 +167,10 @@
   top: 57%;
   padding: 7px 10px;
   border-radius: var(--spine-radius-sticker);
-  background: var(--app-spine-yellow, #efe749);
-  color: var(--app-spine-ink, #141310);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   transform: rotate(7deg);
-  box-shadow: 0 0.08em 0 var(--app-spine-yellow-edge, #b9b22c),
+  box-shadow: 0 0.08em 0 var(--app-spine-accent-edge),
     0 8px 18px -6px rgba(0, 0, 0, 0.7);
 }
 

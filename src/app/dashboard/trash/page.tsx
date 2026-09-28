@@ -594,7 +594,7 @@ export default function TrashPage() {
         <ConfirmDialog
           title={confirmTitle}
           lead={confirmLead}
-          /* Restore BUKAN tindakan berbahaya → tombol kuning; Delete
+          /* Restore is not destructive -> accent button; Delete
              Forever → `button-danger.solid` + `role="alertdialog"`. */
           tone={pending.kind === "restore" ? "recoverable" : "permanent"}
           /* Delete Forever = peringatan (`alertdialog`); Restore bukan —

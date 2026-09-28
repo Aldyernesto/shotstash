@@ -13,8 +13,8 @@ export type NavDestination = {
   icon: ReactNode;
   /** Cocok persis (default: startsWith). */
   exact?: boolean;
-  /** Titik emas 6px, aria-hidden, hanya penanda visual. */
-  goldDot?: boolean;
+  /** 6px accent dot, aria-hidden, visual marker only. */
+  accentDot?: boolean;
 };
 
 function Icon({ children }: { children: ReactNode }) {

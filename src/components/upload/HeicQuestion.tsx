@@ -71,7 +71,7 @@ export function HeicActions({
 }) {
   return (
     <div className={styles.heicActions}>
-      <PillButton variant="yellow" onClick={onConvert}>
+      <PillButton variant="accent" onClick={onConvert}>
         <span aria-hidden="true" style={{ display: "grid", placeItems: "center", width: 16, height: 16 }}>
           {CHECK}
         </span>

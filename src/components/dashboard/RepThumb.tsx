@@ -26,7 +26,7 @@ export type RepThumbProps = {
   /**
    * Story 3.22/3.23: target baris SUDAH DIHAPUS (tautan share yatim, baris
    * Trash tanpa sumber). Satu kartu putus-putus abu — bentuknya sengaja
-   * BEDA dari `empty` (slot hantu berarsir kuning = "belum ada isi").
+   * BEDA dari `empty` (ghost slot with accent hatching = "belum ada isi").
    */
   gone?: boolean;
   className?: string;

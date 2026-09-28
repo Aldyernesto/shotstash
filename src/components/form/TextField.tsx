@@ -3,7 +3,7 @@
 // - Isi surface-2, border istirahat 1px input-border, radius md
 //   (input-mobile 14px di HP), min-height 52 (48 di HP) via min-height +
 //   padding — bukan height tetap, supaya teks tetap bisa membungkus.
-// - Fokus: border kuning (ink di tema terang) + focus-ring Story 1.7;
+// - Focus: the Story 1.7 focus ring only (the border does not change);
 //   caret TETAP native (tanpa caretColor kustom).
 // - Error: border danger + pesan di BAWAH field (ikon 15px + kalimat
 //   spine-footnote warna danger-text), input diberi aria-invalid +

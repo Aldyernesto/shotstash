@@ -98,7 +98,7 @@
 }
 /* Story 3.22/3.23 — target tautan/baris Trash yang sumbernya SUDAH DIHAPUS.
    Mock `key-shared.html` `.th.gone .c`: satu kartu putus-putus abu tanpa
-   bayangan dan tanpa arsir kuning (arsir kuning = slot HANTU "belum ada
+   bayangan dan tanpa arsir aksen (arsir aksen = slot HANTU "belum ada
    isi", arti yang berbeda). Dipakai lewat prop `gone`, bukan kelas lokal
    per halaman. */
 .goneCard {
@@ -111,10 +111,10 @@
 }
 
 .sectionGhost {
-  border: 2px dashed var(--app-spine-yellow-35, #efe74959);
+  border: 2px dashed var(--app-spine-accent-35);
   background: repeating-linear-gradient(
     -45deg,
-    var(--app-spine-yellow-08, #efe74914) 0 6px,
+    var(--app-spine-accent-08) 0 6px,
     transparent 6px 12px
   );
   box-shadow: none;
@@ -202,11 +202,11 @@
   height: 32px;
   margin-left: -15px;
   border-radius: 7px 7px 0 0;
-  border: 2px dashed var(--app-spine-yellow-35, #efe74959);
+  border: 2px dashed var(--app-spine-accent-35);
   border-bottom: 0;
   background: repeating-linear-gradient(
     -45deg,
-    var(--app-spine-yellow-08, #efe74914) 0 5px,
+    var(--app-spine-accent-08) 0 5px,
     transparent 5px 10px
   );
 }
@@ -227,7 +227,7 @@
   place-items: center;
   border-radius: 50%;
   background: var(--app-spine-label-pill, #0b0b0a);
-  color: var(--app-spine-yellow, #efe749);
+  color: var(--app-spine-accent-2);
   box-shadow: 0 4px 10px -4px rgba(0, 0, 0, 0.8);
 }
 .videoMark svg {
@@ -263,11 +263,11 @@
   z-index: 2;
   padding: 4px 6px;
   border-radius: var(--spine-radius-sm);
-  background: var(--app-spine-yellow, #efe749);
-  color: var(--app-spine-ink, #141310);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   font-size: 0.75rem; /* 12px */
   transform: rotate(7deg);
-  box-shadow: 0 0.08em 0 var(--app-spine-yellow-edge, #b9b22c),
+  box-shadow: 0 0.08em 0 var(--app-spine-accent-edge),
     0 6px 12px -6px rgba(0, 0, 0, 0.8);
 }
 

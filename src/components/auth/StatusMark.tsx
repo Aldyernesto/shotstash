@@ -1,9 +1,9 @@
 // Story 1.27: status-mark — pengganti emoji ⏳⛔ (dan gembok untuk akun
 // terkunci) dengan petak 72px miring −6°, tiga varian (AC epics.md 1.27):
-// - waiting  : kuning + jam pasir ink + satu-satunya glow kuning yang
-//              diizinkan untuk mark (aturan DESIGN.md #4, globals.css).
+// - waiting  : accent fill + white hourglass + the only accent glow
+//              allowed untuk mark (aturan DESIGN.md #4, globals.css).
 // - rejected : pasangan danger semantik + ikon larangan.
-// - locked   : surface-2 + border line + gembok gold.
+// - locked   : surface-2 + border line + accent-2 lock (accent-text-light on light).
 // TANPA animasi; ikon aria-hidden (pola PairingSlot: aria-hidden pada elemen
 // ikon, bukan wadah); status TIDAK pernah warna saja — selalu didampingi
 // judul + kalimat di pemakainya. Siap untuk /pending + Epic 3.

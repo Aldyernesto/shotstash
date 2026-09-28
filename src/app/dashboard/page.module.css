@@ -64,7 +64,7 @@
   overflow-wrap: anywhere;
 }
 
-/* count-chip - 30 px, radius penuh, ikon emas. */
+/* count-chip: 30px, full radius, theme-aware accent icon. */
 .countChip {
   display: inline-flex;
   align-items: center;
@@ -82,7 +82,7 @@
   flex: none;
   width: 15px;
   height: 15px;
-  color: var(--app-spine-gold);
+  color: var(--app-accent);
 }
 
 .pageSub {
@@ -345,17 +345,13 @@ textarea.modalInput {
 }
 
 .viewBtnActive {
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
 }
 
-/* Tema terang: kuning di atas putih hanya 1,30 : 1, jadi item aktif
-   diberi cincin ink. Sengaja box-shadow, BUKAN outline: outline adalah
-   satu-satunya penanda fokus (.spine-focus-ring) dan tidak boleh
-   direbut keadaan aktif. */
-html[data-theme="light"] .viewBtnActive {
-  box-shadow: inset 0 0 0 1.5px var(--app-spine-ink);
-}
+/* Active = filled accent pill with white icon in both themes: the filled
+   shape (not only the hue) marks the state, and the accent fill is at least
+   4.29:1 against light surfaces. Focus stays on .spine-focus-ring. */
 
 .iconBtn {
   flex: none;
@@ -375,18 +371,13 @@ html[data-theme="light"] .viewBtnActive {
   height: 19px;
 }
 
-/* Story 3.17: `chat-button` menjadi KUNING selama panel Diskusi project
-   terbuka (keadaannya juga tertulis di `aria-expanded`, jadi warnanya
-   hanya penguat — NFR15). Di tema terang keadaan aktif diberi bingkai
-   ink supaya tidak larut di latar terang, sama dengan `viewBtnActive`. */
+/* Story 3.17: the chat button becomes a filled accent pill while the project
+   discussion panel is open (the state is also in aria-expanded, so color only
+   reinforces it, NFR15). Same fill in both themes, like viewBtnActive. */
 .iconBtnOn {
-  background: var(--app-spine-yellow);
-  border-color: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
-}
-
-html[data-theme="light"] .iconBtnOn {
-  box-shadow: inset 0 0 0 1.5px var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  border-color: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
 }
 
 /* select-toggle - pill varian surface + ikon centang 16 px. Labelnya
@@ -480,15 +471,13 @@ html[data-theme="light"] .iconBtnOn {
 }
 .modalBtnPrimary:hover {
   transform: scale(1.05);
-  background: var(--color-primary-hover, #4a3aff);
 }
 
 .actionBtn {
-  /* HOTFIX isu #4 (pemeriksa pra-deploy): var --color-* lama memberi oker
-     kusam 2,46 : 1 di tema terang dan pil putih di tema gelap. Ikut palet
-     spine seperti button-primary: kuning + teks ink di kedua tema. */
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  /* HOTFIX issue #4: follows the spine like button-primary: accent fill with
+     white text in both themes (the old --color-* vars were inconsistent). */
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   border: none;
   border-radius: var(--spine-radius-full);
   padding: 10px 24px;
@@ -498,8 +487,10 @@ html[data-theme="light"] .iconBtnOn {
   white-space: nowrap;
 }
 
+/* Hover = the button-primary glow (accent glow #2). accent-edge is not used:
+   as a fill it drops under 3:1 against the dark page. */
 .actionBtn:hover {
-  background: var(--app-spine-yellow-edge);
+  box-shadow: 0 16px 36px -12px var(--app-spine-accent-55);
 }
 
 .modalOverlay {
@@ -834,12 +825,9 @@ html[data-theme="light"] .iconBtnOn {
   padding: 24px;
   border-radius: var(--spine-radius-xl);
   background: var(--app-spine-scrim-85, #0a0a09d9);
-  outline: 2px dashed var(--app-spine-yellow, #efe749);
+  outline: 2px dashed var(--app-spine-accent-2);
   outline-offset: -2px;
   pointer-events: none;
-}
-html[data-theme="light"] .dropArea {
-  outline-color: var(--app-spine-ink, #141310);
 }
 
 .dropCircle {
@@ -848,8 +836,8 @@ html[data-theme="light"] .dropArea {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: var(--app-spine-yellow, #efe749);
-  color: var(--app-spine-ink, #141310);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
 }
 .dropCircle svg {
   width: 28px;

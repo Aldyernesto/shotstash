@@ -69,11 +69,8 @@
   cursor: pointer;
 }
 .selectAllBox:checked {
-  background: var(--app-spine-yellow, #efe749);
-  border-color: var(--app-spine-yellow, #efe749);
-}
-:global(html[data-theme="light"]) .selectAllBox:checked {
-  border-color: var(--app-spine-ink, #141310);
+  background: var(--app-spine-accent);
+  border-color: var(--app-spine-accent);
 }
 
 .actions {
@@ -111,13 +108,9 @@
   border-color: var(--app-spine-danger-border, #e5484d59);
   color: var(--app-spine-danger-text, #f07a7e);
 }
-.pillYellow {
-  background: var(--app-spine-yellow, #efe749);
-  color: var(--app-spine-ink, #141310);
-}
-:global(html[data-theme="light"]) .pillYellow {
-  outline: 1.5px solid var(--app-spine-ink, #141310);
-  outline-offset: -1.5px;
+.pillAccent {
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
 }
 .zipSuffix {
   font-size: 0.78125rem; /* 12,5px */

@@ -25,18 +25,18 @@
 .ghost {
   width: 108px;
   height: 118px;
-  border: var(--spine-empty-ghost-border, 2px solid var(--app-spine-yellow-35));
+  border: var(--spine-empty-ghost-border, 2px solid var(--app-spine-accent-35));
   border-bottom: 0;
   border-radius: var(--spine-radius-md) var(--spine-radius-md) 0 0;
   background: repeating-linear-gradient(
     -45deg,
-    var(--app-spine-yellow-08) 0 10px,
+    var(--app-spine-accent-08) 0 10px,
     transparent 10px 20px
   );
 }
 
-/* Tema terang: garis hantu memakai {colors.ink} (kuning tipis tidak
-   terbaca di atas kertas). */
+/* Light theme: the ghost outline uses {colors.ink} (the faint accent-35
+   outline disappears on paper; a full accent frame would read as selection). */
 :global(html[data-theme="light"]) .ghost {
   border-color: var(--app-spine-ink);
 }
@@ -51,13 +51,13 @@
   border: 1px solid var(--app-spine-line);
   border-radius: var(--spine-radius-card-sm);
   background: var(--app-spine-surface-2);
-  color: var(--app-spine-gold);
+  color: var(--app-spine-accent-2);
   transform: rotate(-6deg);
 }
 
-/* Tema terang: ikon emas terang (#d4a83c) gagal kontras di atas kertas. */
+/* Light theme: the light accent-2 icon fails contrast on paper. */
 :global(html[data-theme="light"]) .tile {
-  color: var(--app-spine-accent-light);
+  color: var(--app-spine-accent-text-light);
 }
 .tile svg {
   width: 26px;

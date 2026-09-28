@@ -5,8 +5,8 @@ import styles from './ThemeToggle.module.css';
 
 // Story 1.12: theme-toggle kapsul — dua item ikon (matahari = terang,
 // bulan = gelap) dalam kapsul surface + border line, radius penuh.
-// Item aktif kuning dengan ikon ink (di tema terang ditambah garis tepi
-// ink 1,5px supaya tidak menyatu dengan latar putih); item diam muted.
+// The active item is an accent fill with a white icon in both themes (the
+// filled shape marks it, not only the hue); idle items are muted.
 // Setiap item: role="switch" + aria-checked + label tetap
 // "Aktifkan mode terang/gelap" (label tidak berubah saat aktif).
 // Menyimpan ke localStorage 'shotstash_theme' (try/catch — tanpa localStorage

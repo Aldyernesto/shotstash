@@ -24,15 +24,15 @@
   color: var(--app-spine-text);
 }
 
-/* `number-sticker` — kuning/ink, radius 10, miring −6°. */
+/* `number-sticker`: accent fill + white text, radius 10, -6deg. */
 .sticker {
   display: inline-flex;
   align-items: baseline;
   gap: 3px;
   padding: 7px 10px;
   border-radius: var(--spine-radius-sticker);
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   transform: rotate(-6deg);
   box-shadow: 0 6px 14px -4px rgba(0, 0, 0, 0.6);
   white-space: nowrap;
@@ -70,20 +70,16 @@
   flex: none;
   width: 24px;
   height: 24px;
-  color: var(--app-spine-gold);
+  color: var(--app-spine-accent-2);
 }
 
 :global(html[data-theme="light"]) .dropzone svg {
-  color: var(--app-spine-accent-light);
+  color: var(--app-spine-accent-text-light);
 }
 
 .dropzoneOver {
-  border-color: var(--app-spine-yellow);
-  background: var(--app-spine-yellow-08);
-}
-
-:global(html[data-theme="light"]) .dropzoneOver {
-  border-color: var(--app-spine-ink);
+  border-color: var(--app-spine-accent);
+  background: var(--app-spine-accent-08);
 }
 
 /* Nonaktif saat batch berjalan — opasitas 45 %. */
@@ -135,7 +131,7 @@
 .track i {
   display: block;
   height: 100%;
-  background: var(--app-spine-yellow);
+  background: var(--app-spine-accent);
 }
 
 .track i.bad {
@@ -195,11 +191,11 @@
   height: 40px;
   border-radius: var(--spine-radius-xs);
   background: var(--app-spine-surface-2);
-  color: var(--app-spine-gold);
+  color: var(--app-spine-accent-2);
 }
 
 :global(html[data-theme="light"]) .rowTile {
-  color: var(--app-spine-accent-light);
+  color: var(--app-spine-accent-text-light);
 }
 
 .rowTile svg {
@@ -256,7 +252,7 @@
 
 .rowBar i {
   height: 100%;
-  background: var(--app-spine-yellow);
+  background: var(--app-spine-accent);
 }
 
 /* Slot aksi kanan BERUKURAN TETAP: Epic 4 menyisipkan pill "Coba lagi"
@@ -297,8 +293,8 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
 }
 
 .rowDone svg {
@@ -390,21 +386,21 @@
 }
 
 .heicTo {
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   transform: rotate(7deg);
-  box-shadow: 0 0.08em 0 var(--app-spine-yellow-edge), 0 8px 18px -6px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 0.08em 0 var(--app-spine-accent-edge), 0 8px 18px -6px rgba(0, 0, 0, 0.7);
 }
 
 .heicArrow {
   flex: none;
   width: 22px;
   height: 22px;
-  color: var(--app-spine-gold);
+  color: var(--app-spine-accent-2);
 }
 
 :global(html[data-theme="light"]) .heicArrow {
-  color: var(--app-spine-accent-light);
+  color: var(--app-spine-accent-text-light);
 }
 
 .heicNote {
@@ -564,8 +560,8 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
 }
 
 .dockIcon svg {

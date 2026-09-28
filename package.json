@@ -29,6 +29,7 @@
     "check:tokens": "node scripts/check-design-tokens.mjs",
     "check:legacy": "node scripts/check-legacy-allowlist.mjs",
     "brand:css": "tsx scripts/gen-brand-css.ts",
+    "brand:assets": "node scripts/gen-brand-assets.mjs",
     "privacy:scan": "node scripts/privacy-scan.mjs",
     "privacy:hash": "node scripts/privacy-hash.mjs",
     "security:matrix": "tsx scripts/gen-route-matrix.ts",

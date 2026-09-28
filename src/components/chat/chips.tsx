@@ -28,7 +28,7 @@ export type ProjectTagProps = {
 };
 
 /**
- * Versi mini label Kartu Project: nama kuning di pill hitam, 28 px.
+ * Mini Project card label: accent-2 name on a black pill, 28px.
  * Sebagai tautan namanya "Buka Project {nama}" (AC 3.16).
  */
 export function ProjectTag({ name, href, className }: ProjectTagProps) {
@@ -63,9 +63,9 @@ export type MentionChipProps = {
 };
 
 /**
- * Pill hitam bernama kuning "@Raudhah" yang terbaca "@Raudhah, Section".
- * Blok INVARIAN: tetap pill hitam di tema terang, jadi teks kuningnya
- * tidak pernah mendarat di atas latar terang.
+ * Black pill with an accent-2 name "@Raudhah", read as "@Raudhah, Section".
+ * INVARIANT block: it stays a black pill in the light theme, so the accent-2
+ * text never lands on a light surface.
  */
 export function MentionChip({ name, type, className }: MentionChipProps) {
   return (
@@ -122,7 +122,7 @@ export type AttachmentChipProps = {
   className?: string;
 };
 
-/** Pill berikon klip emas berformat "Lampiran: {nama}". */
+/** Pill with an accent paperclip icon, read as "Lampiran: {nama}". */
 export function AttachmentChip({ name, onRemove, className }: AttachmentChipProps) {
   return (
     <span
@@ -157,7 +157,7 @@ export type RoleChipProps = {
 
 /**
  * Label role UTUH KAPITAL (SUPER ADMIN, ADMIN, FIELD CREW, EDITOR,
- * VIEWER). Admin bertint kuning, role lain netral.
+ * VIEWER). Admin is tinted accent, other roles are neutral.
  *
  * Kata rolenya berasal dari `src/lib/permissions.ts` — satu sumber
  * kebenaran yang sama dengan `avatar-pill`, bukan peta baru di sini.

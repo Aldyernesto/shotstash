@@ -103,33 +103,28 @@
   color: var(--app-spine-danger-text-light);
 }
 
-/* Perisai "Versi aman (blur)". Tema terang memakai emas GELAP —
-   tidak ada teks/ikon kuning di popover tema terang. */
+/* "Versi aman (blur)" shield: accent-2 on dark, accent-text-light on light
+   (accent-2 is never used on a light popover). */
 .safe svg {
-  color: var(--app-spine-gold);
+  color: var(--app-spine-accent-2);
 }
 
 :global(html[data-theme="light"]) .safe svg {
-  color: var(--app-spine-accent-light);
+  color: var(--app-spine-accent-text-light);
 }
 
-/* Item tautan yang sedang aktif (menu "Lainnya" nav-capsule desktop):
-   pill kuning/ink seperti item aktif nav-capsule dan baris aktif more-sheet.
-   Tema terang memberi cincin ink 1,5 px lewat box-shadow — BUKAN outline,
-   supaya outline cincin fokus (.spine-focus-ring--inset) tetap satu-satunya
-   penanda fokus dan tidak kalah oleh status aktif. */
+/* Active link item ("More" menu of the desktop nav capsule): filled accent
+   pill with white text and icon, like the active nav-capsule item and the
+   active more-sheet row. Same in both themes; focus stays on
+   .spine-focus-ring--inset. */
 .current,
 .current:hover {
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
 }
 
 .current svg {
-  color: var(--app-spine-ink);
-}
-
-:global(html[data-theme="light"]) .current {
-  box-shadow: inset 0 0 0 1.5px var(--app-spine-ink);
+  color: var(--app-spine-on-accent);
 }
 
 .sep {

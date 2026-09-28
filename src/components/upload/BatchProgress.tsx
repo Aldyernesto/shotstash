@@ -4,7 +4,7 @@
  * Story 3.13 — `batch-progress`.
  *
  * Angka huruf display besar + "dari 72 file selesai" di kiri, ringkasan
- * berjalan/menunggu di kanan, dan track 6 px kuning dengan segmen
+ * berjalan/menunggu di kanan, dan a 6px accent track with segments
  * `{colors.danger}` untuk yang gagal — jumlah gagal DITULIS sebagai
  * teks, tidak pernah hanya warna segmen (NFR15).
  *

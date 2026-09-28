@@ -51,11 +51,11 @@
   place-items: center;
   width: 15px;
   height: 15px;
-  color: var(--app-spine-gold);
+  color: var(--app-spine-accent-2);
 }
 
 :global(html[data-theme="light"]) .expiryIcon {
-  color: var(--app-spine-accent-light);
+  color: var(--app-spine-accent-text-light);
 }
 
 .expiryIcon svg {
@@ -198,7 +198,7 @@
    .l1   flex space-between gap 8 (copy-pill 44 · button-danger 40)
    .l2   wrap gap 6/10, margin-top 10, padding-left 4, 12.5px meta; b text-soft
    .exr .ct  min-height 26, padding 0 10
-   .newt 22px pill hitam kuning display 11.5/900
+   .newt 22px black pill, accent-2 display 11.5/900
    .exr.conf danger-bg + danger-border; .ct-t gap 10, ikon 20 danger-text;
          b.h 14.5/800 text; span.s 13px text-soft; .ca grid 2 kolom gap 8,
          margin-top 12, pill 48
@@ -303,7 +303,7 @@
   padding: 0 8px;
   border-radius: var(--spine-radius-full);
   background: var(--app-spine-label-pill);
-  color: var(--app-spine-yellow);
+  color: var(--app-spine-accent-2);
   letter-spacing: 0.02em;
 }
 

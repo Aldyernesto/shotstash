@@ -51,8 +51,8 @@ const colors = {
   text: '#1f1c16',
   dim: '#4a4438',
   muted: '#7a7161',
-  accent: '#d4a83c',
-  accentOn: '#14120d',
+  accent: brand.accent,
+  accentOn: brand.onAccent,
   codeBg: '#f7f4ed',
 };
 

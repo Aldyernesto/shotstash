@@ -7,7 +7,7 @@
    `.crow`, `.cb`).
 
    LAPISAN INVARIAN: kontrol ini TETAP GELAP di dua tema. Warnanya
-   memakai token invarian (`object-text`, `scrim-*`, `white-*`, kuning),
+   memakai token invarian (`object-text`, `scrim-*`, `white-*`, `accent`, `accent-2`),
    tidak pernah token chrome yang ikut tema.
    ------------------------------------------------------------ */
 
@@ -52,10 +52,10 @@
   margin: -38px 0 0 -38px;
   border: 0;
   border-radius: 50%;
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   /* "tebal kertas" + jatuh bayangan. */
-  box-shadow: 0 5px 0 var(--app-spine-yellow-edge), 0 18px 36px -10px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 5px 0 var(--app-spine-accent-edge), 0 18px 36px -10px rgba(0, 0, 0, 0.8);
   cursor: pointer;
 }
 
@@ -80,18 +80,18 @@
   margin-left: 4px;
 }
 
-/* Cincin fokus ganda kuning + ink, offset 3px DI LUAR "tebal kertas".
+/* Double focus ring accent-2 + ink, offset 3px DI LUAR "tebal kertas".
    Ditulis di sini, bukan lewat `.spine-focus-ring--double`, karena kelas
    itu memakai `box-shadow` untuk cincin ink-nya dan akan MENIMPA "tebal
    kertas" tombol ini. Di sini ketiganya hidup berdampingan. */
 .big:focus-visible {
-  outline: 2px solid var(--app-spine-yellow);
+  outline: 2px solid var(--app-spine-accent-2);
   outline-offset: 3px;
-  box-shadow: 0 5px 0 var(--app-spine-yellow-edge), 0 0 0 9px var(--app-spine-ink),
+  box-shadow: 0 5px 0 var(--app-spine-accent-edge), 0 0 0 9px var(--app-spine-ink),
     0 18px 36px -10px rgba(0, 0, 0, 0.8);
 }
 
-/* Memuat: lingkaran {colors.label-pill} + busur kuning berputar. */
+/* Loading: a {colors.label-pill} circle + a spinning accent-2 arc. */
 .big[data-state="buffering"] {
   background: var(--app-spine-label-pill);
   border: 1px solid var(--app-spine-white-14);
@@ -104,7 +104,7 @@
   width: 36px;
   height: 36px;
   border: 3px solid var(--app-spine-white-16);
-  border-top-color: var(--app-spine-yellow);
+  border-top-color: var(--app-spine-accent-2);
   border-radius: 50%;
   animation: vc-spin 1s linear infinite;
 }
@@ -195,7 +195,7 @@
 }
 
 .fill {
-  background: var(--app-spine-yellow);
+  background: var(--app-spine-accent-2);
 }
 
 .knob {
@@ -205,8 +205,8 @@
   height: 14px;
   margin: -7px 0 0 -7px;
   border-radius: 50%;
-  background: var(--app-spine-yellow);
-  box-shadow: 0 0 0 4px var(--app-spine-yellow-20);
+  background: var(--app-spine-accent-2);
+  box-shadow: 0 0 0 4px var(--app-spine-accent-20);
 }
 
 /* ---------- baris kontrol ---------- */
@@ -285,11 +285,11 @@
   }
 }
 
-/* Cincin fokus di lapisan gelap TETAP KUNING di dua tema; varian
-   `--double` (kuning + ink) dipakai supaya terbaca di atas media apa
-   pun. `--inset` untuk tombol bar supaya tidak terpotong tepi media. */
+/* Focus rings on the dark media layer stay accent-2 (light blue) in both
+   themes; the `--double` variant (accent-2 + ink) keeps them readable on any
+   media. `--inset` untuk tombol bar supaya tidak terpotong tepi media. */
 .btn:focus-visible {
-  outline: 2px solid var(--app-spine-yellow);
+  outline: 2px solid var(--app-spine-accent-2);
   outline-offset: -4px;
   box-shadow: inset 0 0 0 4px var(--app-spine-ink);
 }
@@ -317,11 +317,11 @@
   cursor: none;
 }
 
-/* Sisa saat kontrol sembunyi: garis progres 3px kuning, DEKORATIF. */
+/* Left when the controls hide: a 3px accent-2 progress line, DECORATIVE. */
 .thin {
   position: absolute;
   left: 0;
   bottom: 0;
   height: 3px;
-  background: var(--app-spine-yellow);
+  background: var(--app-spine-accent-2);
 }

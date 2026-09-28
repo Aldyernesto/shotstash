@@ -13,7 +13,7 @@
      .slug        = `copy-pill` Story 3.2 apa adanya (44px desktop /
                   48px HP) — story ini TIDAK mendefinisikan ulang ukurannya
      .num         15px/800 + satuan 12.5px meta
-     .exp b/small 14px/700 + 12.5px meta; .perm ikon emas + 14px/700
+     .exp b/small 14px/700 + 12.5px meta; .perm accent icon + 14px/700
      HP (.mcard)  kartu radius 22, tiga lapis: r1 nama, r2 chip, r3 aksi
    Semua warna lewat --app-spine-* supaya ikut dua tema.
    ------------------------------------------------------------ */

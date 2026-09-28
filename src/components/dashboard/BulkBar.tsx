@@ -147,7 +147,7 @@ export default function BulkBar({
         ) : null}
         <button
           type="button"
-          className={`spine-button spine-focus-ring ${styles.pill} ${styles.pillYellow}`}
+          className={`spine-button spine-focus-ring ${styles.pill} ${styles.pillAccent}`}
           onClick={onDownloadZip}
         >
           <ZipIcon />

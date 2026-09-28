@@ -64,8 +64,8 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
 }
 
 .icon svg {

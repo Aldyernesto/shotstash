@@ -24,13 +24,13 @@
   height: 36px;
 }
 
-/* Bayangan kuning #4 yang diizinkan DESIGN.md — satu token elevation di
+/* Accent glow #4 allowed by DESIGN.md: satu token elevation di
    globals.css supaya ledger & implementasi tidak saling lepas. Dipakai
    success DAN status menunggu: satu-satunya glow mark. */
 .success,
 .waiting {
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   box-shadow: var(--spine-elevation-success-mark);
 }
 
@@ -45,12 +45,11 @@
 .locked {
   background: var(--app-spine-surface-2);
   border: 1px solid var(--app-spine-line);
-  color: var(--app-spine-gold);
+  color: var(--app-spine-accent-2);
 }
 
-/* Gembok gold kontrak brand tak terbaca di terang (#d4a83c di atas
-   surface-2 terang ≈1,9:1) — mengikuti preseden PairingSlot .bar i:
-   literal gelap serumpun brand ("bukan kuning", key-login-auth.html). */
+/* The light accent-2 blue is unreadable on the light surface-2, so the
+   light theme uses the deep accent text token. */
 :global([data-theme='light']) .locked {
-  color: #8a6508;
+  color: var(--app-spine-accent-text-light);
 }

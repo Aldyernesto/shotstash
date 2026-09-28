@@ -59,9 +59,10 @@
   border: 2px solid var(--app-spine-object-text, #fafaf5);
   background: var(--app-spine-scrim-60, #0a0a0999);
 }
+/* On a photo the accent fill gets an accent-2 ring, which stays >= 3:1 on dark photos and the card object. */
 .inputPhoto:checked {
-  background: var(--app-spine-yellow, #efe749);
-  border-color: var(--app-spine-yellow, #efe749);
+  background: var(--app-spine-accent);
+  border-color: var(--app-spine-accent-2);
 }
 
 /* ---------- varian di atas surface (list-row) ---------- */
@@ -70,14 +71,11 @@
   background: transparent;
 }
 .inputSurface:checked {
-  background: var(--app-spine-yellow, #efe749);
-  border-color: var(--app-spine-yellow, #efe749);
+  background: var(--app-spine-accent);
+  border-color: var(--app-spine-accent);
 }
-/* Tema terang: bingkai ink supaya kotak tercentang tetap punya batas
-   ≥ 3 : 1 terhadap surface putih. */
-:global(html[data-theme="light"]) .inputSurface:checked {
-  border-color: var(--app-spine-ink, #141310);
-}
+/* The accent fill is >= 4.29:1 against light surfaces, so the checked box
+   keeps a visible boundary in both themes; the white check is the shape cue. */
 
 /* HP: lingkaran varian surface 26 px (area sentuh tetap seluruh baris). */
 @media (max-width: 899.98px) {
@@ -97,5 +95,5 @@
   pointer-events: none;
 }
 .input:checked ~ .mark {
-  color: var(--app-spine-ink, #141310);
+  color: var(--app-spine-on-accent);
 }

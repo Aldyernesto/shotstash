@@ -364,7 +364,7 @@ export default function ListView(props: ListViewProps) {
           text="Seret file ke sini, atau upload dari komputermu."
           action={
             canUpload && onUploadHere ? (
-              <PillButton variant="yellow" onClick={onUploadHere}>
+              <PillButton variant="accent" onClick={onUploadHere}>
                 Upload footage pertama
               </PillButton>
             ) : undefined
@@ -416,7 +416,7 @@ export default function ListView(props: ListViewProps) {
               >
                 {isEmpty && canUpload ? (
                   <PillButton
-                    variant="yellow"
+                    variant="accent"
                     className={styles.rowCta}
                     onClick={(e) => {
                       e.stopPropagation();

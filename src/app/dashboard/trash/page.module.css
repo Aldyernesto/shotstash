@@ -10,7 +10,7 @@
                   radius 22 (lg), surface + line, jarak baris 12
      .kon         flex gap 14; .nmb b 15px/1.3 800
      .cell        14px/700 text-soft (Project / Ukuran)
-     .ct          `remaining-chip` 30px pill surface+line, ikon emas 13px
+     .ct          `remaining-chip` 30px pill surface+line, accent icon 13px
      .ct.bad      tint danger + ikon peringatan + teks 800
      .act         flex gap 12, rata kanan
      HP (.mcard)  kartu radius 22: r1 nama + chip, r3 dua aksi 48px 1:1
@@ -52,8 +52,8 @@
   min-height: 48px;
   padding: 0 22px;
   border-radius: var(--spine-radius-full);
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   text-decoration: none;
 }
 
@@ -308,8 +308,8 @@
   gap: 3px;
   padding: 5px 8px;
   border-radius: var(--spine-radius-sticker);
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   font-size: 0.8125rem;
   transform: rotate(-6deg);
   box-shadow: 0 6px 14px -4px rgba(0, 0, 0, 0.6);

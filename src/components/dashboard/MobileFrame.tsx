@@ -251,7 +251,7 @@ export default function MobileFrame({
     <>
       <header className={styles.headerMobile}>
         <Link href="/dashboard" className={`spine-focus-ring ${styles.logoLink}`}>
-            <Logo size="mobile" />
+            <Logo size="appMobile" />
         </Link>
         <div className={styles.headerMobileRight}>
           <ThemeToggle />
@@ -316,7 +316,7 @@ export default function MobileFrame({
                     >
                       {d.icon}
                       <span>{d.label}</span>
-                      {d.goldDot && <span className={styles.goldDot} aria-hidden="true" />}
+                      {d.accentDot && <span className={styles.accentDot} aria-hidden="true" />}
                     </Link>
                   );
                 })}

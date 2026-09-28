@@ -39,7 +39,7 @@
   left: 4px;
   width: calc(50% - 6px);
   border-radius: 999px;
-  background: var(--app-spine-yellow);
+  background: var(--app-spine-accent);
   transition: transform var(--spine-dur-slide, 280ms) var(--spine-motion-spring);
   pointer-events: none;
 }
@@ -54,16 +54,12 @@
 }
 
 .tabs .tabActive {
-  color: var(--app-spine-ink);
+  color: var(--app-spine-on-accent);
   font-weight: 800;
 }
 
-/* Penanda tambahan di tema terang (AC 1.21): outline ink di sekeliling
-   pill aktif — tab aktif tidak dibedakan warna saja. Gelap tidak perlu:
-   pill kuning/ink sudah kontras kuat. */
-html[data-theme='light'] .tabs::before {
-  outline: 1.5px solid var(--app-spine-ink);
-}
+/* Active tab (AC 1.21): the sliding filled accent pill plus weight 800 mark
+   it in both themes, so the state is never color only. */
 
 /* (temuan review G2) Cincin fokus papan-tombol harus tetap TERBEDAKAN dari
    outline statis tab aktif — aturan di atas (0,3,1) menimpa kontrak global

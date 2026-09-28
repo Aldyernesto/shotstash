@@ -603,7 +603,7 @@ export default function ShareModal({
               Batal
             </PillButton>
             <PillButton
-              variant="yellow"
+              variant="accent"
               busy={busy}
               busyLabel="Membuat..."
               aria-describedby={failed ? alertId : undefined}

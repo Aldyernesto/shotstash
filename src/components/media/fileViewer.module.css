@@ -92,17 +92,17 @@
   height: 20px;
 }
 
-/* Keadaan aktif ⓘ: kuning/ink di dua tema (lapisan invarian). */
+/* Active info button: accent fill with white icon in both themes (invariant layer). */
 .iconButton[aria-expanded="true"] {
-  background: var(--app-spine-yellow);
-  border-color: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  border-color: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
 }
 
-/* Cincin fokus di lapisan gelap TETAP KUNING di dua tema. */
+/* Focus rings on the dark media layer stay accent-2 (light blue) in both themes. */
 .iconButton:focus-visible,
 .pill:focus-visible {
-  outline: 2px solid var(--app-spine-yellow);
+  outline: 2px solid var(--app-spine-accent-2);
   outline-offset: 3px;
   box-shadow: 0 0 0 2px var(--app-spine-ink);
 }
@@ -125,10 +125,10 @@
   cursor: pointer;
 }
 
-.pillYellow {
-  border-color: var(--app-spine-yellow);
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+.pillAccent {
+  border-color: var(--app-spine-accent);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
 }
 
 .pill svg {

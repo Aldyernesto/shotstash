@@ -207,7 +207,7 @@ export function LoadingCard() {
   );
 }
 
-/** Pesan netral (kirim ulang dsb.) — bukan danger, bukan ok: kuning redup + role="status". */
+/** Pesan netral (kirim ulang dsb.): not danger, not ok: soft accent tint + role="status". */
 export function InfoMessage({ children }: { children: React.ReactNode }) {
   if (!children) return null;
   return <p role="status" className={"spine-footnote " + styles.info}>{children}</p>;

@@ -3,8 +3,8 @@
 /**
  * Story 3.13 — `upload-row`.
  *
- * Grid 40px / 1fr / auto, min-height 64 px: tile ikon jenis 40 px emas,
- * nama 1 baris, meta status, garis progres 4 px kuning, dan slot aksi
+ * Grid 40px / 1fr / auto, min-height 64px: 40px file-type tile with an accent
+ * icon, one-line name, status meta, a 4px accent progress line, and slot aksi
  * kanan BERUKURAN TETAP.
  *
  * Keadaan SELALU tertulis sebagai teks, tidak pernah warna saja (NFR15).

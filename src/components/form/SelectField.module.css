@@ -6,10 +6,10 @@
                radius 16 (HP 14), surface-2 + input-border, 15px
      .sel span padding 12px 0, line-height 1.3 — jawaban panjang
                MEMBUNGKUS maksimal 2 baris, tidak dipotong
-     .sel.open border kuning + focus-ring tunggal Epic 1
+     .sel.open accent border + the single Epic 1 focus ring
      .lb       listbox radius 16, surface-2 + input-border, padding 6
      .lb .op   opsi 48px, radius 12, 14px/1.3
-     .lb .op.on kuning/ink + centang (tema terang: + outline ink)
+     .lb .op.on accent fill + white text + check, weight 700
      .lb .op.kf cincin fokus DI DALAM opsi (offset -2px)
    ------------------------------------------------------------ */
 
@@ -39,11 +39,7 @@
 /* SATU penanda fokus: cincin Epic 1 lewat utilitas .spine-focus-ring di
    markup; terbuka hanya mengubah warna bingkainya. */
 .controlOpen {
-  border-color: var(--app-spine-yellow);
-}
-
-:global(html[data-theme="light"]) .controlOpen {
-  border-color: var(--app-spine-ink);
+  border-color: var(--app-spine-accent);
 }
 
 .controlInvalid,
@@ -123,17 +119,13 @@
 }
 
 .optionSelected {
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   font-weight: 700;
 }
 
-/* Tema terang: kuning di atas kertas terang butuh garis luar ink supaya
-   opsi terpilih tetap terbaca sebagai "terpilih", bukan sekadar warna. */
-:global(html[data-theme="light"]) .optionSelected {
-  outline: 2px solid var(--app-spine-ink);
-  outline-offset: -2px;
-}
+/* Selected option: accent fill, white text and weight 700 in both themes
+   (weight is the non-color cue). */
 
 /* Fokus keyboard ditandai cincin DI DALAM opsi supaya tidak terpotong
    tepi listbox. */

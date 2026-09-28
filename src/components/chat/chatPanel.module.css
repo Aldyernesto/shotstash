@@ -229,7 +229,7 @@
   border: 1px solid var(--app-spine-line);
   border-radius: var(--spine-radius-tile);
   background: var(--app-spine-surface-2);
-  color: var(--app-spine-gold);
+  color: var(--app-accent);
   transform: rotate(-6deg);
 }
 

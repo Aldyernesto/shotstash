@@ -488,14 +488,14 @@ function FolderPickerModal({ mode, items, currentLocationId, apolloClient, onSel
                     gap: '10px',
                     borderBottom: '1px solid var(--dash-chip)',
                     transition: 'background 0.15s',
-                    background: isSelected ? 'rgba(239,231,73,0.12)' : 'transparent',
+                    background: isSelected ? 'var(--app-spine-accent-14)' : 'transparent',
                     borderLeft: isSelected ? '3px solid var(--color-primary-container)' : '3px solid transparent',
                   }}
                   onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--dash-hairline)'; }}
                   onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
                 >
                   <span style={{ fontSize: '1.1rem' }}>{isProjectLevel ? '🎬' : '📁'}</span>
-                  <span style={{ flex: 1, color: isSelected ? 'var(--color-primary-container)' : 'inherit', fontWeight: isSelected ? 600 : 400 }}>
+                  <span style={{ flex: 1, color: isSelected ? 'var(--app-accent)' : 'inherit', fontWeight: isSelected ? 600 : 400 }}>
                     {item.title || item.name}
                   </span>
                   <span style={{ fontSize: '0.75rem', color: 'var(--color-on-surface-variant)' }}>
@@ -2043,7 +2043,7 @@ export default function DashboardPage() {
     >
       {/* Story 2.17: `drag-over` area konten — MENGGANTIKAN overlay
           "📥 Drop to upload → {folder}". Lapisan scrim-85 ber-radius xl,
-          garis putus-putus inset, lingkaran kuning 64 px, dan label besar
+          dashed accent-2 outline inset, a 64px accent circle, and a large label
           yang MENYEBUT tujuannya. Tidak pernah warna saja. */}
       {isDroppingFiles && currentProjectId && canUpload && (
         <div className={styles.dropArea} aria-hidden="true">
@@ -2493,7 +2493,7 @@ export default function DashboardPage() {
                     title="Belum ada project."
                     text="Project baru akan muncul di sini begitu dibuat."
                     action={canCreateProject ? (
-                      <PillButton variant="yellow" onClick={() => setIsCreateProjectModalOpen(true)}>
+                      <PillButton variant="accent" onClick={() => setIsCreateProjectModalOpen(true)}>
                         New Project
                       </PillButton>
                     ) : undefined}
@@ -2508,7 +2508,7 @@ export default function DashboardPage() {
                   title="Masih kosong — seret file ke sini"
                   text={canUpload ? undefined : "Belum ada file di Section ini."}
                   action={canUpload && currentFolderId ? (
-                    <PillButton variant="yellow" onClick={() => {
+                    <PillButton variant="accent" onClick={() => {
                       upload.open({
                         projectId: currentProjectId!,
                         folderId: currentFolderId!,
@@ -2519,7 +2519,7 @@ export default function DashboardPage() {
                       Upload footage pertama
                     </PillButton>
                   ) : canUpload ? (
-                    <PillButton variant="yellow" onClick={() => setProjectRootPickerFiles([])}>
+                    <PillButton variant="accent" onClick={() => setProjectRootPickerFiles([])}>
                       Upload footage pertama
                     </PillButton>
                   ) : undefined}
@@ -2535,8 +2535,8 @@ export default function DashboardPage() {
                     top: Math.min(selectRect.y1, selectRect.y2),
                     width: Math.abs(selectRect.x2 - selectRect.x1),
                     height: Math.abs(selectRect.y2 - selectRect.y1),
-                    background: 'rgba(239, 231, 73, 0.1)',
-                    border: '1px solid rgba(239, 231, 73, 0.5)',
+                    background: 'var(--app-spine-accent-08)',
+                    border: '1px solid var(--app-spine-accent-55)',
                     pointerEvents: 'none',
                     zIndex: 10,
                   }}
@@ -2843,7 +2843,7 @@ export default function DashboardPage() {
       )}
 
       {/* Confirm Trash — Story 3.1: "Move to Trash" bisa dipulihkan 30 hari,
-          jadi tombolnya KUNING (button-primary), bukan danger solid. */}
+          so its button is the accent button-primary, not danger solid. */}
       {confirmTrash && (() => {
         const isBulk = !confirmTrash.fileId && !confirmTrash.folderId;
         const file = confirmTrash.fileId ? files.find((f: any) => f.id === confirmTrash.fileId) : null;

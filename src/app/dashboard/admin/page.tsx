@@ -564,7 +564,7 @@ export default function AdminPanel() {
                     </span>
                     <span className={styles.apSpacer} />
                     <PillButton
-                      variant="yellow"
+                      variant="accent"
                       busy={busy === 'approve'}
                       busyLabel="Memproses..."
                       aria-label={`Setujui ${name}`}
@@ -601,7 +601,7 @@ export default function AdminPanel() {
               {formatNumber(users.length)}
             </span>
           </h2>
-          <PillButton variant="yellow" onClick={() => setShowCreateModal(true)}>
+          <PillButton variant="accent" onClick={() => setShowCreateModal(true)}>
             + Add User
           </PillButton>
         </div>
@@ -853,7 +853,7 @@ export default function AdminPanel() {
                 Cancel
               </PillButton>
               <PillButton
-                variant="yellow"
+                variant="accent"
                 busy={registerLoading}
                 busyLabel="Creating..."
                 onClick={() => handleCreateUser()}
@@ -941,7 +941,7 @@ export default function AdminPanel() {
                 Batal
               </PillButton>
               <PillButton
-                variant="yellow"
+                variant="accent"
                 busy={resetLoading}
                 busyLabel="Memproses..."
                 onClick={() => handleResetSubmit()}
@@ -1031,7 +1031,7 @@ export default function AdminPanel() {
           locked
           dismissOnBackdrop={false}
           onClose={closeResetModal}
-          actions={<PillButton variant="yellow" onClick={closeResetModal}>Selesai</PillButton>}
+          actions={<PillButton variant="accent" onClick={closeResetModal}>Selesai</PillButton>}
         >
           {resetResult.password ? (
             <>

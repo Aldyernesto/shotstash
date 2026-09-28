@@ -11,12 +11,14 @@ html[data-theme="dark"] {
   /* brand:start */
   /* Generated from src/lib/brand.ts by `npm run brand:css`. Do not edit. */
   --brand-name: "Shotstash";
-  --brand-accent: #efe749;
-  --brand-accent-edge: #b9b22c;
+  --brand-accent: #3563f2;
+  --brand-accent-edge: #2446c7;
+  --brand-on-accent: #ffffff;
+  --brand-mark: #3d6cff;
   --brand-theme-color: #141310;
   --brand-logo-on-dark: url("/brand/logo-on-dark.svg");
   --brand-logo-on-light: url("/brand/logo-on-light.svg");
-  --brand-logo-aspect: 1098.2 / 250;
+  --brand-logo-aspect: 1314.2 / 250;
   --brand-icon: url("/brand/icon.svg");
   /* brand:end */
   --app-bg: var(--app-spine-bg, #0f0f0d);
@@ -30,14 +32,8 @@ html[data-theme="dark"] {
   --app-text-dim: var(--app-spine-text-soft, #dcdad2);
   --app-text-muted: var(--app-spine-muted, #a3a197);
   --app-text-faint: var(--app-spine-meta, #9a988f); /* #6b6357 / #9a917f lama gagal kontras teks — dibuang */
-  --app-accent: var(--app-spine-gold, #d4a83c);
-  --app-accent-2: var(--app-spine-yellow, #efe749);
-  /* accent-grad → kuning datar, seperti button-primary (bukan gradien lagi).
-     Catatan transisi: di tema terang isian kuning di atas permukaan terang
-     < 3:1 — outline ink menyusul dari story pemilik komponennya
-     (mis. tab aktif = Story 1.21), bukan di shim ini. */
-  --app-accent-grad: var(--app-spine-yellow, #efe749);
-  --app-accent-on: var(--app-spine-ink, #141310);
+  /* --app-accent is an accent TEXT color: light blue on dark surfaces. */
+  --app-accent: var(--app-spine-accent-2);
   --app-danger: var(--app-spine-danger-text, #f07a7e); /* teks, bukan isi — isi = --app-danger-solid */
   --app-danger-bg: var(--app-spine-danger-bg, #e5484d1a);
   --app-danger-border: var(--app-spine-danger-border, #e5484d59);
@@ -45,13 +41,12 @@ html[data-theme="dark"] {
   --app-ok-bg: var(--app-spine-ok-bg, #3fb68b1a);
   --app-ok-border: var(--app-spine-ok-border, #3fb68b59);
   --app-shadow: 0 16px 48px rgba(0, 0, 0, .4);
-  /* Story 1.7: glow lama (kuning 35%) diganti nilai cincin fokus SOLID —
-     sama dengan .spine-focus-ring. Glow alpha tidak bertahan di forced
-     colors; outline di .spine-focus-ring-lah yang jadi cincin utama. */
-  --app-ring: var(--app-spine-yellow, #efe749);
-  /* glow dekoratif → yellow-14 (gelap); tema terang memakai nilai sekarang. */
-  --app-glow-1: var(--app-spine-yellow-14, #efe74924);
-  --app-glow-2: var(--app-spine-yellow-14, #efe74924);
+  /* Story 1.7: solid focus ring value, same as .spine-focus-ring (the light
+     accent-2 blue reaches 3:1 on every dark surface). */
+  --app-ring: var(--app-spine-accent-2);
+  /* decorative glow: accent-14. */
+  --app-glow-1: var(--app-spine-accent-14);
+  --app-glow-2: var(--app-spine-accent-14);
   /* Dashboard-specific theme-aware tokens (dark defaults) */
   --dash-navbar: rgba(20, 19, 16, 0.85);
   --dash-navbar-solid: rgba(20, 19, 16, 0.95);
@@ -77,13 +72,8 @@ html[data-theme="light"] {
   --app-text-dim: var(--app-spine-text-soft, #4a4438);
   --app-text-muted: var(--app-spine-muted, #6d6a60);
   --app-text-faint: var(--app-spine-meta, #6d6a60);
-  /* accent terang = accent-light (#8a6508) menggantikan #b8860b yang gagal AA
-     teks kecil; JANGAN kuning/emas polos di tema terang. */
-  --app-accent: var(--app-spine-accent-light, #8a6508);
-  --app-accent-2: var(--app-spine-gold, #d4a83c);
-  /* accent-grad tidak dideklarasikan ulang di sini — kuning datar yang sama
-     dengan blok gelap (nilai identik, :root mewarisi). */
-  --app-accent-on: var(--app-spine-ink, #141310);
+  /* light accent text = accent-text-light (AA on every light surface). */
+  --app-accent: var(--app-spine-accent-text-light);
   --app-danger: var(--app-spine-danger-text-light, #b8292f);
   --app-danger-bg: var(--app-spine-danger-bg-light, #e5484d12);
   --app-danger-border: var(--app-spine-danger-border-light, #e5484d66);
@@ -91,12 +81,11 @@ html[data-theme="light"] {
   --app-ok-bg: var(--app-spine-ok-bg-light, #3fb68b12);
   --app-ok-border: var(--app-spine-ok-border-light, #3fb68b66);
   --app-shadow: 0 12px 40px rgba(60, 50, 30, .12);
-  /* Story 1.7: cincin terang = ink — kuning/emas tidak pernah menjadi
-     penanda fokus di tema terang (sama dengan .spine-focus-ring). */
+  /* Story 1.7: light ring = ink, same as .spine-focus-ring. */
   --app-ring: var(--app-spine-ink, #141310);
-  /* glow terang: nilai sekarang dipertahankan (dekoratif — baris pemetaan). */
-  --app-glow-1: rgba(212, 168, 60, .10);
-  --app-glow-2: rgba(231, 198, 90, .12);
+  /* light decorative glow: accent-08 / accent-14. */
+  --app-glow-1: var(--app-spine-accent-08);
+  --app-glow-2: var(--app-spine-accent-14);
   color-scheme: light;
 }
 
@@ -147,34 +136,34 @@ html[data-theme="light"] {
   --app-spine-placeholder: #6d6a60;
 }
 
+/* -- Accent (brand, same in both themes) --------------------------------- */
+/* Blue accent family (Shotstash rebrand). The logo blue #3d6cff lives only in
+   the brand assets; the UI fill is a slightly deeper blue so white text on it
+   reaches 4.98:1.
+   - accent: fills (buttons, pills, stickers, badges, selection). Text and icons
+     on it are always on-accent (white). As a UI boundary it is >= 3:1 on bg,
+     surface and surface-2 of both themes.
+   - accent-edge: the darker lip under stickers and marks.
+   - accent-2: accent TEXT/icon color on dark surfaces (dark theme chrome and
+     the invariant hero stage / card objects), >= 5.4:1 on all of them. Never
+     on a light surface.
+   - accent-text-light: accent TEXT color on light surfaces (light theme
+     only), >= 5.6:1 on bg, surface and surface-2.
+   - accent-08 to accent-55: alpha variants for glow, shadows, empty slots. */
 :root {
-  /* accent-light (keputusan OQ-D19) menggantikan #b8860b. DESIGN.md hanya
-     menetapkan nilai tema TERANG; tema gelap memakai teks biasa + garis bawah
-     kuning, jadi tidak ada nilai gelap untuk dipasangkan. Satu property, satu
-     nilai — bukan pasangan var.
-     JANGAN dipakai di tema gelap: #8a6508 di atas --app-spine-bg hanya 3,61 : 1.
-     Tautan/aksen teks tema gelap memakai --app-spine-yellow (atau --app-accent,
-     yang sejak Story 1.2 dipetakan ke gold di tema gelap). */
-  --app-spine-accent-light: #8a6508;
-}
-
-/* -- Brand (sama di dua tema, WAJIB dipertahankan) ------------------------ */
-/* Satu kuning: #efe749. Teks di atas kuning selalu ink (14,33 : 1).
-   Emas bukan warna blok besar dan bukan warna teks; di tema terang kuning
-   maupun emas tidak boleh jadi teks atau cincin fokus (pakai ink).
-   Varian alfa yellow-08 s.d. yellow-55 hanya untuk glow, bayangan, slot kosong. */
-:root {
-  --app-spine-yellow: #efe749;
-  --app-spine-yellow-edge: #b9b22c;
-  --app-spine-gold: #d4a83c;
+  --app-spine-accent: #3563f2;
+  --app-spine-accent-edge: #2446c7;
+  --app-spine-accent-2: #8aa5ff;
+  --app-spine-accent-text-light: #2a4fd6;
+  --app-spine-on-accent: #ffffff;
   --app-spine-ink: #141310;
   --app-spine-paper: #ffffff;
-  --app-spine-yellow-08: #efe74914;
-  --app-spine-yellow-14: #efe74924;
-  --app-spine-yellow-20: #efe74933; /* dipakai brand & grup invarian */
-  --app-spine-yellow-35: #efe74959;
-  --app-spine-yellow-45: #efe74973;
-  --app-spine-yellow-55: #efe7498c;
+  --app-spine-accent-08: #3563f214;
+  --app-spine-accent-14: #3563f224;
+  --app-spine-accent-20: #3563f233;
+  --app-spine-accent-35: #3563f259;
+  --app-spine-accent-45: #3563f273;
+  --app-spine-accent-55: #3563f28c;
 }
 
 /* -- INVARIAN (tidak pernah berganti tema) -------------------------------- */
@@ -182,7 +171,7 @@ html[data-theme="light"] {
    Benda ini tetap gelap di tema terang, jadi teks di atasnya WAJIB memakai
    token invarian (stage-text, stage-sub, object-text, object-meta), tidak
    pernah token chrome yang ikut tema. Tidak ada pasangan -light satu pun.
-   yellow-20 termasuk grup ini dan sudah dideklarasikan di blok Brand di atas. */
+   accent-20 is declared in the Accent block above. */
 :root {
   /* panggung hero (selalu gelap) */
   --app-spine-stage-1: #34322d;
@@ -220,7 +209,7 @@ html[data-theme="light"] {
 }
 
 /* -- Status (keputusan OQ-D7) --------------------------------------------- */
-/* PENTING: nilai isi (danger #e5484d, ok #3fb68b, warning #d4a83c) adalah isi,
+/* PENTING: nilai isi (danger #e5484d, ok #3fb68b, warning #dca43b) adalah isi,
    titik, ikon, garis error, dan tombol danger solid — nilainya SAMA di dua tema
    dan TIDAK PERNAH dipakai sebagai teks kecil (#e5484d hanya 4,41 : 1 di
    surface, 3,93 : 1 di surface-2). Teks status selalu memakai *-text (gelap)
@@ -241,13 +230,13 @@ html[data-theme="light"] {
   --app-spine-ok-bg-light: #3fb68b12;
   --app-spine-ok-border: #3fb68b59;
   --app-spine-ok-border-light: #3fb68b66;
-  --app-spine-warning: #d4a83c;
-  --app-spine-warning-text: #d4a83c;
+  --app-spine-warning: #dca43b;
+  --app-spine-warning-text: #dca43b;
   --app-spine-warning-text-light: #7a5905;
-  --app-spine-warning-bg: #d4a83c1a;
-  --app-spine-warning-bg-light: #d4a83c14;
-  --app-spine-warning-border: #d4a83c59;
-  --app-spine-warning-border-light: #d4a83c66;
+  --app-spine-warning-bg: #dca43b1a;
+  --app-spine-warning-bg-light: #dca43b14;
+  --app-spine-warning-border: #dca43b59;
+  --app-spine-warning-border-light: #dca43b66;
   /* Var isi bernama (DESIGN.md → Pemetaan var --app-*). --app-danger dan
      --app-ok lama adalah warna TEKS, jadi isinya butuh nama sendiri; warning
      belum pernah ada. Nama baru, belum dirujuk aturan mana pun. */
@@ -256,21 +245,21 @@ html[data-theme="light"] {
   /* PERHATIAN: --app-danger & --app-ok lama adalah warna TEKS, tetapi
      --app-warning adalah warna ISI. Untuk teks kecil pakai
      --app-spine-warning-text (gelap) / --app-spine-warning-text-light (terang). */
-  --app-warning: var(--app-spine-warning, #d4a83c);
-  --app-warning-solid: var(--app-spine-warning, #d4a83c);
+  --app-warning: var(--app-spine-warning, #dca43b);
+  --app-warning-solid: var(--app-spine-warning, #dca43b);
 }
 
 /* Keluarga --app-warning-* baru (DESIGN.md → Pemetaan var --app-*): ikut tema,
    sejajar dengan --app-danger-* / --app-ok-* lama. */
 :root,
 html[data-theme="dark"] {
-  --app-warning-bg: var(--app-spine-warning-bg, #d4a83c1a);
-  --app-warning-border: var(--app-spine-warning-border, #d4a83c59);
+  --app-warning-bg: var(--app-spine-warning-bg, #dca43b1a);
+  --app-warning-border: var(--app-spine-warning-border, #dca43b59);
 }
 
 html[data-theme="light"] {
-  --app-warning-bg: var(--app-spine-warning-bg-light, #d4a83c14);
-  --app-warning-border: var(--app-spine-warning-border-light, #d4a83c66);
+  --app-warning-bg: var(--app-spine-warning-bg-light, #dca43b14);
+  --app-warning-border: var(--app-spine-warning-border-light, #dca43b66);
 }
 
 /* ============================================================
@@ -503,23 +492,23 @@ html {
    (jatuh jauh, tepi lembut) dan TANPA glow — kecuali varian terang
    card/pocket di bawah, nilai hangat yang disetujui DESIGN.md.
 
-   CAHAYA KUNING hanya boleh di empat tempat (aturan DESIGN.md bagian
+   ACCENT GLOW (blue) hanya boleh di empat tempat (aturan DESIGN.md bagian
    Elevation & Depth; focus ring adalah outline, bukan glow):
-   1. glow panggung, termasuk panggung mini: radial-gradient(closest-side, var(--app-spine-yellow-14), transparent)
-   2. hover button-primary: 0 16px 36px -12px var(--app-spine-yellow-55)
-   3. bayangan stiker: 0 .08em 0 var(--app-spine-yellow-edge), 0 .3em .6em -.2em var(--app-spine-yellow-45)
-   4. bayangan success-mark/status-mark menunggu: 0 5px 0 var(--app-spine-yellow-edge), 0 18px 36px -12px var(--app-spine-yellow-45) */
+   1. glow panggung, termasuk panggung mini: radial-gradient(closest-side, var(--app-spine-accent-14), transparent)
+   2. hover button-primary: 0 16px 36px -12px var(--app-spine-accent-55)
+   3. bayangan stiker: 0 .08em 0 var(--app-spine-accent-edge), 0 .3em .6em -.2em var(--app-spine-accent-45)
+   4. bayangan success-mark/status-mark menunggu: 0 5px 0 var(--app-spine-accent-edge), 0 18px 36px -12px var(--app-spine-accent-45) */
 :root {
-  --spine-elevation-stage: radial-gradient(closest-side, var(--app-spine-yellow-14, #efe74924), transparent);
+  --spine-elevation-stage: radial-gradient(closest-side, var(--app-spine-accent-14), transparent);
   --spine-elevation-tile: 0 30px 50px -20px rgba(0, 0, 0, .85);
   --spine-elevation-pocket: inset 0 1.5px 0 var(--app-spine-white-12, #ffffff1f), 0 -16px 30px -14px rgba(0, 0, 0, .9), 0 30px 50px -24px #000;
   --spine-elevation-card: 0 40px 80px -30px #000;
   --spine-elevation-popover: 0 24px 44px -16px #000; /* bulk-bar & upload-dock: 0 30px 60px -18px #000, 0 0 0 1px rgba(0,0,0,.4) */
   --spine-elevation-sheet: 0 -30px 60px -20px #000;
   --spine-elevation-viewer: 0 40px 80px -30px #000;
-  /* Cahaya kuning #4 (aturan di atas): bayangan success-mark & status-mark
+  /* Accent glow #4 (aturan di atas): bayangan success-mark & status-mark
      menunggu (Story 1.27) — dipakai bersama dua komponen itu saja. */
-  --spine-elevation-success-mark: 0 5px 0 var(--app-spine-yellow-edge), 0 18px 36px -12px var(--app-spine-yellow-45);
+  --spine-elevation-success-mark: 0 5px 0 var(--app-spine-accent-edge), 0 18px 36px -12px var(--app-spine-accent-45);
 }
 
 html[data-theme="light"] {
@@ -552,16 +541,16 @@ html[data-theme="light"] {
    Satu pasangan cincin fokus untuk seluruh app ({components.focus-ring}):
    outline 2px solid via :focus-visible (BUKAN box-shadow — outline
    bertahan di forced colors / Windows high contrast), offset 3px.
-   Gelap = kuning spine, terang = ink (kuning/emas tidak pernah jadi
-   penanda fokus di tema terang). Fokus keyboard = keadaan hover PLUS
+   Dark = accent-2 (light blue), light = ink (the accent fill never
+   marks focus in the light theme). Fokus keyboard = keadaan hover PLUS
    cincin — keduanya menyala, bukan saling menggantikan.
-   Varian: --on-photo (di atas foto: kuning offset 2px + cincin ink
+   Varian: --on-photo (di atas foto: accent-2 offset 2px + cincin ink
    2px — salah satu selalu ≥3:1 di foto terang maupun gelap),
    --inset (item menu & opsi listbox: offset -2px agar tak terpotong
-   tepi), --double (video-controls: cincin ganda kuning+ink offset
+   tepi), --double (video-controls: cincin ganda accent-2+ink offset
    3px di luar "tebal kertas"). */
 :root {
-  --spine-ring-color: var(--app-spine-yellow, #efe749);
+  --spine-ring-color: var(--app-spine-accent-2);
 }
 html[data-theme="light"] {
   --spine-ring-color: var(--app-spine-ink, #141310);
@@ -572,7 +561,7 @@ html[data-theme="light"] {
   outline-offset: 3px;
 }
 .spine-focus-ring--on-photo:focus-visible {
-  outline: 2px solid var(--app-spine-yellow, #efe749);
+  outline: 2px solid var(--app-spine-accent-2);
   outline-offset: 2px;
   box-shadow: 0 0 0 2px var(--app-spine-ink, #141310);
 }
@@ -581,7 +570,7 @@ html[data-theme="light"] {
   outline-offset: -2px;
 }
 .spine-focus-ring--double:focus-visible {
-  outline: 2px solid var(--app-spine-yellow, #efe749);
+  outline: 2px solid var(--app-spine-accent-2);
   outline-offset: 3px;
   box-shadow: 0 0 0 2px var(--app-spine-ink, #141310);
 }
@@ -688,7 +677,7 @@ html[data-motion="calm"] .spine-motion-keep::after {
 html[data-theme="light"] .authThemeScope {
   --color-background: var(--app-spine-bg, #f5f4ee);
   --color-on-background: var(--app-spine-text, #141310);
-  --color-primary: var(--app-spine-ink, #141310);
+  --color-primary: var(--app-spine-accent-text-light);
   --color-surface: var(--app-spine-surface, #ffffff);
   --color-surface-dim: var(--app-spine-bg, #f5f4ee);
   --color-surface-container-lowest: var(--app-spine-surface-2, #f0eee6);
@@ -701,24 +690,23 @@ html[data-theme="light"] .authThemeScope {
   --color-error: var(--app-spine-danger-text-light, #b8292f);
   --glass-bg: rgba(255, 255, 255, 0.72);
   --glass-border: 1px solid rgba(60, 50, 30, 0.10);
-  --shadow-glow: 0 0 20px rgba(184, 134, 11, 0.10);
+  --shadow-glow: 0 0 20px var(--app-spine-accent-14);
 }
 
 /* Dashboard light mode: shim --color-* ke token spine di dalam .dashThemeScope.
    Diterapkan HANYA saat data-theme=light supaya dark tetap identik.
    --dash-* struktural (bukan palet) tidak disentuh. Container high/highest
    melipat ke surface-2/line — spine tidak punya tangga container lebih halus.
-   Pasangan penemuan lokal: primary=accent-light (#b8860b lama gagal AA teks
-   kecil), on-primary-container=ink. primary-container bertahan gold karena
-   perannya ganda — sebagai teks di permukaan terang 2,2:1 (gagal) lawan
-   sebagai isian berteks ink 8,4:1 (lolos); pemecahan peran per-situs
-   menyusul saat layar-layar ini di-restyle. */
+   Local pairings: primary = accent-text-light (AA text on light surfaces),
+   primary-container = accent (a fill with white on-accent text, 4.98:1; as
+   an icon or border on light surfaces it stays above 3:1). */
 html[data-theme="light"] .dashThemeScope {
   --color-background: var(--app-spine-bg, #f5f4ee);
   --color-on-background: var(--app-spine-text, #141310);
-  --color-primary: var(--app-spine-accent-light, #8a6508); /* #b8860b gagal AA teks kecil */
-  --color-primary-container: var(--app-spine-gold, #d4a83c);
-  --color-on-primary-container: var(--app-spine-ink, #141310);
+  --color-primary: var(--app-spine-accent-text-light);
+  --color-on-primary: var(--app-spine-on-accent); /* white on accent-text-light, 6.59:1 */
+  --color-primary-container: var(--app-spine-accent);
+  --color-on-primary-container: var(--app-spine-on-accent);
   --color-surface: var(--app-spine-surface, #ffffff);
   --color-surface-dim: var(--app-spine-surface-2, #f0eee6);
   --color-surface-bright: var(--app-spine-surface, #ffffff);
@@ -763,17 +751,18 @@ html[data-theme="light"] .dashThemeScope {
   --color-outline: #94917a;
   --color-outline-variant: #494734;
 
-  /* Primary (Actionable, White & Gold) */
-  --color-primary: #ffffff;
-  --color-on-primary: #343200;
-  --color-primary-container: #efe749; /* Gold */
-  --color-on-primary-container: #6b6700;
-  --color-inverse-primary: #656100;
+  /* Primary (actionable): the accent blue family. Dark: accent-2 with ink
+     on it (8.1:1); light (.dashThemeScope below): accent-text-light with white. */
+  --color-primary: var(--app-spine-accent-2);
+  --color-on-primary: var(--app-spine-ink);
+  --color-primary-container: var(--app-spine-accent); /* accent fill */
+  --color-on-primary-container: var(--app-spine-on-accent);
+  --color-inverse-primary: var(--app-spine-accent-text-light);
   
-  --color-primary-fixed: #efe749;
-  --color-primary-fixed-dim: #d3cb2c;
-  --color-on-primary-fixed: #1e1c00;
-  --color-on-primary-fixed-variant: #4c4900;
+  --color-primary-fixed: var(--app-spine-accent);
+  --color-primary-fixed-dim: var(--app-spine-accent-edge);
+  --color-on-primary-fixed: var(--app-spine-on-accent);
+  --color-on-primary-fixed-variant: var(--app-spine-on-accent);
 
   /* Secondary (Cyan highlights) */
   --color-secondary: #59d5f9;
@@ -869,7 +858,7 @@ a {
 
 .btn-primary {
   background: var(--color-primary-container);
-  color: #000;
+  color: var(--color-on-primary-container);
   border: none;
   border-radius: var(--radius-lg);
   padding: 12px 24px;
@@ -882,7 +871,7 @@ a {
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(239, 231, 73, 0.3);
+  box-shadow: 0 4px 12px var(--app-spine-accent-35);
 }
 
 .btn-secondary {
@@ -920,7 +909,7 @@ a {
 /* Story 1.7: cincin fokus spine menggantikan outline: none (satu ring
    di semua kontrol — lihat .spine-focus-ring di atas). */
 .input-field:focus-visible {
-  outline: 2px solid var(--spine-ring-color, #efe749);
+  outline: 2px solid var(--spine-ring-color);
   outline-offset: 3px;
 }
 
@@ -992,7 +981,7 @@ iframe[src^="https://accounts.google.com/gsi/"],
 }
 
 /* Story 2.1: skip-link "Lewati ke konten" — fokus pertama di body untuk
-   /dashboard/*. Tersembunyi sampai :focus-visible, lalu pill kuning/ink
+   /dashboard/*. Tersembunyi sampai :focus-visible, lalu pill accent/white
    di kiri-atas (di atas semua modal dashboard, z 1200). Target fokusnya
    <main id> di dashboard/layout.tsx; cincin fokus dari .spine-focus-ring
    yang dipasang di markup. */
@@ -1006,8 +995,8 @@ iframe[src^="https://accounts.google.com/gsi/"],
   min-height: 48px;
   padding: 10px 22px;
   border-radius: var(--spine-radius-full);
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   font-weight: 800;
   font-size: 0.875rem;
   letter-spacing: 0.02em;

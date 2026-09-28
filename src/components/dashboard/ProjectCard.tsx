@@ -295,7 +295,7 @@ export default function ProjectCard({
               Project di belakangnya. */}
           {showUploadCta ? (
             <PillButton
-              variant="yellow"
+              variant="accent"
               className={styles.uploadCta}
               onClick={(e) => {
                 e.stopPropagation();

@@ -39,7 +39,7 @@ export default function NotificationBell({ large = false }: { large?: boolean } 
       case "upload_complete": return { icon: "▲", bg: "rgba(76,175,80,0.15)", color: "#4CAF50", label: "Upload" };
       case "chat_mention": return { icon: "@", bg: "rgba(33,150,243,0.15)", color: "#2196F3", label: "Chat" };
       case "file_shared": return { icon: "↗", bg: "rgba(255,152,0,0.15)", color: "#FF9800", label: "Share" };
-      case "project_created": return { icon: "+", bg: "rgba(239,231,73,0.15)", color: "var(--color-gold)", label: "Project" };
+      case "project_created": return { icon: "+", bg: "var(--app-spine-accent-14)", color: "var(--app-accent)", label: "Project" };
       default: return { icon: "●", bg: "rgba(255,255,255,0.1)", color: "#fff", label: "Info" };
     }
   };
@@ -58,7 +58,7 @@ export default function NotificationBell({ large = false }: { large?: boolean } 
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      {/* Story 2.2: icon-button 40px (48px versi HP, Story 2.3) + badge kuning
+      {/* Story 2.2: icon-button 40px (48px versi HP, Story 2.3) + accent badge
           miring 8° (AC) — label menyebut jumlah belum dibaca; dropdown tetap
           perilaku lama (Epic 3). */}
       <button
@@ -79,7 +79,7 @@ export default function NotificationBell({ large = false }: { large?: boolean } 
         {count > 0 && (
           <span aria-hidden="true" style={{
             position: "absolute", top: -4, right: -8,
-            background: "var(--app-spine-yellow)", color: "var(--app-spine-ink)",
+            background: "var(--app-spine-accent)", color: "var(--app-spine-on-accent)",
             font: "900 9.5px/1.2 var(--font-inter)", letterSpacing: "0.02em",
             padding: "2px 5px", borderRadius: "999px",
             transform: "rotate(8deg)",
@@ -106,7 +106,7 @@ export default function NotificationBell({ large = false }: { large?: boolean } 
           }}>
             <span style={{ fontWeight: 700, fontSize: "15px", color: "var(--color-on-surface)" }}>Notifications</span>
             {count > 0 && (
-              <button onClick={handleMark} style={{ background: "none", border: "none", color: "var(--color-gold)", fontSize: "12px", cursor: "pointer", fontWeight: 600, opacity: 0.8 }}>
+              <button onClick={handleMark} style={{ background: "none", border: "none", color: "var(--app-accent)", fontSize: "12px", cursor: "pointer", fontWeight: 600 }}>
                 Mark all read
               </button>
             )}

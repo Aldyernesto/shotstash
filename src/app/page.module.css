@@ -86,8 +86,8 @@
   border-radius: var(--spine-radius-md); /* 16px */
 }
 
-/* Sorotan akun Google-only (AC 1.22): outline 2px kuning (gelap) / ink
-   (terang) offset 3px — var ring spine sudah berganti tema sendiri.
+/* Google-only account highlight (AC 1.22): 2px ring outline, accent-2 (dark)
+   / ink (light), offset 3px: var ring spine sudah berganti tema sendiri.
    Warna SAJA tidak pernah cukup: kalimat pendamping (.ghint) selalu
    dirender bersama outline ini. Padding 8px = mock .gwrap.hl. */
 .googleWrapHl {
@@ -157,7 +157,7 @@
   background: var(--app-spine-warning-bg);
   border: 1px solid var(--app-spine-warning-border);
   border-radius: var(--spine-radius-md);
-  color: var(--app-spine-warning-text); /* #d4a83c — gelap */
+  color: var(--app-spine-warning-text); /* amber warning text, dark theme */
 }
 
 .pendingRow svg {
@@ -174,7 +174,7 @@
 html[data-theme='light'] .pendingRow {
   background: var(--app-spine-warning-bg-light);
   border-color: var(--app-spine-warning-border-light);
-  color: var(--app-spine-warning-text-light); /* #7a5905 — emas terang kurang terbaca di terang */
+  color: var(--app-spine-warning-text-light); /* #7a5905: the amber fill is too light for text on paper */
 }
 
 /* Story 1.24: .qrContainer/.qrBox/.qrText dihapus — markup QR lama

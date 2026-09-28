@@ -96,8 +96,8 @@
   z-index: 4;
   padding: 7px 10px;
   border-radius: var(--spine-radius-sticker);
-  background: var(--app-spine-yellow, #efe749);
-  color: var(--app-spine-ink, #141310);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   transform: rotate(-6deg);
   box-shadow: 0 6px 14px -4px rgba(0, 0, 0, 0.6);
   transition: transform var(--spine-motion-stack-swing);
@@ -128,7 +128,7 @@
 .countChip svg {
   width: 13px;
   height: 13px;
-  color: var(--app-spine-gold, #d4a83c);
+  color: var(--app-accent);
 }
 
 /* ---------- satu tautan, area seluas kartu ---------- */
@@ -198,10 +198,10 @@
   padding: 18px 14px 62px;
   background: repeating-linear-gradient(
     -45deg,
-    var(--app-spine-yellow-08, #efe74914) 0 10px,
+    var(--app-spine-accent-08) 0 10px,
     transparent 10px 20px
   );
-  border: 2px solid var(--app-spine-yellow-35, #efe74959);
+  border: 2px solid var(--app-spine-accent-35);
   box-shadow: none;
 }
 
@@ -309,16 +309,13 @@
    Garis putus-putus + garis diagonal + chip bertulisan. Tidak pernah
    ditandai lewat perubahan warna saja. */
 .dragOver .frontCard {
-  outline: 2px dashed var(--app-spine-yellow, #efe749);
+  outline: 2px dashed var(--app-spine-accent-2);
   outline-offset: 3px;
   background-image: repeating-linear-gradient(
     -45deg,
-    var(--app-spine-yellow-14, #efe74924) 0 10px,
+    var(--app-spine-accent-14) 0 10px,
     transparent 10px 20px
   );
-}
-:global(html[data-theme="light"]) .dragOver .frontCard {
-  outline-color: var(--app-spine-ink, #141310);
 }
 
 .dragChip {
@@ -345,5 +342,5 @@
   flex: none;
   width: 16px;
   height: 16px;
-  color: var(--app-spine-yellow, #efe749);
+  color: var(--app-spine-accent-2);
 }

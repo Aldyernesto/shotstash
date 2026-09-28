@@ -292,13 +292,13 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
             onClick={uploading ? undefined : handlePickFile}
             style={{
               width: '96px', height: '96px', borderRadius: '50%',
-              background: avatarUrl ? `url(${avatarUrl}) center/cover no-repeat` : 'linear-gradient(135deg, #efe749 0%, #d3cb2c 100%)',
-              border: '3px solid rgba(239,231,73,0.4)',
+              background: avatarUrl ? `url(${avatarUrl}) center/cover no-repeat` : 'linear-gradient(135deg, var(--app-spine-accent) 0%, var(--app-spine-accent-edge) 100%)',
+              border: '3px solid var(--app-spine-accent-45)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '32px', fontWeight: 800, color: '#141310',
+              fontSize: '32px', fontWeight: 800, color: 'var(--app-spine-on-accent)',
               cursor: uploading ? 'wait' : 'pointer',
               position: 'relative',
-              boxShadow: '0 8px 24px rgba(239,231,73,0.25)',
+              boxShadow: '0 8px 24px var(--app-spine-accent-20)',
             }}
             title="Click to change photo"
           >
@@ -308,7 +308,7 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
               width: '30px', height: '30px', borderRadius: '50%',
               background: '#141310', border: '2px solid var(--color-primary-container)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--color-primary-container)', fontSize: '14px',
+              color: 'var(--app-spine-accent-2)', fontSize: '14px',
             }}>📷</div>
           </div>
           <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
@@ -356,7 +356,7 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
           <div style={{
             padding: '11px 14px', background: 'var(--dash-chip)',
             border: '1px solid var(--dash-hairline-soft)', borderRadius: '10px',
-            color: 'var(--color-primary-container)', fontSize: '14px', fontWeight: 700, letterSpacing: '0.05em',
+            color: 'var(--app-accent)', fontSize: '14px', fontWeight: 700, letterSpacing: '0.05em',
           }}>{user.role}</div>
           <div style={{ fontSize: '11px', color: 'var(--color-on-surface-variant)', marginTop: '4px', opacity: 0.7 }}>
             Role hanya dapat diubah oleh admin.
@@ -383,7 +383,7 @@ function ProfileSettingsModal({ user, onClose }: { user: any; onClose: () => voi
             onClick={handleSave}
             disabled={saving || uploading}
             style={{
-              background: 'var(--color-primary-container)', border: 'none', color: '#141310',
+              background: 'var(--color-primary-container)', border: 'none', color: 'var(--color-on-primary-container)',
               padding: '9px 20px', borderRadius: '999px',
               cursor: saving ? 'wait' : 'pointer', fontSize: '13px', fontWeight: 700,
               opacity: (saving || uploading) ? 0.6 : 1,

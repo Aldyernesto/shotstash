@@ -11,8 +11,8 @@
   height: 30px;
   padding: 0 14px;
   border-radius: var(--spine-radius-sm);
-  background: var(--app-spine-yellow);
-  color: var(--app-spine-ink);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
   transform: skewX(-6deg); /* kemiringan pill milik komponen, bukan token */
   text-transform: uppercase;
   white-space: nowrap; /* pill tidak pernah melipat baris dalam kotaknya */

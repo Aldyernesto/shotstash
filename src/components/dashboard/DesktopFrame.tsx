@@ -214,7 +214,7 @@ export default function DesktopFrame({
     icon: d.icon,
     href: d.href,
     current: isActiveDestination(d, pathname),
-    trailing: d.goldDot ? <span className={styles.goldDot} aria-hidden="true" /> : undefined,
+    trailing: d.accentDot ? <span className={styles.accentDot} aria-hidden="true" /> : undefined,
   }));
 
   const name = user?.name || user?.email?.split("@")[0] || "User";
@@ -248,7 +248,7 @@ export default function DesktopFrame({
                   >
                     {d.icon}
                     <span>{d.label}</span>
-                    {d.goldDot && <span className={styles.goldDot} aria-hidden="true" />}
+                    {d.accentDot && <span className={styles.accentDot} aria-hidden="true" />}
                   </Link>
                 </li>
               );
@@ -256,7 +256,7 @@ export default function DesktopFrame({
             {overflow.length > 0 && (
               <li>
                 {/* Pemicu "Lainnya": rupa item kapsul + ikon tiga titik slot HP.
-                    Aktif (kuning/ink) bila halaman sekarang ada di dalamnya. */}
+                    Active (accent fill, white text) bila halaman sekarang ada di dalamnya. */}
                 <button
                   type="button"
                   ref={moreBtnRef}
@@ -285,7 +285,7 @@ export default function DesktopFrame({
                   <span className={itemClass(active)}>
                     {d.icon}
                     <span>{d.label}</span>
-                    {d.goldDot && <span className={styles.goldDot} />}
+                    {d.accentDot && <span className={styles.accentDot} />}
                   </span>
                 </li>
               );

@@ -5,7 +5,7 @@
      layar yang sama (hancurkan Project, kosongkan Trash) — latar
      --app-danger-solid.
    - "Move to Trash" dan "Restore" TIDAK PERNAH solid merah — keduanya
-     ButtonPrimary kuning (pelindung dari hapus yang tak sengaja).
+     the accent ButtonPrimary (a guard against accidental deletes).
    (Story 1.14; komponen dibangun di sini, layar Epic 2/3 mengonsumsi.) */
 
 // Story 1.14: keluarga tombol — ButtonPrimary, PillButton, ButtonDanger,
@@ -72,7 +72,7 @@ export function ButtonPrimary({
 // memuatnya dan `{...rest}` meneruskannya. Dipakai Story 3.1 supaya dialog
 // bisa menaruh fokus awal di tombol "Batal".
 export type PillButtonProps = React.ComponentProps<'button'> & {
-  variant?: 'yellow' | 'paper' | 'surface';
+  variant?: 'accent' | 'paper' | 'surface';
   /**
    * Sedang memproses: `aria-busy` + `aria-disabled` (BUKAN `disabled` —
    * fokus tidak boleh hilang), kiriman kedua diabaikan, spinner ink.
@@ -94,7 +94,7 @@ export function PillButton({
   ...rest
 }: PillButtonProps) {
   const variantClass =
-    variant === 'yellow' ? styles.pillYellow : variant === 'paper' ? styles.pillPaper : styles.pillSurface;
+    variant === 'accent' ? styles.pillAccent : variant === 'paper' ? styles.pillPaper : styles.pillSurface;
   return (
     <button
       {...rest}
@@ -150,8 +150,8 @@ export function ButtonDanger({
 }
 
 // TextLink — tautan teks dalam kalimat/form ("Lupa password?",
-// "Ganti email", "Kembali ke halaman masuk"). Gelap: teks text + garis
-// bawah 2px kuning offset 4px. Terang: teks DAN garis accent-light.
+// "Ganti email", "Kembali ke halaman masuk"). Dark: text color + a 2px accent
+// underline, offset 4px. Light: text AND underline in accent-text-light.
 export type TextLinkProps = React.ComponentProps<typeof Link>;
 
 export function TextLink({ className, children, ...rest }: TextLinkProps) {
