@@ -354,13 +354,18 @@ jobs:
           done
           curl -fsS http://127.0.0.1:3005/api/health
 
-      # The harness logs in once; it runs before e2e:security, which uses up
-      # the login rate limit (10 per 15 minutes) for the seeded accounts.
+      # The harness runs first; the rate limit counters are reset before
+      # e2e:security (login limit 10 per 15 minutes per IP).
       - name: Interrupted upload resumes (256 MiB)
         env:
           E2E_BASE_URL: http://127.0.0.1:3005
           E2E_UPLOAD_MB: "256"
         run: npm run e2e:upload
+
+      # Both steps log in from the same IP; flush the throwaway CI cache (it
+      # holds rate limit counters) so e2e:security starts with a fresh budget.
+      - name: Reset rate limit counters
+        run: docker exec "$(docker ps -q --filter ancestor=docker.dragonflydb.io/dragonflydb/dragonfly:v2.0.0)" redis-cli FLUSHALL
 
       - name: e2e:security (uploads, dedup, cancel, expiry, shares, trash)
         env:
