@@ -165,9 +165,9 @@ model MediaFile {
   originalName  String       // Name the uploader's file had
   mimeType      String       // Sniffed from the bytes at completion
   size          BigInt
-  // MD5 of the uploaded bytes (empty until they were verified). After a
-  // HEIC conversion it stays the MD5 of what the user uploaded (the dedup
-  // key) until Story 4.4 keeps originals immutable. Dedup authority: a
+  // MD5 of the stored original, which is exactly what the user uploaded
+  // (empty until verified). Originals are immutable (Story 4.4): HEIC and
+  // any other conversion become processed versions. Dedup authority: a
   // partial unique index on (projectId, md5Checksum) over ready, untrashed
   // rows that are not marked duplicateOf (migration 0006).
   md5Checksum   String
@@ -205,8 +205,9 @@ model MediaFile {
   @@map("media_files")
 }
 
-// Outputs derived from a file (Epic 5 pipeline). Created now and empty until
-// the pipeline exists; purge deletes their keys with the file.
+// Outputs derived from a file: the upload's HEIC `preview` (Story 4.4) and,
+// with Epic 5, pipeline results. Served by /media/p/:id; purge deletes
+// their keys with the file.
 model ProcessedVersion {
   id          String    @id @default(uuid())
   mediaFileId String    @map("media_file_id")

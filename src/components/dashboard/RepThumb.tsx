@@ -46,7 +46,7 @@ function extLabel(value?: string | null): string {
 function MiniCard({
   file,
   className,
-  isDoc,
+  isDoc: isDocProp,
 }: {
   file?: RepFile | null;
   className: string;
@@ -54,6 +54,8 @@ function MiniCard({
 }) {
   const [failed, setFailed] = React.useState(false);
   const url = file?.thumbnailUrl;
+  // Story 4.5: a document inside a stack or fan is a mini doc card too.
+  const isDoc = isDocProp ?? file?.kind === "document";
   return (
     <span className={`${styles.card} ${className} ${isDoc ? styles.docCard : ""}`}>
       {url && !failed && !isDoc ? (
@@ -147,6 +149,8 @@ export default function RepThumb({
         <MiniCard file={sample[1]} className={styles.back1} />
         <MiniCard file={sample[2]} className={styles.back2} />
         <MiniCard file={sample[0]} className={styles.front} />
+        {/* Story 4.5: a video on the front card gets the play mark, like the file variant. */}
+        {sample[0]?.kind === "video" ? <VideoMark /> : null}
       </span>
     );
   }

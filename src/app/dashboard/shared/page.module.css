@@ -359,3 +359,32 @@
     width: 100%;
   }
 }
+
+/* Story 4.5 (key-shared): number sticker + Section title, as in the Trash rows. */
+.titleLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.numberSticker {
+  flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 5px 8px;
+  border-radius: var(--spine-radius-sticker);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
+  font-size: 0.8125rem;
+  transform: rotate(-6deg);
+  box-shadow: 0 6px 14px -4px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
+
+.numberPrefix {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}

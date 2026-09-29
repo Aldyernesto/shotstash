@@ -254,3 +254,62 @@
 /* Fokus DI DALAM panel memakai {colors.ink} saat tema terang; fokus di
    lapisan gelap di sekelilingnya tetap accent-2. Nilai itu sudah dipegang
    --spine-ring-color, jadi `.spine-focus-ring` cukup. */
+
+/* Story 4.4: processed versions (kind chip, type · size · date, download). */
+.versions {
+  display: grid;
+  gap: 12px;
+}
+
+.versionsTitle {
+  margin: 0;
+  color: var(--app-spine-meta);
+}
+
+.versionList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.version {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.versionText {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  justify-items: start;
+}
+
+.versionMeta {
+  color: var(--app-spine-text-soft);
+  overflow-wrap: anywhere;
+}
+
+.versionDownload {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--spine-radius-full);
+  border: 1px solid var(--app-spine-line);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-text);
+}
+
+.versionDownload svg {
+  width: 20px;
+  height: 20px;
+}
+
+.versionDownload:hover {
+  border-color: var(--app-spine-accent);
+}

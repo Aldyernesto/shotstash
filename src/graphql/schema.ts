@@ -157,10 +157,27 @@ export const typeDefs = `#graphql
     # already in the project (or copied): the id of that original.
     duplicateOf: ID
     downloadUrl: String!
+    # Story 4.4: outputs derived from this file (the HEIC preview today,
+    # pipeline results with Epic 5), newest first. The original never changes.
+    processedVersions: [ProcessedVersion!]!
+    # /media/p/{id} of the image preview the viewer shows instead of the
+    # original (HEIC), null when the original is shown as is.
+    previewUrl: String
     folder: Folder!
     uploadedBy: User!
     project: Project!
     trashedAt: DateTime
+    createdAt: DateTime!
+  }
+
+  type ProcessedVersion {
+    id: ID!
+    # "preview" (HEIC preview made at upload) or a pipeline kind.
+    kind: String!
+    mimeType: String!
+    size: BigInt!
+    # /media/p/{id}: attachment, cookie session, same permission as the file.
+    downloadUrl: String!
     createdAt: DateTime!
   }
 
@@ -366,6 +383,9 @@ export const typeDefs = `#graphql
     # Files
     searchFiles(query: String!, projectId: ID): [MediaFile!]!
     searchFolders(query: String!, projectId: ID): [Folder!]!
+    # Story 4.4: processed versions of one live file, newest first (the
+    # viewer loads them when it opens a file; large Section lists skip them).
+    processedVersions(fileId: ID!): [ProcessedVersion!]!
 
     # Shares
     shareLinks: [ShareLink!]!
@@ -424,7 +444,7 @@ export const typeDefs = `#graphql
     # Upload (Story 4.3): parts travel over REST, see UploadSession.
     initiateUpload(input: InitiateUploadInput!): UploadSession!
     # md5Checksum: MD5 of the whole file, when not sent at initiate.
-    completeUpload(sessionId: ID!, md5Checksum: String, convertHeic: Boolean): MediaFile!
+    completeUpload(sessionId: ID!, md5Checksum: String): MediaFile!
     cancelUpload(sessionId: ID!): Boolean!
 
     # Share

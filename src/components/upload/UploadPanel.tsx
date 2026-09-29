@@ -3,8 +3,9 @@
 /**
  * Story 3.12 — `upload-panel`: kerangka panel, tujuan, dropzone, slot
  * antrean, dan footer. Isi barisnya (`upload-row`), progres batch
- * (`batch-progress`), dan pertanyaan HEIC (`heic-question`) datang dari
- * Story 3.13; tombol "Kecilkan" dari Story 3.15.
+ * (`batch-progress`) datang dari Story 3.13; tombol "Kecilkan" dari
+ * Story 3.15. Story 4.4: no HEIC question any more (originals stay as
+ * uploaded; HEIC gets a preview version on the server).
  *
  * Menggantikan `src/components/UploadModal.tsx` (overlay
  * `page.module.css`, dialog HEIC bertumpuk di atas dialog, tombol
@@ -28,7 +29,6 @@ import { acceptForFolder, useUpload } from "@/components/UploadContext";
 import { summarize } from "./uploadTypes";
 import UploadRow from "./UploadRow";
 import BatchProgress from "./BatchProgress";
-import { HeicActions, HeicBody } from "./HeicQuestion";
 import { DuplicateActions, DuplicateBody, useApplyAll } from "./DuplicateQuestion";
 import styles from "./upload.module.css";
 
@@ -66,8 +66,6 @@ export default function UploadPanel() {
   const q = useUpload();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [askHeic, setAskHeic] = useState(false);
-  const heicTitleId = useId();
   const dupeTitleId = useId();
   const [applyAll, setApplyAll] = useApplyAll(q.duplicatePrompt);
   const askDupe = !!q.duplicatePrompt;
@@ -117,22 +115,11 @@ export default function UploadPanel() {
       q.finish();
       return;
     }
-    // Pertanyaan HEIC MENGGANTI isi panel — tidak ada dialog kedua.
-    if (q.hasHeic && q.convertHeic === null) {
-      setAskHeic(true);
-      return;
-    }
-    await q.start();
-  };
-
-  const answerHeic = async (convert: boolean) => {
-    q.setConvertHeic(convert);
-    setAskHeic(false);
     await q.start();
   };
 
   const primaryLabel = finished ? t("panel.done") : t("panel.uploadCount", { count: sum.waiting });
-  const locked = q.running || askHeic || askDupe;
+  const locked = q.running || askDupe;
   const retryable = q.tasks.filter((x) => x.status === "error" && x.file && x.error?.reason !== "duplicate").length;
 
   return (
@@ -140,17 +127,17 @@ export default function UploadPanel() {
       size="lg"
       mobilePlacement="bottom"
       mobilePreviewFirst={false}
-      title={askDupe ? t("duplicate.title") : askHeic ? t("heic.title") : t("panel.title")}
+      title={askDupe ? t("duplicate.title") : t("panel.title")}
       closeLabel={t("panel.close")}
       closeDisabled={locked}
-      /* Esc does nothing while a batch runs or a question (HEIC, duplicate)
-         waits for its answer (AC 3.12, 3.13, 4.3). */
+      /* Esc does nothing while a batch runs or the duplicate question
+         waits for its answer (AC 3.12, 4.3). */
       locked={locked}
       onClose={locked ? () => undefined : q.closePanel}
       headerExtra={
         /* Story 3.15: "Kecilkan" — serah-terima ke `upload-dock`.
            Upload TETAP berjalan setelah panel diperkecil. */
-        !askHeic && !askDupe && q.tasks.length > 0 ? (
+        !askDupe && q.tasks.length > 0 ? (
           <button
             type="button"
             aria-label={t("panel.minimizeLabel")}
@@ -165,8 +152,6 @@ export default function UploadPanel() {
       footer={
         askDupe ? (
           <DuplicateActions onSkip={() => q.answerDuplicate("skip", applyAll)} onUpload={() => q.answerDuplicate("upload", applyAll)} />
-        ) : askHeic ? (
-          <HeicActions onConvert={() => answerHeic(true)} onKeep={() => answerHeic(false)} />
         ) : (
           <div className={styles.footer}>
             {summaryText ? (
@@ -207,11 +192,8 @@ export default function UploadPanel() {
       }
     >
       {askDupe && q.duplicatePrompt ? (
-        /* The duplicate question REPLACES the panel content, like HEIC. */
+        /* The duplicate question REPLACES the panel content (no second dialog). */
         <DuplicateBody prompt={q.duplicatePrompt} titleId={dupeTitleId} applyAll={applyAll} onApplyAll={setApplyAll} />
-      ) : askHeic ? (
-        /* Pertanyaan HEIC MENGGANTI isi panel — bukan dialog kedua. */
-        <HeicBody titleId={heicTitleId} />
       ) : (
         <>
           <p className={`spine-body ${styles.target}`}>

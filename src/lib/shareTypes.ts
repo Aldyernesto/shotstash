@@ -68,6 +68,7 @@ export type SharePayload = {
 
 export type ShareResolution =
   | { state: "expired" }
+  | { state: "revoked" }
   | { state: "gone"; target: "project" | "section" | "file" }
   | { state: "not-found" }
   | { state: "private" }

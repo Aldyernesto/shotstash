@@ -30,6 +30,7 @@ import styles from "./sharePage.module.css";
 
 export type ShareInvalidKind =
   | "expired"
+  | "revoked"
   | "not-found"
   | "project-gone"
   | "section-gone"
@@ -37,8 +38,12 @@ export type ShareInvalidKind =
   | "private";
 
 /** Message keys (`shareInvalid.<key>.title|text`) per state. */
-const COPY_KEY: Record<ShareInvalidKind, "expired" | "notFound" | "projectGone" | "sectionGone" | "fileGone" | "private"> = {
+const COPY_KEY: Record<
+  ShareInvalidKind,
+  "expired" | "revoked" | "notFound" | "projectGone" | "sectionGone" | "fileGone" | "private"
+> = {
   expired: "expired",
+  revoked: "revoked",
   "not-found": "notFound",
   "project-gone": "projectGone",
   "section-gone": "sectionGone",

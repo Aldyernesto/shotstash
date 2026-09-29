@@ -31,6 +31,7 @@ export const AUTH_MAP: Record<'Query' | 'Mutation' | 'Subscription', Record<stri
     folder: { auth: 'session', action: 'project.view' },
     searchFiles: { auth: 'session', action: 'project.view' },
     searchFolders: { auth: 'session', action: 'project.view' },
+    processedVersions: { auth: 'session', action: 'project.view' },
     shareLinks: { auth: 'session', action: 'share.manage' },
     shareLinksForTarget: { auth: 'session', action: 'share.manage' },
     uploadSession: { auth: 'session', action: 'upload' },

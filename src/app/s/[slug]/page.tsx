@@ -6,11 +6,10 @@
  * cabang ≥ 900 px — seluruhnya lewat CSS di `sharePage.module.css`,
  * bukan berkas kedua. Story 3.11 menyumbang keadaan gagalnya.
  *
- * Story 4.5: slug yang tidak ada (salah ketik ATAU baru dicabut — barisnya
- * memang dihapus) memanggil `notFound()` sehingga statusnya HTTP 404 dan
- * wujudnya `not-found.tsx` (tampilan "Link tidak ditemukan" Story 3.11
- * yang sama persis). Keadaan lain (kedaluwarsa, hilang, PRIVATE) tetap
- * dirender di dalam halaman seperti sebelumnya.
+ * Story 4.6: every inactive link (unknown, revoked, expired, target gone)
+ * answers HTTP 404 through `notFound()`; `not-found.tsx` shows the matching
+ * message (it resolves the link again from the request path). A
+ * PRIVATE link without its code stays 200 with the unlock form.
  *
  * ATURAN PRATINJAU LINK (Epic 1, tetap berlaku apa adanya):
  * `og:image` SELALU satu template generik untuk SEMUA link — tidak
@@ -28,6 +27,7 @@ import { config } from "@/lib/config";
 import { findLiveShare, recordShareView, resolveShare } from "@/lib/shareLink";
 import { shareSigner, shareUnlocked } from "@/modules/share";
 import ShareRoot from "@/components/share/ShareRoot";
+import { inactiveKindOf } from "./inactive";
 
 export const dynamic = "force-dynamic";
 
@@ -102,11 +102,9 @@ export default async function SharePageRoute({
     }
   }
 
-  // Story 4.5: `prisma.shareLink.findUnique({ where: { slug } })` null →
-  // 404 lewat `not-found.tsx`, bukan 200 dengan tampilan yang sama.
-  // Story 2.8: a trashed or deleted target answers 404 like a revoked link;
-  // the page never says whether the item still exists.
-  if (resolution.state === "not-found" || resolution.state === "gone") notFound();
+  // Story 4.6: unknown, revoked, expired and gone links answer 404 with
+  // their own message (never a name, count or thumbnail).
+  if (inactiveKindOf(resolution)) notFound();
   // One view per successful page render (media requests are not counted).
   if (resolution.state === "ok") await recordShareView(slug);
 

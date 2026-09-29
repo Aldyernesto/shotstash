@@ -5,22 +5,25 @@
  */
 
 import { Readable } from 'stream';
-import archiver from 'archiver';
 import { isStorageError, storage } from '@/modules/storage';
 import { errMessage, logger } from '@/lib/logger';
 import { parseRange } from './range';
+import { zipStream, type ZipEntry } from './zip';
 
 const log = logger('media');
 
 export const CACHE_COOKIE = 'private, max-age=3600';
 export const CACHE_SIGNED = 'private, max-age=300';
+/** A thumbnail addressed by its current version (`?v=<thumb_version>`) never changes. */
+export const CACHE_IMMUTABLE = 'private, max-age=31536000, immutable';
 
-export type CachePolicy = 'cookie' | 'signed';
+/** `immutable` is for cookie-authorised, versioned URLs only. */
+export type CachePolicy = 'cookie' | 'signed' | 'immutable';
 
 function cacheHeaders(policy: CachePolicy): Record<string, string> {
-  return policy === 'cookie'
-    ? { 'Cache-Control': CACHE_COOKIE, Vary: 'Cookie' }
-    : { 'Cache-Control': CACHE_SIGNED };
+  if (policy === 'cookie') return { 'Cache-Control': CACHE_COOKIE, Vary: 'Cookie' };
+  if (policy === 'immutable') return { 'Cache-Control': CACHE_IMMUTABLE, Vary: 'Cookie' };
+  return { 'Cache-Control': CACHE_SIGNED };
 }
 
 export function notFoundResponse() {
@@ -104,12 +107,13 @@ export async function fileResponse(input: FileResponseInput): Promise<Response> 
   }
 }
 
-export type ZipEntry = { key: string; name: string };
+export type { ZipEntry } from './zip';
 
 /**
- * Streams a ZIP. Entries are opened one at a time, when the archive reaches
- * them; an object that cannot be read is skipped and listed in
- * `_MISSING_FILES.txt` at the end.
+ * Streams a ZIP (STORE mode, ZIP64 where needed, see zip.ts). Objects are
+ * checked while planning, so unreadable ones are listed in
+ * `_MISSING_FILES.txt`; there is no `Content-Length` and no Range. A read
+ * that fails mid-entry aborts the response.
  */
 export async function zipResponse(input: {
   entries: ZipEntry[];
@@ -118,58 +122,14 @@ export async function zipResponse(input: {
   cache: CachePolicy;
 }): Promise<Response> {
   const store = storage();
-  const archive = archiver('zip', { zlib: { level: 1 } });
-  const queue = [...input.entries];
-  const skipped: string[] = [];
-  let filesDone = false;
-
-  const finish = () => {
-    filesDone = true;
-    for (const d of input.emptyDirs ?? []) archive.append('', { name: d.endsWith('/') ? d : `${d}/` });
-    if (skipped.length) {
-      archive.append(
-        `These files were skipped because they could not be read from storage:\n\n${skipped.map((s) => `  - ${s}`).join('\n')}\n`,
-        { name: '_MISSING_FILES.txt' },
-      );
-    }
-    void archive.finalize().catch(() => archive.abort());
-  };
-
-  const next = async () => {
-    while (queue.length) {
-      const e = queue.shift()!;
-      try {
-        const stream = await store.getStream(e.key);
-        // A read that fails mid-entry cannot be skipped any more: the
-        // archive (and the response) fails, so the client sees a broken
-        // download instead of a silently truncated ZIP.
-        stream.once('error', (err) => {
-          log.warn('zip entry failed', { name: e.name, err: errMessage(err) });
-          archive.abort();
-          archive.destroy(err instanceof Error ? err : new Error(String(err)));
-        });
-        archive.append(stream, { name: e.name });
-        return;
-      } catch {
-        skipped.push(e.name);
-      }
-    }
-    finish();
-  };
-
-  // One entry in flight at a time: the next object is opened when the
-  // archive has written the previous one.
-  archive.on('entry', () => {
-    if (!filesDone) void next();
+  const source = { stat: (key: string) => store.stat(key), getStream: (key: string) => store.getStream(key) };
+  const stream = await zipStream(input.entries, source, {
+    emptyDirs: input.emptyDirs,
+    onError: (err) => log.warn('zip failed', { err: errMessage(err) }),
   });
-  archive.on('error', (err) => log.warn('zip failed', { err: errMessage(err) }));
-  void next();
-
   // Readable.toWeb pulls from the archive, so a slow client pauses zipping
   // instead of buffering the whole archive in memory.
-  const body = toWeb(archive);
-
-  return new Response(body, {
+  return new Response(toWeb(stream), {
     headers: {
       'Content-Type': 'application/zip',
       'Content-Disposition': contentDisposition('attachment', input.zipName),

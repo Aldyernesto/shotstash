@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Story 4.3: duplicate question. Like the HEIC question it REPLACES the
+ * Story 4.3: duplicate question. It REPLACES the
  * content of `upload-panel` (one modal layer, no dialog over a dialog).
  * "Skip" is the default (accent, first); "Upload anyway" keeps both files.
  * With more duplicates waiting, one checkbox applies the answer to all.
@@ -50,7 +50,7 @@ export function DuplicateBody({
           ? t.rich("bodySame", { name: prompt.name, b: (chunks) => <b>{chunks}</b> })
           : t.rich("body", { name: prompt.name, existing: prompt.existingName, b: (chunks) => <b>{chunks}</b> })}
       </p>
-      <p className={`spine-footnote ${styles.heicNote}`}>{t("note")}</p>
+      <p className={`spine-footnote ${styles.questionNote}`}>{t("note")}</p>
       {prompt.remaining > 0 ? (
         <label className={`spine-body-sm ${styles.dupeAll}`}>
           <input type="checkbox" checked={applyAll} onChange={(e) => onApplyAll(e.target.checked)} />
@@ -64,7 +64,7 @@ export function DuplicateBody({
 export function DuplicateActions({ onSkip, onUpload }: { onSkip: () => void; onUpload: () => void }) {
   const t = useTranslations("upload.duplicate");
   return (
-    <div className={styles.heicActions}>
+    <div className={styles.questionActions}>
       <PillButton variant="accent" onClick={onSkip}>
         {t("skip")}
       </PillButton>

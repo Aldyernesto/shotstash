@@ -1,23 +1,28 @@
 /**
- * Story 4.5 — `not-found.tsx` rute publik `/s/[slug]`.
+ * Story 4.5 / 4.6: `not-found.tsx` of the public route `/s/[slug]`.
  *
- * Dirender saat `page.tsx` memanggil `notFound()` untuk slug yang tidak
- * ada — termasuk link yang baru dicabut, karena "Cabut Akses" MENGHAPUS
- * baris `shareLink` sehingga server memang tidak bisa membedakan keduanya.
- * Responsnya HTTP 404 (bukan 200 seperti Story 3.11), jadi pemeriksa
- * link, crawler, dan pemantauan tidak lagi menganggap link mati itu hidup.
- *
- * Tampilannya dipakai ULANG apa adanya dari Story 3.11 (`ShareInvalid`
- * kind "not-found": objek `project-empty` tanpa label, judul
- * `display-panel-mobile`, satu kalimat `muted`, tag diredupkan, topbar
- * logo 50 px + `theme-toggle`). Tidak ada query database, tidak ada nama
- * file/Section/Project, thumbnail, jumlah, atau mime yang bisa bocor, dan
- * TIDAK ada metadata per-link: `og:image` tetap satu template generik
- * dari `page.tsx` / layout (Epic 1, FR37).
+ * Every inactive link answers HTTP 404 through `notFound()` (unknown,
+ * revoked, expired, target gone). Next gives this file no params, so the
+ * slug comes from the request path the custom server records
+ * (`x-shotstash-path`) and the link's state is resolved again here to show
+ * the matching message. Nothing about the content leaks: no names,
+ * thumbnails, counts or types, and no per-link metadata (`og:image` stays
+ * the one generic template, Epic 1, FR37).
  */
 
+import { headers } from "next/headers";
 import ShareInvalid from "@/components/share/ShareInvalid";
+import { resolveShare } from "@/lib/shareLink";
+import { inactiveKindOf } from "./inactive";
 
-export default function ShareNotFound() {
-  return <ShareInvalid kind="not-found" />;
+async function inactiveKind() {
+  const path = (await headers()).get("x-shotstash-path") ?? "";
+  const m = /^\/s\/([A-Za-z0-9_-]{1,64})\/?$/.exec(path);
+  if (!m) return "not-found" as const;
+  const res = await resolveShare(m[1], { limit: 0 }).catch(() => null);
+  return (res && inactiveKindOf(res)) || ("not-found" as const);
+}
+
+export default async function ShareNotFound() {
+  return <ShareInvalid kind={await inactiveKind()} />;
 }

@@ -126,6 +126,12 @@ const eslintConfig = defineConfig([
     rules: { "local/no-process-env": "error" },
   },
   {
+    // Story 4.5: feedback goes through the toast or a Dialog with a coded
+    // message; browser alert(), confirm() and prompt() are not allowed.
+    files: ["src/**"],
+    rules: { "no-alert": "error" },
+  },
+  {
     // Unit tests run the module internals directly with node --test (type
     // stripping needs explicit file paths, which the public index cannot give).
     files: ["scripts/**/*.test.mjs"],

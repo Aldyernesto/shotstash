@@ -22,6 +22,11 @@
  *
  * Lembar HP adalah `<section>` DI DALAM `role="dialog"` viewer — bukan
  * dialog kedua — sehingga aturan satu lapisan modal tetap terjaga.
+ *
+ * Story 4.4: processed versions (the HEIC preview today, pipeline outputs
+ * with Epic 5) are listed under "Versions" with kind, type, size and date,
+ * each with a download link (`/media/p/<id>`, same permission as the file).
+ * The original never changes.
  */
 
 import React, { useEffect, useRef, useState } from "react";
@@ -29,6 +34,17 @@ import { useTranslations } from "next-intl";
 import styles from "./viewerInfo.module.css";
 import { useFormat } from "@/i18n/useFormat";
 import { parseSectionName } from "@/lib/sectionNumber";
+import { StatusChip } from "@/components/form/StatusChip";
+
+/** A processed version as the GraphQL `ProcessedVersion` type answers it. */
+export type ViewerVersion = {
+  id: string;
+  kind: string;
+  mimeType: string;
+  size?: number | string | null;
+  createdAt?: string | number | Date | null;
+  downloadUrl: string;
+};
 
 export type ViewerInfoFile = {
   id: string;
@@ -45,6 +61,8 @@ export type ViewerInfoFile = {
   capturedAtRaw?: string | null;
   /** Durasi video "02:18" bila diketahui. */
   duration?: string | null;
+  /** Story 4.4: outputs derived from this file, newest first. */
+  processedVersions?: ViewerVersion[] | null;
 };
 
 export type ViewerInfoProps = {
@@ -90,6 +108,58 @@ function NoneValue() {
   );
 }
 const NONE = <NoneValue />;
+
+const DownloadIcon = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 4v12M6 10l6 6 6-6M4 20h16" />
+  </svg>
+);
+
+/** Known kinds read as words; anything else (a future pipeline kind) is shown as is. */
+function useKindLabel() {
+  const t = useTranslations("viewer.info.versions");
+  return (kind: string) => (t.has(`kind.${kind}` as never) ? t(`kind.${kind}` as never) : kind);
+}
+
+function VersionsList({ versions }: { versions: ViewerVersion[] }) {
+  const t = useTranslations("viewer.info.versions");
+  const f = useFormat();
+  const kindLabel = useKindLabel();
+  return (
+    <section aria-labelledby="viewer-versions-title" className={styles.versions}>
+      <p id="viewer-versions-title" className={`spine-label ${styles.versionsTitle}`}>
+        {t("title")}
+      </p>
+      <ul className={styles.versionList}>
+        {versions.map((v) => {
+          const type = (v.mimeType.split("/").pop() || "").toUpperCase();
+          const label = kindLabel(v.kind);
+          return (
+            <li key={v.id} className={styles.version}>
+              <div className={styles.versionText}>
+                <StatusChip tone="ok">{label}</StatusChip>
+                <span className={`spine-body-sm ${styles.versionMeta}`}>
+                  {[type, v.size != null ? f.fileSize(Number(v.size)) : null, v.createdAt ? f.dateTime(v.createdAt) : null]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              </div>
+              <a
+                className={`spine-focus-ring ${styles.versionDownload}`}
+                href={v.downloadUrl}
+                download
+                aria-label={t("download", { kind: label })}
+                title={t("download", { kind: label })}
+              >
+                {DownloadIcon}
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
 
 function typeLabel(mime: string, name: string, duration?: string | null): React.ReactNode {
   const ext = (name.split(".").pop() || "").toUpperCase();
@@ -185,6 +255,12 @@ export function ViewerInfo({ variant, file, projectTitle, sectionName, onClose }
           )}
         </dd>
       </dl>
+      {file.processedVersions?.length ? (
+        <>
+          <hr className={styles.rule} />
+          <VersionsList versions={file.processedVersions} />
+        </>
+      ) : null}
     </>
   );
 

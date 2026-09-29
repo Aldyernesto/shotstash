@@ -538,3 +538,8 @@
     margin: 0 6px 6px 66px;
   }
 }
+
+/* Story 4.5: rows of a virtualised list (> 200 files) sit between two spacers. */
+.virtualRows {
+  display: block;
+}

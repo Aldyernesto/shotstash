@@ -46,7 +46,7 @@ test('count plurals: No files / 1 file / 2 files / grouped thousands', () => {
   assert.equal(t('count.files', { count: 1 }), '1 file');
   assert.equal(t('count.files', { count: 2 }), '2 files');
   assert.equal(t('count.files', { count: 2600 }), '2,600 files');
-  assert.equal(t('count.sections', { count: 1 }), '1 section');
+  assert.equal(t('count.sections', { count: 1 }), '1 Section');
 });
 
 test('content summary: "3 photos, 1 video" from bucket parts, empty buckets dropped', () => {

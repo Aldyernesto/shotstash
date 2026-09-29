@@ -810,6 +810,16 @@ textarea.modalInput {
   .gridFiles { grid-template-columns: repeat(6, 1fr); }
 }
 
+/* Story 4.5: one row of a virtualised file grid (> 200 files); the row gap
+   is padding so the measured row height includes it. */
+.gridFilesRow {
+  padding-bottom: var(--spine-grid-gap-files-mobile);
+}
+
+@media (min-width: 900px) {
+  .gridFilesRow { padding-bottom: var(--spine-grid-gap-files); }
+}
+
 /* ============================================================
    Story 2.17 — `drag-over` area konten (di dalam Section / project)
    ============================================================
@@ -856,4 +866,36 @@ textarea.modalInput {
      supaya tetap terbaca di kedua tema. */
   color: var(--app-spine-object-text, #fafaf5);
   text-align: center;
+}
+
+/* Story 4.5: reasons of a partly failed bulk Trash (Dialog body). */
+.bulkReasons {
+  margin: 0;
+  padding: 0 0 0 1.1em;
+  display: grid;
+  gap: 6px;
+  max-height: 40vh;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+/* Story 4.5: number sticker before a numbered Section's page title. */
+.titleSticker {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 6px 10px;
+  margin-right: 4px;
+  border-radius: var(--spine-radius-sticker);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
+  font-size: 1.125rem;
+  line-height: 1;
+  transform: rotate(-6deg);
+  white-space: nowrap;
+  align-self: center;
+}
+
+.titleSticker small {
+  font-size: 0.625rem;
 }

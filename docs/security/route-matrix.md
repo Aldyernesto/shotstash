@@ -27,9 +27,12 @@ Actions are the `can()` actions of `src/modules/auth/permissions.ts` (`self` = a
 | `/media/d/[fileId]` | HEAD | cookie | media.download |
 | `/media/i/[fileId]` | GET | cookie | media.download |
 | `/media/i/[fileId]` | HEAD | cookie | media.download |
+| `/media/p/[versionId]` | GET | cookie | media.download |
+| `/media/p/[versionId]` | HEAD | cookie | media.download |
 | `/media/s/[token]` | GET | signed |  |
 | `/media/s/[token]` | HEAD | signed |  |
 | `/media/t/[fileId]` | GET | cookie | media.download |
+| `/media/t/[fileId]` | HEAD | cookie | media.download |
 | `/media/z` | GET | cookie | media.download |
 | `/s/[slug]/items` | GET | share |  |
 | `/s/[slug]/sign` | POST | share |  |
@@ -47,6 +50,7 @@ Actions are the `can()` actions of `src/modules/auth/permissions.ts` (`self` = a
 | `Query.notifications` | session | self |
 | `Query.passwordResetAvailable` | public |  |
 | `Query.pendingUsers` | session | users.manage |
+| `Query.processedVersions` | session | project.view |
 | `Query.project` | session | project.view |
 | `Query.projects` | session | project.view |
 | `Query.searchFiles` | session | project.view |

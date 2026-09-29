@@ -9,7 +9,7 @@
  *   `confirm-dialog` → Story 3.1 (dialog desktop / confirm-sheet HP)
  *   `button-danger`  → Story 1.14
  *   `status-chip`    → Story 1.15
- *   `rep-thumb`      → Story 2.14 (placeholder; data thumbnail = FR40/Epic 4)
+ *   `rep-thumb`      → Story 2.14; real thumbnails from `ShareLink.repThumbs` (Story 4.5)
  *   `empty-state` / `skeleton-row` / `error-box` → Story 2.8 + 3.2
  *
  * Tiga call site yang DIMILIKI story ini dan sekarang bersih:
@@ -21,7 +21,8 @@
 import React, { useMemo, useState } from "react";
 import styles from "./page.module.css";
 import { gql, useQuery, useMutation } from "@apollo/client";
-import RepThumb, { type RepThumbVariant } from "@/components/dashboard/RepThumb";
+import RepThumb, { type RepThumbProps, type RepThumbVariant } from "@/components/dashboard/RepThumb";
+import type { RepFile } from "@/components/dashboard/ProjectCard";
 import { CopyPill } from "@/components/feedback/CopyPill";
 import { useTranslations } from "next-intl";
 import { useToast, useHumanizeError } from "@/components/feedback/ToastProvider";
@@ -31,6 +32,7 @@ import { StatusChip } from "@/components/form/StatusChip";
 import { EmptyState, SkeletonRow, ErrorBox } from "@/components/dashboard/states";
 import TagPill from "@/components/tag-pill/TagPill";
 import { useFormat } from "@/i18n/useFormat";
+import { parseSectionName } from "@/lib/sectionNumber";
 
 const GET_SHARE_LINKS = gql`
   query GetShareLinks {
@@ -44,6 +46,13 @@ const GET_SHARE_LINKS = gql`
       createdAt
       targetType
       targetName
+      repThumbs(limit: 3) {
+        id
+        kind
+        thumbnailUrl
+        duration
+        extension
+      }
     }
   }
 `;
@@ -65,6 +74,8 @@ type ShareLinkRow = {
   targetType: string;
   /** Null when the target was deleted. */
   targetName: string | null;
+  /** 1-3 representative files of the target (Story 2.4 daily sample). */
+  repThumbs?: RepFile[] | null;
 };
 
 /* Ikon garis — semuanya `aria-hidden`, arti selalu ada di teksnya. */
@@ -106,18 +117,23 @@ const THUMB_VARIANT: Record<string, RepThumbVariant> = {
 };
 
 /**
- * Placeholder `rep-thumb`: BENTUK-nya benar per tingkat (satu kartu untuk
- * file, tumpukan tiga untuk Section, saku berkipas untuk Project) dan
- * isinya `{colors.rep-placeholder}` karena tidak ada `thumbnailUrl`.
- * Sengaja BUKAN `empty`: ghost slot with accent hatching means "belum ada
- * isi", bukan "thumbnail belum diambil". Data thumbnail per baris masuk
- * di FR40/Epic 4; story ini tidak menambah permintaan thumbnail apa pun.
+ * Fallback `rep-thumb` when the target has no thumbnail: the right shape per
+ * level (one card for a file, a stack of three for a Section, the fanned
+ * pocket for a Project) filled with `{colors.rep-placeholder}`. Deliberately
+ * not `empty` (hatched ghost slot = "nothing inside yet").
  */
-const REP_PLACEHOLDER = [
-  { id: "ph-1", kind: "image" },
-  { id: "ph-2", kind: "image" },
-  { id: "ph-3", kind: "image" },
+const REP_PLACEHOLDER: RepFile[] = [
+  { id: "ph-1", kind: "photo", thumbnailUrl: null },
+  { id: "ph-2", kind: "photo", thumbnailUrl: null },
+  { id: "ph-3", kind: "photo", thumbnailUrl: null },
 ];
+
+/** Story 4.5: the row's real thumbnails (at most 3; the server clamps the limit too). */
+function thumbFor(link: ShareLinkRow): Pick<RepThumbProps, "repFiles" | "file"> {
+  const thumbs = link.repThumbs ?? [];
+  if (link.targetType === "file") return { file: thumbs[0] ?? REP_PLACEHOLDER[0] };
+  return { repFiles: thumbs.length ? thumbs : REP_PLACEHOLDER };
+}
 
 export default function SharedLinksPage() {
   const { data, loading, error, refetch } = useQuery(GET_SHARE_LINKS, {
@@ -237,7 +253,7 @@ export default function SharedLinksPage() {
             thumb: (
               <RepThumb
                 variant={THUMB_VARIANT[pending.targetType] ?? "file"}
-                repFiles={REP_PLACEHOLDER}
+                {...thumbFor(pending)}
                 gone={isGone(pending.targetName)}
                 size="sm"
               />
@@ -289,19 +305,31 @@ function LinkRow({ link, onRevoke }: { link: ShareLinkRow; onRevoke: () => void 
   const typeKey = TYPE_KEY[link.targetType];
   const type = typeKey ? t(`type.${typeKey}`) : t("type.unknown");
   const isPublic = link.mode === "PUBLIC";
+  const section = !gone && link.targetType === "folder" ? parseSectionName(name) : null;
 
   return (
     <div className={styles.row} role="row">
       <div className={`${styles.cell} ${styles.cellContent}`} role="cell">
         <RepThumb
           variant={THUMB_VARIANT[link.targetType] ?? "file"}
-          repFiles={REP_PLACEHOLDER}
+          {...thumbFor(link)}
           gone={gone}
           className={styles.rowThumb}
         />
         <div className={styles.nameBlock}>
-          <span className={`${styles.rowName} ${gone ? styles.rowNameGone : ""} spine-row-title`}>
-            {name}
+          <span className={styles.titleLine}>
+            {/* Story 4.5 (key-shared): a numbered Section shows its number sticker. */}
+            {section?.number ? (
+              <span className={`spine-display-label ${styles.numberSticker}`}>
+                <span className={styles.numberPrefix} aria-hidden="true">
+                  {tc("numberPrefix")}
+                </span>
+                <span className="spine-visually-hidden">{tc("number")}</span> {section.number}
+              </span>
+            ) : null}
+            <span className={`${styles.rowName} ${gone ? styles.rowNameGone : ""} spine-row-title`}>
+              {section ? section.title : name}
+            </span>
           </span>
           <span className={styles.rowMeta}>
             <span className={`${styles.typeChip} spine-chip`}>{type}</span>

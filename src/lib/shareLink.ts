@@ -14,8 +14,9 @@
  *     verified the `shotstash_share_<slug>` cookie (`unlocked: true`).
  *  4. Media URLs are signed `/media/s/<token>` URLs minted by the caller's
  *     `signer` (the media module); this file never imports modules.
- *  5. Revoked links answer `not-found`; a trashed target (or a trashed
- *     ancestor Section) answers `gone`.
+ *  5. Revoked links answer `revoked`; a trashed target (or a trashed
+ *     ancestor Section) answers `gone`. The page answers HTTP 404 for
+ *     every inactive state (Story 4.6), with the matching message.
  *  3. Klien mengunduh BERKAS ASLI — tidak ada jalur "versi aman"
  *     di sini, termasuk untuk link yang dibuat role VIEWER (OQ-X27).
  *
@@ -204,8 +205,8 @@ export async function resolveShare(
 
   if (!link) return { state: "not-found" };
   const inactive = linkInactiveReason(link);
-  // A revoked link looks exactly like one that never existed.
-  if (inactive === "revoked") return { state: "not-found" };
+  // Story 4.6: a revoked link says so (HTTP 404, no content, no names).
+  if (inactive === "revoked") return { state: "revoked" };
   if (inactive === "expired") return { state: "expired" };
 
   // PRIVATE: nothing is assembled before the access code was proven.

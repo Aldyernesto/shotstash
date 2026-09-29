@@ -9,6 +9,8 @@ export const mediaUrl = {
   thumbnail: (fileId: string, v?: number | null) => (v ? `/media/t/${fileId}?v=${v}` : `/media/t/${fileId}`),
   inline: (fileId: string) => `/media/i/${fileId}`,
   download: (fileId: string) => `/media/d/${fileId}`,
+  /** A processed version (Story 4.4), same permission as its file. */
+  processed: (versionId: string) => `/media/p/${versionId}`,
   cover: (kind: 'project' | 'user', id: string) => `/media/c/${kind}/${id}`,
   zip: (params: { projectId: string; folderId?: string | null; fileIds?: string[] }) => {
     const q = new URLSearchParams({ projectId: params.projectId });

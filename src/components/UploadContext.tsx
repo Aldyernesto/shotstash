@@ -110,8 +110,8 @@ const CHECK_DUPLICATES = gql`
 `;
 
 const COMPLETE_UPLOAD = gql`
-  mutation CompleteUpload($sessionId: ID!, $md5Checksum: String, $convertHeic: Boolean) {
-    completeUpload(sessionId: $sessionId, md5Checksum: $md5Checksum, convertHeic: $convertHeic) {
+  mutation CompleteUpload($sessionId: ID!, $md5Checksum: String) {
+    completeUpload(sessionId: $sessionId, md5Checksum: $md5Checksum) {
       id
       filename
     }
@@ -170,9 +170,6 @@ export type UploadContextType = {
   aborted: boolean;
   rejection: UploadRejectCode | null;
   setRejection: React.Dispatch<React.SetStateAction<UploadRejectCode | null>>;
-  convertHeic: boolean | null;
-  setConvertHeic: (v: boolean | null) => void;
-  hasHeic: boolean;
   target: UploadTarget | null;
   panelOpen: boolean;
   minimized: boolean;
@@ -244,7 +241,6 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   const [running, setRunning] = useState(false);
   const [aborted, setAborted] = useState(false);
   const [rejection, setRejection] = useState<UploadRejectCode | null>(null);
-  const [convertHeic, setConvertHeic] = useState<boolean | null>(null);
   const [target, setTarget] = useState<UploadTarget | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
@@ -257,8 +253,6 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   tasksRef.current = tasks;
   const targetRef = useRef<UploadTarget | null>(null);
   targetRef.current = target;
-  const convertRef = useRef<boolean | null>(null);
-  convertRef.current = convertHeic;
   const runningRef = useRef(false);
   const duplicateAnswer = useRef<((a: { choice: "skip" | "upload"; all: boolean }) => void) | null>(null);
 
@@ -723,10 +717,9 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         completing = true;
         patch(task.id, { md5, status: "merging", progress: 100 });
 
-        const convert = convertRef.current !== false;
         for (let attempt = 0; ; attempt++) {
           try {
-            await completeUpload({ variables: { sessionId: session.id, md5Checksum: md5, convertHeic: convert } });
+            await completeUpload({ variables: { sessionId: session.id, md5Checksum: md5 } });
             break;
           } catch (err) {
             const code = errorCodeOf(err);
@@ -871,17 +864,11 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     setMinimized(false);
     setTasks([]);
     setRejection(null);
-    setConvertHeic(null);
     setAborted(false);
     abortRef.current = false;
     // Halaman yang sedang tampil memuat ulang Section tujuannya.
     window.dispatchEvent(new CustomEvent("mam:upload-done"));
   }, []);
-
-  const hasHeic = useMemo(
-    () => tasks.some((t) => t.file && t.status === "pending" && /\.(heic|heif)$/i.test(t.file.name)),
-    [tasks],
-  );
 
   const value: UploadContextType = {
     tasks,
@@ -889,9 +876,6 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     aborted,
     rejection,
     setRejection,
-    convertHeic,
-    setConvertHeic,
-    hasHeic,
     target,
     panelOpen,
     minimized,

@@ -27,6 +27,7 @@ import { revokeLinksForTargets } from '@/services/share.service';
 import { coverIdFromUrl, deleteCover } from '@/modules/media';
 import { storage, storageKeys } from '@/modules/storage';
 import { detachDuplicates, detachDuplicatesOfProject, markConflictsAsDuplicates, resettle } from '@/modules/upload';
+import { syncSearch, syncSearchLater } from '@/modules/library';
 import { batches, expiredRootWhere, planFolderTrash, retentionCutoff, subtreeFolderIds } from './plan';
 import { errMessage, logger } from '@/lib/logger';
 
@@ -47,11 +48,12 @@ export async function trashFile(fileId: string) {
   if (!file || file.status !== 'ready') throw trashError('NOT_FOUND', 'File not found');
   if (file.trashedAt) throw trashError('ALREADY_TRASHED', 'File is already in the Trash');
   await prisma.mediaFile.update({ where: { id: fileId }, data: { trashedAt: new Date(), trashRootId: null } });
+  syncSearchLater([fileId]);
   return true;
 }
 
 export async function trashFolder(folderId: string) {
-  await prisma.$transaction(async (tx) => {
+  const trashed = await prisma.$transaction(async (tx) => {
     const root = await tx.folder.findUnique({
       where: { id: folderId },
       select: { id: true, projectId: true, trashedAt: true },
@@ -78,7 +80,9 @@ export async function trashFolder(folderId: string) {
     if (plan.fileIds.length) {
       await tx.mediaFile.updateMany({ where: { id: { in: plan.fileIds } }, data: { trashedAt: now, trashRootId: root.id } });
     }
+    return plan.fileIds;
   });
+  syncSearchLater(trashed);
   return true;
 }
 
@@ -96,7 +100,7 @@ export async function restoreFile(fileId: string) {
   if (file.trashRootId || (await folderChainTrashed(file.folderId))) {
     throw trashError('ANCESTOR_TRASHED', RESTORE_PARENT_FIRST);
   }
-  return prisma.$transaction(async (tx) => {
+  const restored = await prisma.$transaction(async (tx) => {
     await markConflictsAsDuplicates(tx, [fileId]);
     return tx.mediaFile.update({
       where: { id: fileId },
@@ -104,6 +108,8 @@ export async function restoreFile(fileId: string) {
       include: { folder: true, project: true },
     });
   });
+  syncSearchLater([fileId]);
+  return restored;
 }
 
 export async function restoreFolder(folderId: string) {
@@ -116,13 +122,15 @@ export async function restoreFolder(folderId: string) {
   if (folder.trashRootId || (folder.parentId && (await folderChainTrashed(folder.parentId)))) {
     throw trashError('ANCESTOR_TRASHED', RESTORE_PARENT_FIRST);
   }
-  await prisma.$transaction(async (tx) => {
+  const restored = await prisma.$transaction(async (tx) => {
     const files = await tx.mediaFile.findMany({ where: { trashRootId: folderId }, select: { id: true } });
     await markConflictsAsDuplicates(tx, files.map((f) => f.id));
     await tx.folder.update({ where: { id: folderId }, data: { trashedAt: null, trashRootId: null } });
     await tx.folder.updateMany({ where: { trashRootId: folderId }, data: { trashedAt: null, trashRootId: null } });
     await tx.mediaFile.updateMany({ where: { trashRootId: folderId }, data: { trashedAt: null, trashRootId: null } });
+    return files.map((f) => f.id);
   });
+  syncSearchLater(restored);
   return prisma.folder.findUnique({
     where: { id: folderId },
     include: { children: { where: { trashedAt: null } }, files: { where: { trashedAt: null, status: 'ready' } } },
@@ -196,17 +204,9 @@ async function removeKeys(keys: string[]) {
   if (failed) logger('trash').error('some storage keys could not be deleted', { failed, total: keys.length });
 }
 
-/** Best effort: drop purged files from the search index when Elasticsearch is configured. */
+/** Best effort: purged files leave the search index (rows are gone, so sync deletes them). */
 async function removeFromSearch(fileIds: string[]) {
-  if (!fileIds.length) return;
-  try {
-    const { esClient } = await import('@/lib/elasticsearch');
-    const es = esClient();
-    if (!es) return;
-    await es.deleteByQuery({ index: 'media_files', query: { ids: { values: fileIds } }, conflicts: 'proceed' });
-  } catch (err) {
-    logger('trash').warn('search index cleanup failed', { err: errMessage(err) });
-  }
+  await syncSearch(fileIds);
 }
 
 /**

@@ -32,6 +32,13 @@ export class StorageError extends Error {
   }
 }
 
+/**
+ * Branded check, not only `instanceof`: a bundler may load this file more
+ * than once (two classes), and a storage failure must still be recognised.
+ */
 export function isStorageError(err: unknown, code?: StorageFaultCode): err is StorageError {
-  return err instanceof StorageError && (code === undefined || err.code === code);
+  const branded =
+    err instanceof StorageError ||
+    (err instanceof Error && err.name === 'StorageError' && typeof (err as { code?: unknown }).code === 'string');
+  return branded && (code === undefined || (err as StorageError).code === code);
 }

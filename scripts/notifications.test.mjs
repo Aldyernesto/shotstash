@@ -36,7 +36,7 @@ test('chat_mention without a sender name uses the translated placeholder, never 
 test('project_created, upload_complete and file_shared render from data', () => {
   assert.deepEqual(notificationText({ type: 'project_created', data: { projectId: 'p', projectTitle: 'Expo' } }, t), {
     label: 'Project',
-    title: 'New project',
+    title: 'New Project',
     body: 'Expo was created',
   });
   assert.equal(

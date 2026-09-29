@@ -1,6 +1,6 @@
 /* ============================================================
    Stories 3.12-3.15 — `upload-panel`, `upload-row`, `batch-progress`,
-   `heic-question`, `upload-dock`, dan pemilih Section tujuan.
+   `upload-dock`, dan pemilih Section tujuan.
    ============================================================
    Nilai terukur dari mock `key-upload.html` (01 / 02b / 02c / 03 / 04).
    Kotak panel, sudut, dan jebakan fokus datang dari `Dialog` Story 3.1
@@ -362,67 +362,28 @@
   margin-top: 16px;
 }
 
-/* ---------- heic-question ---------- */
+/* ---------- question layout (duplicate prompt) ---------- */
 
-.heic {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 4px 0 20px;
-}
-
-.heicChip {
-  padding: 8px 12px;
-  border-radius: var(--spine-radius-sticker);
-  box-shadow: 0 8px 18px -6px rgba(0, 0, 0, 0.7);
-  font-size: 1rem; /* 16px */
-}
-
-.heicFrom {
-  border: 1px solid var(--app-spine-input-border);
-  background: var(--app-spine-surface-2);
-  color: var(--app-spine-text);
-  transform: rotate(-6deg);
-}
-
-.heicTo {
-  background: var(--app-spine-accent);
-  color: var(--app-spine-on-accent);
-  transform: rotate(7deg);
-  box-shadow: 0 0.08em 0 var(--app-spine-accent-edge), 0 8px 18px -6px rgba(0, 0, 0, 0.7);
-}
-
-.heicArrow {
-  flex: none;
-  width: 22px;
-  height: 22px;
-  color: var(--app-spine-accent-2);
-}
-
-:global(html[data-theme="light"]) .heicArrow {
-  color: var(--app-spine-accent-text-light);
-}
-
-.heicNote {
+.questionNote {
   margin: 12px 0 0;
   color: var(--app-spine-meta);
 }
 
 /* Dua tombol BERTUMPUK lebar penuh. */
-.heicActions {
+.questionActions {
   display: grid;
   grid-template-columns: 1fr;
   gap: 12px;
   width: 100%;
 }
 
-.heicActions > button {
+.questionActions > button {
   width: 100%;
   min-height: 48px;
 }
 
 @media (max-width: 899px) {
-  .heicActions > button {
+  .questionActions > button {
     min-height: 52px;
   }
 }

@@ -11,6 +11,7 @@ import { useTranslations } from "next-intl";
 import { useFormat } from "@/i18n/useFormat";
 import { parseSectionName } from "@/lib/sectionNumber";
 import type { RepFile } from "./ProjectCard";
+import { VIRTUALIZE_ABOVE, useMediaQuery, useWindowRows } from "./virtualRows";
 
 export type SortField = "name" | "date" | "size" | "type";
 export type ListLevel = "projects" | "sections" | "files";
@@ -409,7 +410,12 @@ export default function ListView(props: ListViewProps) {
   }
 
   return (
-    <div className={styles.list} role="table" aria-label={label}>
+    <div
+      className={styles.list}
+      role="table"
+      aria-label={label}
+      aria-rowcount={level === "files" && files.length > VIRTUALIZE_ABOVE ? files.length + 1 : undefined}
+    >
       <ListHead level={level} sortBy={sortBy} sortAsc={sortAsc} onSort={onSort} />
 
       {level === "projects" &&
@@ -630,8 +636,11 @@ export default function ListView(props: ListViewProps) {
           );
         })}
 
-      {level === "files" &&
-        files.map((file: any, idx: number) => {
+      {level === "files" && (
+        <VirtualRows
+          count={files.length}
+          renderRow={(idx, measure) => {
+          const file = files[idx];
           const kind = determineType(file.mimeType || "");
           const selected = selectedFileIds.has(file.id);
           const sizeText = fmt.fileSize(Number(file.size) || 0);
@@ -655,6 +664,9 @@ export default function ListView(props: ListViewProps) {
           return (
             <div
               key={file.id}
+              ref={measure?.ref}
+              data-index={measure ? idx : undefined}
+              aria-rowindex={measure ? idx + 2 : undefined}
               className={`${styles.row} ${styles.files} ${selected ? styles.selected : ""}`}
               role="row"
               data-list-row
@@ -760,7 +772,44 @@ export default function ListView(props: ListViewProps) {
               />
             </div>
           );
-        })}
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Story 4.5: estimated height of one file row before it is measured. */
+const FILE_ROW_ESTIMATE_PX = 76;
+
+/**
+ * Story 4.5: file rows of the list. Up to `VIRTUALIZE_ABOVE` rows every row
+ * renders; above that only the rows near the viewport, between two spacers,
+ * each carrying `aria-rowindex` (the table carries `aria-rowcount`).
+ */
+function VirtualRows({
+  count,
+  renderRow,
+}: {
+  count: number;
+  renderRow: (index: number, measure: { ref: (el: HTMLElement | null) => void } | null) => React.ReactNode;
+}) {
+  const virtual = count > VIRTUALIZE_ABOVE;
+  // `.row + .row` margin: 12 px from 900 px up, 8 px below.
+  const desktop = useMediaQuery("(min-width: 900px)");
+  const { containerRef, items, paddingTop, paddingBottom, measureElement } = useWindowRows({
+    count,
+    estimateSize: FILE_ROW_ESTIMATE_PX,
+    enabled: virtual,
+    overscan: 8,
+    gap: desktop ? 12 : 8,
+  });
+  if (!virtual) return <>{Array.from({ length: count }, (_, i) => renderRow(i, null))}</>;
+  return (
+    <div ref={containerRef} role="presentation" data-virtual-list="" className={styles.virtualRows}>
+      <div role="presentation" style={{ height: paddingTop }} />
+      {items.map((item) => renderRow(item.index, { ref: measureElement }))}
+      <div role="presentation" style={{ height: paddingBottom }} />
     </div>
   );
 }

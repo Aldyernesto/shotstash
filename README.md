@@ -84,7 +84,7 @@ What runs: `app` (Shotstash with ffmpeg), `db` (PostgreSQL 17) and `cache` (Drag
 
 **Port already taken.** `docker/preflight.sh` tells you. Set `SHOTSTASH_PORT=8080` (any free port) in `.env`, set `APP_URL=http://localhost:8080` to match, and start again.
 
-**Search (optional).** `docker compose --profile search up -d` adds Elasticsearch (about 1 GB of memory); then set `ELASTICSEARCH_NODE_URL=http://elasticsearch:9200` in `.env` and run `docker compose up -d`. Without it, search runs in PostgreSQL.
+**Search (optional).** `docker compose --profile search up -d` adds Elasticsearch (about 1 GB of memory); then set `ELASTICSEARCH_NODE_URL=http://elasticsearch:9200` in `.env` and run `docker compose up -d`. Without it, search runs in PostgreSQL. Both answer the same results (Elasticsearch only narrows the candidates); after enabling it on an existing install, run `npm run search:reindex` once.
 
 **Behind a reverse proxy or tunnel.** Set `APP_URL` to the public `https://` address and `TRUST_PROXY=true`, and only when the app is reachable through the proxy alone.
 

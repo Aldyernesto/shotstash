@@ -17,6 +17,7 @@ import * as perm from "@/lib/permissions";
 import ProjectCard, { ProjectCardSkeleton } from "@/components/dashboard/ProjectCard";
 import SectionCard from "@/components/dashboard/SectionCard";
 import FileCard from "@/components/dashboard/FileCard";
+import FileGrid from "@/components/dashboard/FileGrid";
 import { EmptyState, SkeletonRow, ErrorBox } from "@/components/dashboard/states";
 import BulkBar from "@/components/dashboard/BulkBar";
 import ListView from "@/components/dashboard/ListView";
@@ -40,7 +41,7 @@ import VideoPlayer from "@/components/media/VideoPlayer";
 import FileViewer from "@/components/media/FileViewer";
 // Story 3.1: konfirmasi bergaya (`dialog` desktop / `confirm-sheet` HP)
 // menggantikan ConfirmModal warisan dan modal hapus project berinline style.
-import { ConfirmDialog } from "@/components/overlay/Dialog";
+import { ConfirmDialog, Dialog } from "@/components/overlay/Dialog";
 import RepThumb from "@/components/dashboard/RepThumb";
 // Story 3.2: `toast` bersama — satu host di dashboard/layout.tsx.
 import { useToast, useHumanizeError } from "@/components/feedback/ToastProvider";
@@ -183,6 +184,9 @@ const GET_FOLDER = gql`
         size
         createdAt
         thumbnailUrl
+        # Story 4.4: the viewer shows the preview version of a HEIC original;
+        # the full version list loads when the viewer opens a file.
+        previewUrl
         # Story 2.15 (aditif): kolom "Diunggah oleh" — HANYA ada di tingkat
         # isi Section karena skema hanya menyimpan MediaFile.uploadedBy.
         uploadedBy {
@@ -190,6 +194,19 @@ const GET_FOLDER = gql`
           name
         }
       }
+    }
+  }
+`;
+
+const FILE_VERSIONS = gql`
+  query FileVersions($fileId: ID!) {
+    processedVersions(fileId: $fileId) {
+      id
+      kind
+      mimeType
+      size
+      createdAt
+      downloadUrl
     }
   }
 `;
@@ -345,7 +362,7 @@ function FolderPickerModal({ mode, items, currentLocationId, apolloClient, onSel
       apolloClient.query({
         query: GET_FOLDER,
         variables: { id: currentFoldId },
-        fetchPolicy: 'network-only',
+        fetchPolicy: 'no-cache',
       }).then((res: any) => {
         setFolderItems(res.data?.folder?.children || []);
         setLoading(false);
@@ -578,8 +595,8 @@ export default function DashboardPage() {
   };
 
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [sortBy, setSortBy] = useState<"name" | "date" | "size" | "type">("name");
-  const [sortAsc, setSortAsc] = useState(true);
+  const [sortBy, setSortBy] = useState<"name" | "date" | "size" | "type">("date");
+  const [sortAsc, setSortAsc] = useState(false);
   // Story 3.8: baris identitas `share-modal` butuh rep-thumb + meta, jadi
   // pemicunya mengirim bentuk yang sudah lengkap (bukan hanya id + judul).
   const [shareData, setShareData] = useState<
@@ -702,7 +719,10 @@ export default function DashboardPage() {
   const { data: folderData, loading: folderLoading, error: folderError, refetch: refetchFolder } = useQuery(GET_FOLDER, {
     variables: { id: currentFolderId },
     skip: currentFolderId === null,
-    fetchPolicy: "network-only",
+    // Story 4.5: a Section can hold 10,000+ files; normalising every one into
+    // the Apollo cache costs over a second. The result stays with this query
+    // and every change refetches it (as each mutation here already does).
+    fetchPolicy: "no-cache",
   });
 
   // Sync navigation state → URL search params
@@ -852,21 +872,11 @@ export default function DashboardPage() {
         else if (currentProjectId) refetchRoot();
         else refetchProjects();
         if (notify) pushSpineToast({ tone: 'success', message: t('toasts.fileTrashed') });
-      } else if (notify) {
-        pushSpineToast({ tone: 'error', message: t('toasts.fileTrashFailed') });
       } else {
-        alert(t('alerts.trashFailed'));
+        pushSpineToast({ tone: 'error', message: t('toasts.fileTrashFailed') });
       }
     } catch (err: any) {
-      if (notify) {
-        pushSpineToast({
-          tone: 'error',
-          message: t('toasts.fileTrashFailed'),
-          cause: humanize(err),
-        });
-      } else {
-        alert(t('alerts.trashError', { cause: humanize(err) }));
-      }
+      pushSpineToast({ tone: 'error', message: t('toasts.fileTrashFailed'), cause: humanize(err) });
     }
   };
 
@@ -884,21 +894,11 @@ export default function DashboardPage() {
         if (currentFolderId) refetchFolder();
         else if (currentProjectId) refetchRoot();
         if (notify) pushSpineToast({ tone: 'success', message: t('toasts.sectionTrashed') });
-      } else if (notify) {
-        pushSpineToast({ tone: 'error', message: t('toasts.sectionTrashFailed') });
       } else {
-        alert(t('alerts.trashFailed'));
+        pushSpineToast({ tone: 'error', message: t('toasts.sectionTrashFailed') });
       }
     } catch (err: any) {
-      if (notify) {
-        pushSpineToast({
-          tone: 'error',
-          message: t('toasts.sectionTrashFailed'),
-          cause: humanize(err),
-        });
-      } else {
-        alert(t('alerts.trashError', { cause: humanize(err) }));
-      }
+      pushSpineToast({ tone: 'error', message: t('toasts.sectionTrashFailed'), cause: humanize(err) });
     }
   };
 
@@ -1444,8 +1444,8 @@ export default function DashboardPage() {
         t('live.moved', { count: movedCount, target: parseSectionName(targetName).title }),
       );
     } catch (err: any) {
-      // Umpan balik memakai mekanisme yang ADA hari ini; item tetap di tempatnya.
-      alert(t('alerts.moveFailed', { cause: humanize(err) }));
+      // Story 4.5: a toast with the code's message; the items stay where they are.
+      pushSpineToast({ tone: 'error', message: t('toasts.moveFailed'), cause: humanize(err) });
     }
     setDragItem(null);
     if (currentFolderId) refetchFolder();
@@ -1557,8 +1557,13 @@ export default function DashboardPage() {
   const rawFiles = currentFolderId ? folderData?.folder?.files || [] : [];
 
   // Natural sort: "10. Raudhah" sorts after "9. Orientasi", not after "1. Kedatangan"
-  const naturalCompare = (a: string, b: string) =>
-    (a || "").localeCompare(b || "", f.locale, { numeric: true, sensitivity: "base" });
+  // Story 4.5: one collator for every comparison (localeCompare with options
+  // builds a new one per call, far too slow for a 10,000-file Section).
+  const collator = React.useMemo(
+    () => new Intl.Collator(f.locale, { numeric: true, sensitivity: "base" }),
+    [f.locale],
+  );
+  const naturalCompare = (a: string, b: string) => collator.compare(a || "", b || "");
 
   // Sort
   // Story 2.15: kepala kolom mode daftar memakai keadaan urut BERSAMA ini,
@@ -1575,7 +1580,7 @@ export default function DashboardPage() {
       return cmp;
     });
     return arr;
-  }, [rawFolders, sortBy, sortAsc, f.locale]);
+  }, [rawFolders, sortBy, sortAsc, collator]);
 
   const projects = React.useMemo(() => {
     const arr = [...rawProjects];
@@ -1588,7 +1593,7 @@ export default function DashboardPage() {
       return cmp;
     });
     return arr;
-  }, [rawProjects, sortBy, sortAsc, f.locale]);
+  }, [rawProjects, sortBy, sortAsc, collator]);
 
   const files = React.useMemo(() => {
     const arr = [...rawFiles];
@@ -1597,12 +1602,12 @@ export default function DashboardPage() {
       if (sortBy === "name") cmp = naturalCompare(a.originalName, b.originalName);
       else if (sortBy === "date") cmp = new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
       else if (sortBy === "size") cmp = (Number(a.size) || 0) - (Number(b.size) || 0);
-      else if (sortBy === "type") cmp = (a.mimeType || "").localeCompare(b.mimeType || "", f.locale);
+      else if (sortBy === "type") cmp = collator.compare(a.mimeType || "", b.mimeType || "");
       if (!sortAsc) cmp = -cmp;
       return cmp;
     });
     return arr;
-  }, [rawFiles, sortBy, sortAsc, f.locale]);
+  }, [rawFiles, sortBy, sortAsc, collator]);
 
 
   /* ------------------------------------------------------------------ */
@@ -1615,12 +1620,24 @@ export default function DashboardPage() {
     () => files.filter((f: any) => /^(image|video)\//.test(f.mimeType || "")),
     [files],
   );
+  // Story 4.4: processed versions of the file open in the viewer.
+  const { data: versionData } = useQuery(FILE_VERSIONS, {
+    skip: !previewFile?.id,
+    variables: { fileId: previewFile?.id ?? "" },
+    fetchPolicy: "cache-and-network",
+  });
+  const viewerFilesWithVersions = React.useMemo(() => {
+    const versions = versionData?.processedVersions;
+    if (!previewFile || !versions) return viewerFiles;
+    return viewerFiles.map((f: any) => (f.id === previewFile.id ? { ...f, processedVersions: versions } : f));
+  }, [viewerFiles, previewFile, versionData]);
   const viewerIndex = previewFile
     ? viewerFiles.findIndex((f: any) => f.id === previewFile.id)
     : -1;
 
   // Story 2.2: media bytes ride the HttpOnly `shotstash_session` cookie; no token in any URL.
-  const inlineSrcOf = (f: any) => mediaUrl.inline(f.id);
+  // Story 4.4: a HEIC original is shown through its JPEG preview version.
+  const inlineSrcOf = (f: any) => f.previewUrl || mediaUrl.inline(f.id);
 
   const currentProjectTitle =
     (currentFolderId ? folderData?.folder?.project?.title : rootData?.project?.title) ||
@@ -1770,6 +1787,8 @@ export default function DashboardPage() {
   // sama, jadi pengguna bisa langsung menekan aksi yang sama lagi untuk sisa
   // yang masih terpilih. Dikosongkan setiap kali pilihan berubah.
   const [bulkResult, setBulkResult] = useState<string | null>(null);
+  // Story 4.5: per-item reasons of a partly failed bulk Trash, shown in a Dialog.
+  const [bulkReasons, setBulkReasons] = useState<string[] | null>(null);
   // Item terakhir yang disentuh — Esc di dalam `bulk-bar` mengembalikan
   // fokus ke sana, bukan ke awal halaman.
   const lastTouchedRef = useRef<{ type: "file" | "folder"; id: string } | null>(null);
@@ -1859,9 +1878,8 @@ export default function DashboardPage() {
    * Story 2.13 — aksi massal "Trash" dengan KEGAGALAN SEBAGIAN.
    * Item yang berhasil dilepas dari pilihan; item yang gagal TIDAK dilepas
    * dan tidak berpindah tempat, sehingga aksi yang sama bisa langsung
-   * ditekan lagi untuk sisa itu saja. Daftar sebab per item memakai
-   * mekanisme umpan balik yang ada hari ini (`alert()`), bukan `toast`
-   * bergaya baru.
+   * ditekan lagi untuk sisa itu saja. Story 4.5: the reason per item is
+   * listed in a Dialog (no `alert()`).
    */
   const runBulkTrash = async () => {
     const fileIds = Array.from(selectedFileIds);
@@ -1892,7 +1910,7 @@ export default function DashboardPage() {
         const name = isFolder
           ? folders.find((f: any) => f.id === id)?.name
           : files.find((f: any) => f.id === id)?.originalName;
-        reasons.push(t('alerts.bulkReason', { name: name || id, cause: humanize(err) }));
+        reasons.push(t('bulk.reason', { name: name || id, cause: humanize(err) }));
       }
     };
 
@@ -1919,7 +1937,7 @@ export default function DashboardPage() {
     }
     // Kalimat hasil diumumkan SEKALI lewat live region polite.
     if (message) setLiveMessage(message);
-    if (reasons.length) alert(t('alerts.bulkTrash', { reasons: reasons.join("\n") }));
+    if (reasons.length) setBulkReasons(reasons);
 
     if (currentFolderId) refetchFolder();
     else if (currentProjectId) refetchRoot();
@@ -1939,7 +1957,7 @@ export default function DashboardPage() {
       if (fIds) {
          params.append('fileIds', fIds);
       } else {
-         alert(t('alerts.zipOneSection'));
+         pushSpineToast({ tone: 'success', message: t('toasts.zipOneSection') });
          params.append('folderId', Array.from(selectedFolderIds)[0]);
       }
     }
@@ -1993,6 +2011,7 @@ export default function DashboardPage() {
       : currentFolderId
         ? folderData?.folder?.name || t('levels.section')
         : rootData?.project?.title || t('levels.project');
+  const pageSection = currentProjectId !== null && currentFolderId ? parseSectionName(pageTitle) : null;
   const backLabel =
     folderHistory.length > 1 ? folderHistory[folderHistory.length - 2].name : t('levels.projects');
   const totalFilesAllProjects = projects.reduce(
@@ -2096,7 +2115,16 @@ export default function DashboardPage() {
           )}
 
           <h1 className={`${styles.pageTitle} spine-display-page`}>
-            <span className={styles.pageTitleText}>{pageTitle}</span>
+            {/* Story 4.5 (key-file-grid): a numbered Section shows its number
+                as the accent sticker before the title, like its card. */}
+            {pageSection?.number ? (
+              <span className={`spine-display-label ${styles.titleSticker}`}>
+                <small aria-hidden="true">{tc('numberPrefix')}</small>
+                <span className="spine-visually-hidden">{tc('number')} </span>
+                {pageSection.number}
+              </span>
+            ) : null}
+            <span className={styles.pageTitleText}>{pageSection ? pageSection.title : pageTitle}</span>
             {currentProjectId === null ? (
               projects.length > 0 && <TagPill>{tn('projects', { count: projects.length })}</TagPill>
             ) : (
@@ -2464,21 +2492,20 @@ export default function DashboardPage() {
               )}
 
               {currentProjectId !== null && files.length > 0 && (
-                <div className={styles.gridFiles}>
-              {files.map((file: any, idx: number) => (
+                <FileGrid
+                  files={files}
+                  className={styles.gridFiles}
+                  rowClassName={styles.gridFilesRow}
+                  renderCard={(file: any, idx: number) => (
                 <FileCard
                   key={file.id}
                   id={file.id}
                   name={file.originalName}
                   kind={determineType(file.mimeType) as any}
                   sizeBytes={Number(file.size) || 0}
-                  thumbnailUrl={
-                    file.thumbnailUrl
-                      ? file.thumbnailUrl
-                      : file.mimeType?.startsWith('image/')
-                        ? mediaUrl.inline(file.id)
-                        : null
-                  }
+                  // Story 4.4: the thumbnail only; a file without one keeps the
+                  // placeholder card (never the full original).
+                  thumbnailUrl={file.thumbnailUrl ?? null}
                   draggable={canMove}
                   onOpen={(id) => {
                     // Story 3.5: foto & video → `file-viewer`; dokumen tetap
@@ -2498,8 +2525,8 @@ export default function DashboardPage() {
                   menuOpen={actionMenu?.id === file.id}
                   onOpenMenu={(anchor) => openFileMenu(file.id, file, anchor)}
                 />
-              ))}
-                </div>
+                  )}
+                />
               )}
 
               {currentProjectId === null && projects.length === 0 && (
@@ -2727,6 +2754,26 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Story 4.5: why some items of a bulk Trash failed (replaces alert()). */}
+      {bulkReasons && (
+        <Dialog
+          title={t('bulk.reasonsTitle')}
+          lead={t('bulk.reasonsLead', { count: bulkReasons.length })}
+          onClose={() => setBulkReasons(null)}
+          actions={
+            <PillButton variant="accent" onClick={() => setBulkReasons(null)}>
+              {tc('close')}
+            </PillButton>
+          }
+        >
+          <ul className={styles.bulkReasons}>
+            {bulkReasons.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
+          </ul>
+        </Dialog>
+      )}
+
       {/* Delete Project — Story 3.1 `dialog` / `confirm-sheet`, role="alertdialog",
           fokus awal di "Batal", tombol permanen = button-danger.solid. */}
       {deleteProjectData && (() => {
@@ -2825,7 +2872,7 @@ export default function DashboardPage() {
           di dua tema. Dokumen tidak pernah masuk ke sini (lihat `openFile`). */}
       {previewFile && currentProjectId && viewerIndex >= 0 && (
         <FileViewer
-          files={viewerFiles}
+          files={viewerFilesWithVersions}
           index={viewerIndex}
           onIndexChange={(i) => setPreviewFile(viewerFiles[i])}
           onClose={() => setPreviewFile(null)}
@@ -2951,7 +2998,7 @@ export default function DashboardPage() {
             if (currentFolderId) refetchFolder();
             else if (currentProjectId) refetchRoot();
           } catch (err: any) {
-            alert(t('alerts.operationFailed', { cause: humanize(err) }));
+            pushSpineToast({ tone: 'error', message: t('toasts.operationFailed'), cause: humanize(err) });
           }
         }}
         onClose={() => setMoveCopyModal(null)}

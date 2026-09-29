@@ -215,6 +215,9 @@ function shutdown(signal: string) {
 process.once('SIGTERM', () => shutdown('SIGTERM'));
 process.once('SIGINT', () => shutdown('SIGINT'));
 
+/** Request path as the server received it (set here, never trusted from the client). */
+const REQUEST_PATH_HEADER = 'x-shotstash-path';
+
 app.prepare().then(() => {
   // Harus setelah prepare(): Next melempar kalau diminta lebih awal.
   const upgradeHandler = app.getUpgradeHandler();
@@ -226,6 +229,10 @@ app.prepare().then(() => {
       req.headers[CLIENT_IP_HEADER] = req.socket.remoteAddress ?? '';
       setSecurityHeaders(req, res);
       const parsedUrl = parse(req.url!, true);
+      // Story 4.6: the share 404 page reads the request path from here to
+      // show why a link is inactive (Next gives not-found.tsx no params).
+      delete req.headers[REQUEST_PATH_HEADER];
+      req.headers[REQUEST_PATH_HEADER] = parsedUrl.pathname ?? '/';
       if (await setupGate(res, parsedUrl.pathname ?? '/')) return;
       await handle(req, res, parsedUrl);
     } catch (err) {

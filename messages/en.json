@@ -25,8 +25,8 @@
   },
   "count": {
     "files": "{count, plural, =0 {No files} one {# file} other {# files}}",
-    "sections": "{count, plural, =0 {No sections} one {# section} other {# sections}}",
-    "projects": "{count, plural, =0 {No projects} one {# project} other {# projects}}",
+    "sections": "{count, plural, =0 {No Sections} one {# Section} other {# Sections}}",
+    "projects": "{count, plural, =0 {No Projects} one {# Project} other {# Projects}}",
     "items": "{count, plural, =0 {No items} one {# item} other {# items}}",
     "fileWord": "{count, plural, one {file} other {files}}"
   },
@@ -253,8 +253,8 @@
       "fc_file": {
         "label": "How do you organize your footage after a shoot?",
         "options": {
-          "byDate": "A folder per date",
-          "byEvent": "A folder per location or event",
+          "byDate": "One Section per shoot date",
+          "byEvent": "One Section per location or event",
           "upload": "I upload straight to a NAS / cloud",
           "none": "No fixed system yet"
         }
@@ -390,7 +390,7 @@
     },
     "head": {
       "projectSub": "{files} · {sections}",
-      "hoverHint": "hover over a project to peek inside."
+      "hoverHint": "hover over a Project to peek inside."
     },
     "sort": {
       "group": "Sort",
@@ -418,8 +418,8 @@
     },
     "states": {
       "loadError": "Couldn't load from the server.",
-      "noProjectsTitle": "No projects yet.",
-      "noProjectsText": "New projects show up here once they're created.",
+      "noProjectsTitle": "No Projects yet.",
+      "noProjectsText": "New Projects show up here once they're created.",
       "newProject": "New Project",
       "emptySectionTitle": "Still empty. Drag files here",
       "emptySectionText": "No files in this Section yet.",
@@ -451,33 +451,30 @@
       "titleCopy": "Copy {icon} \"{name}\"",
       "hint": "Go to the destination Section",
       "emptySections": "No Sections here",
-      "emptyProjects": "No projects found",
+      "emptyProjects": "No Projects found",
       "openSection": "Open Section",
       "tapHint": "Tap a Section to select it, › to open",
-      "openProject": "Open a project",
+      "openProject": "Open a Project",
       "moveHere": "Move here",
       "copyHere": "Copy here"
     },
     "toasts": {
       "projectDeleted": "Project deleted.",
-      "projectDeleteFailed": "Couldn't delete the project.",
+      "projectDeleteFailed": "Couldn't delete the Project.",
       "fileTrashed": "File moved to Trash.",
       "fileTrashFailed": "Couldn't move the file to Trash.",
       "sectionTrashed": "Section moved to Trash.",
-      "sectionTrashFailed": "Couldn't move the Section to Trash."
-    },
-    "alerts": {
-      "trashFailed": "Couldn't move to Trash. Try again.",
-      "trashError": "Couldn't move to Trash: {cause}",
-      "moveFailed": "Couldn't move: {cause}",
-      "operationFailed": "Couldn't finish: {cause}",
-      "bulkTrash": "Some items couldn't be moved to Trash:\n\n{reasons}",
-      "bulkReason": "{name}: {cause}",
+      "sectionTrashFailed": "Couldn't move the Section to Trash.",
+      "moveFailed": "Couldn't move the items.",
+      "operationFailed": "Couldn't finish.",
       "zipOneSection": "Downloading several Sections at once isn't supported yet. Downloading the first one."
     },
     "bulk": {
       "failedAll": "Failed: {count, plural, one {# item} other {# items}} still selected",
-      "failedSome": "{failed, number} of {total, number} failed, still selected"
+      "failedSome": "{failed, number} of {total, number} failed, still selected",
+      "reason": "{name}: {cause}",
+      "reasonsTitle": "Some items stayed",
+      "reasonsLead": "{count, plural, one {# item} other {# items}} couldn't be moved to Trash and {count, plural, one {is} other {are}} still selected."
     },
     "live": {
       "results": "{count, plural, one {# result} other {# results}} for \"{query}\".",
@@ -493,7 +490,7 @@
       "renameProject": "Rename Project",
       "renameSection": "Rename Section",
       "rename": "Rename",
-      "deleteProjectTitle": "Delete this project?",
+      "deleteProjectTitle": "Delete this Project?",
       "deleteProjectLead": "Every Section and file in <b>{name}</b> will be deleted <b>permanently</b>. This can't be undone.",
       "deleteForever": "Delete forever",
       "createProjectTitle": "New Project",
@@ -503,7 +500,7 @@
       "create": "Create",
       "createSectionTitle": "New Section",
       "createSectionLead": "Create a new Section inside {name}.",
-      "createSectionLeadFallback": "Create a new Section inside this project.",
+      "createSectionLeadFallback": "Create a new Section inside this Project.",
       "sectionPlaceholder": "Section name (e.g. B-Roll, Thumbnails)",
       "trashTitle": "Move to Trash?",
       "trashLeadBulk": "<b>{name}</b> will move to Trash. You can restore them within 30 days.",
@@ -729,7 +726,7 @@
       "UPLOAD_SESSION_NOT_FOUND": "This upload can't be found anymore. Start it again.",
       "USER_HAS_ACTIVITY": "This account has activity (uploads, share links or messages), so it can't be deleted. Deactivate it instead to block access and keep its data.",
       "USER_NOT_FOUND": "That account no longer exists.",
-      "DUPLICATE_FILE": "This file is already in the project.",
+      "DUPLICATE_FILE": "This file is already in the Project.",
       "PART_CHECKSUM_MISMATCH": "Part of the file got damaged on the way. Try the upload again.",
       "PART_CHECKSUM_REQUIRED": "The upload is missing a checksum. Reload the page and try again.",
       "PART_SIZE_MISMATCH": "Part of the file has the wrong size. Try the upload again.",
@@ -758,7 +755,7 @@
     },
     "projectGone": {
       "title": "Project no longer available",
-      "text": "This project was deleted or moved."
+      "text": "This Project was deleted or moved."
     },
     "sectionGone": {
       "title": "Section no longer available",
@@ -778,7 +775,11 @@
     "rateLimited": "Too many attempts. Try again in {minutes, plural, one {# minute} other {# minutes}}.",
     "wrongCode": "Wrong access code.",
     "inactive": "This link isn't active anymore.",
-    "offline": "Can't reach the server. Try again."
+    "offline": "Can't reach the server. Try again.",
+    "revoked": {
+      "title": "This link was turned off",
+      "text": "The person who shared it turned this link off. Ask the {productName} team for a new one."
+    }
   },
   "email": {
     "passwordReset": {
@@ -825,7 +826,15 @@
       "close": "Close info",
       "expand": "Expand info",
       "collapse": "Collapse info",
-      "showAll": "Show all info"
+      "showAll": "Show all info",
+      "versions": {
+        "title": "Versions",
+        "download": "Download the {kind} version",
+        "kind": {
+          "preview": "Preview",
+          "heic-to-jpeg": "Full-size JPEG"
+        }
+      }
     },
     "video": {
       "loading": "Loading video…",
@@ -869,7 +878,7 @@
     },
     "sortGroup": "Sort",
     "moreFilesShown": "{count, plural, one {# more file shown.} other {# more files shown.}}",
-    "moreSectionsShown": "{count, plural, one {# more section shown.} other {# more sections shown.}}",
+    "moreSectionsShown": "{count, plural, one {# more Section shown.} other {# more Sections shown.}}",
     "loadMoreFailed": "Couldn't load more. Try again.",
     "sortFailed": "Couldn't re-sort. Try again.",
     "zipErrors": {
@@ -881,7 +890,7 @@
     },
     "kickProject": "Project · <b>{name}</b>",
     "kickSection": "Section · <b>{label}</b>",
-    "sectionCount": "{count, plural, one {# section} other {# sections}}",
+    "sectionCount": "{count, plural, one {# Section} other {# Sections}}",
     "breakdown": "Contains {parts}.",
     "preparing": "Preparing…",
     "download": "Download",
@@ -889,12 +898,12 @@
     "zipFailed": "Couldn't prepare the download. Try again.",
     "validUntil": "Link valid until <b>{date}, {time}</b>",
     "noExpiry": "Link never expires",
-    "projectContents": "Project contents · <b>{count, plural, one {# section} other {# sections}}</b>",
+    "projectContents": "Project contents · <b>{count, plural, one {# Section} other {# Sections}}</b>",
     "sectionContents": "Section contents · <b>{count, plural, one {# file} other {# files}}</b>",
     "showingFiles": "Showing {shown, number} of {total, plural, one {# file} other {# files}}.",
-    "showingSections": "Showing {shown, number} of {total, plural, one {# section} other {# sections}}.",
+    "showingSections": "Showing {shown, number} of {total, plural, one {# Section} other {# Sections}}.",
     "showMoreFiles": "Show {count, plural, one {# more file} other {# more files}}",
-    "showMoreSections": "Show {count, plural, one {# more section} other {# more sections}}",
+    "showMoreSections": "Show {count, plural, one {# more Section} other {# more Sections}}",
     "loading": "Loading…"
   },
   "shareModal": {
@@ -908,17 +917,17 @@
       "section": "Section",
       "file": "File"
     },
-    "sectionCount": "{count, plural, one {# section} other {# sections}}",
+    "sectionCount": "{count, plural, one {# Section} other {# Sections}}",
     "activeFor": {
       "file": "Active links for this file",
       "section": "Active links for this Section",
-      "project": "Active links for this project"
+      "project": "Active links for this Project"
     },
     "activeMine": "Your active links",
     "noLinks": {
       "file": "No links for this file yet.",
       "section": "No links for this Section yet.",
-      "project": "No links for this project yet."
+      "project": "No links for this Project yet."
     },
     "linkCount": "{count, plural, one {# link} other {# links}}",
     "linksLoading": "Loading links…",
@@ -973,7 +982,7 @@
       "generic": "The upload couldn't start. Try again in a moment.",
       "storage": "Storage isn't available right now. Ask your admin to check it, then try again.",
       "expired": "This upload ended before it finished. Start it again.",
-      "duplicate": "This file is already in the project.",
+      "duplicate": "This file is already in the Project.",
       "rateLimited": "Too many uploads at once. Wait a moment, then try again."
     },
     "rowReason": {
@@ -988,7 +997,7 @@
       "generic": "rejected by the server",
       "storage": "storage unavailable",
       "expired": "the upload ended, start it again",
-      "duplicate": "already in this project",
+      "duplicate": "already in this Project",
       "rateLimited": "too many uploads, try again soon"
     },
     "live": {
@@ -1037,7 +1046,7 @@
       "remove": "Remove {name} from the queue",
       "statusRetrying": "Uploading {progress, number}% · retrying in {seconds, number} s",
       "statusChecking": "Checking for duplicates {progress, number}%",
-      "statusSkipped": "Skipped: already in this project",
+      "statusSkipped": "Skipped: already in this Project",
       "statusPaused": "Paused · {done, number} of {total, plural, one {# part} other {# parts}} sent",
       "statusWaitingDuplicate": "Waiting · uploading anyway",
       "chooseFile": "Choose file",
@@ -1056,20 +1065,13 @@
       "progress": "Batch progress",
       "progressValue": "{done, number} of {total, plural, one {# file} other {# files}} done"
     },
-    "heic": {
-      "title": "Convert HEIC to JPG?",
-      "body": "Some of your files are <b>.heic</b>. Most browsers and editing apps can't open this format directly. Convert them to JPG automatically so they work everywhere?",
-      "note": "This choice applies to every HEIC file in this upload.",
-      "convert": "Yes, convert to JPG",
-      "keep": "No, keep .heic"
-    },
     "picker": {
       "title": "Choose a Section",
       "lead": "Pick a Section to upload to, or create a new one.",
       "close": "Close",
       "create": "New Section",
       "cancel": "Cancel",
-      "empty": "This project has no Sections yet. Create one to start uploading.",
+      "empty": "This Project has no Sections yet. Create one to start uploading.",
       "files": "{count, plural, one {# file} other {# files}}"
     },
     "dock": {
@@ -1090,10 +1092,10 @@
       "subPaused": "Choose the files again to continue"
     },
     "duplicate": {
-      "title": "Already in this project",
-      "body": "<b>{name}</b> has the same content as {existing}, which is already in this project.",
-      "bodySame": "<b>{name}</b> is already in this project with exactly the same content.",
-      "note": "Skip keeps the project free of copies. Upload anyway adds a second file.",
+      "title": "Already in this Project",
+      "body": "<b>{name}</b> has the same content as {existing}, which is already in this Project.",
+      "bodySame": "<b>{name}</b> is already in this Project with exactly the same content.",
+      "note": "Skip keeps the Project free of copies. Upload anyway adds a second file.",
       "applyAll": "Do the same for the other {count, plural, one {# duplicate} other {# duplicates}}",
       "skip": "Skip",
       "uploadAnyway": "Upload anyway"
@@ -1200,18 +1202,18 @@
       "deleteFileLead": "Delete \"{name}\" forever? This can't be undone.",
       "deleteSectionLead": "Section \"{name}\" and ALL the files in it will be deleted forever. This can't be undone."
     },
-    "noProject": "No project"
+    "noProject": "No Project"
   },
   "chat": {
     "title": "Project discussion",
-    "close": "Close project discussion",
+    "close": "Close Project discussion",
     "feed": "Project discussion messages",
     "messageCount": "{count, plural, =0 {No messages} one {# message} other {# messages}}",
     "loadFailed": "Couldn't load the discussion. Try again.",
     "retry": "Try again",
     "loading": "Loading the discussion…",
     "emptyTitle": "No messages yet",
-    "emptyText": "Start talking about this project's footage. Type @ to mention a Section or file, and your team will see it here.",
+    "emptyText": "Start talking about this Project's footage. Type @ to mention a Section or file, and your team will see it here.",
     "you": "You",
     "sending": "sending…",
     "sendFailed": "Your message wasn't sent. Try again.",
@@ -1257,7 +1259,7 @@
     },
     "project_created": {
       "label": "Project",
-      "title": "New project",
+      "title": "New Project",
       "body": "{projectTitle} was created"
     },
     "upload_complete": {
@@ -1338,7 +1340,7 @@
       "title": "Storage overview",
       "loadFailed": "Couldn't load storage data. Try again.",
       "empty": "No storage data yet.",
-      "totalProjects": "Total projects",
+      "totalProjects": "Total Projects",
       "totalFiles": "Total files",
       "usedSpace": "Used space",
       "freeSpace": "Free space"

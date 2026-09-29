@@ -15,6 +15,7 @@ import ShareInvalid, { type ShareInvalidKind } from "./ShareInvalid";
 
 function kindOf(res: Exclude<ShareResolution, { state: "ok" }>): ShareInvalidKind {
   if (res.state === "expired") return "expired";
+  if (res.state === "revoked") return "revoked";
   if (res.state === "private") return "private";
   if (res.state === "not-found") return "not-found";
   return res.target === "project"

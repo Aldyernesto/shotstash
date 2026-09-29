@@ -1,7 +1,7 @@
 /**
  * Next page of a share grid ("Tampilkan N file lagi"), with signed media URLs.
  *   200 { files, sections, total }
- *   410 { state: "expired" | "gone" }, 404 { state: "not-found" }, 401 { state: "private" }
+ *   410 { state: "expired" | "revoked" | "gone" }, 404 { state: "not-found" }, 401 { state: "private" }
  */
 import { NextResponse } from 'next/server';
 import { defineRoute } from '@/lib/defineRoute';

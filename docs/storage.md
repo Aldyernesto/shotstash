@@ -76,6 +76,17 @@ R2 requires every part of a multipart upload except the last to have the same si
 
 The interrupted-upload harness (`npm run e2e:upload`) uploads a synthetic file through a local proxy that cuts the connection twice. It runs at 256 MiB by default and at 1 GiB in CI; the 20 GiB acceptance run is manual: `E2E_UPLOAD_MB=20480 npm run e2e:upload` against a running instance (it needs about 20 GiB free on the storage backend and takes a while).
 
+## Thumbnails and processed versions
+
+- Thumbnails are 480 px on the long edge with the source aspect ratio, EXIF orientation applied (photos) and the display matrix applied (phone video, frame at second 2). Each is stored as `files/<id>/thumb-<n>.jpg` and served at `/media/t/<id>?v=<n>`, cached for a year when `n` is the current version.
+- Originals are never rewritten. A HEIC original stays as uploaded (its MD5 is the stored bytes' MD5); the upload adds a JPEG `preview` processed version (2048 px) that the viewer shows and the thumbnail is made from.
+- Processed versions live at `files/<id>/proc/<versionId>.<ext>`, are listed in the viewer info panel and download from `/media/p/<versionId>` with the permission of their file. Share pages never expose them.
+- `npm run thumbs:rebuild` regenerates the thumbnails of existing files (`-- --missing` for files without one). Run it from a checkout of the same version with the server's `.env` (database and storage settings).
+
+## ZIP downloads
+
+Share and dashboard ZIPs are streamed in STORE mode (no compression; media is already compressed), with ZIP64 for entries above 4 GiB and no temporary files. Objects that cannot be read when the download starts are listed in `_MISSING_FILES.txt`; a read that fails mid-download aborts the download, and the browser offers its own retry.
+
 ## Switching backends
 
 Switching is a copy procedure, not a setting to flip: the database records keys, and the keys are the same on both backends, so you copy the bytes and change the configuration.

@@ -16,6 +16,8 @@ import { zipFileName, zipPlanForFolders } from '@/lib/mediaTree';
 import { can, type Actor } from '@/modules/auth';
 import { isZipTarget, verifyShareToken } from './signing';
 import { fileResponse, forbiddenResponse, notFoundResponse, zipResponse } from './stream';
+import { processedFileName } from './processed';
+import { thumbnailCacheFor } from './thumbCache.ts';
 
 const ID_RE = /^[0-9a-fA-F-]{8,64}$/;
 
@@ -65,8 +67,36 @@ export async function mediaGuard(actor: Actor | null, fileId: string): Promise<G
   return { ok: true, file: rest };
 }
 
+/**
+ * Thumbnail gate (Story 4.4): like `mediaGuard`, except that a trashed file
+ * keeps its thumbnail for actors who see the Trash (`trash.view`), so Trash
+ * rows show real thumbnails. Everything else about a trashed file stays 404.
+ */
+export async function thumbnailGuard(actor: Actor | null, fileId: string): Promise<GuardResult> {
+  const live = await mediaGuard(actor, fileId);
+  if (live.ok || live.response.status !== 404 || !can(actor, 'trash.view') || !ID_RE.test(fileId)) return live;
+  const file = await prisma.mediaFile.findUnique({
+    where: { id: fileId },
+    select: { id: true, originalName: true, mimeType: true, storageKey: true, thumbVersion: true, projectId: true, folderId: true, status: true },
+  });
+  if (!file || file.status !== 'ready') return live;
+  const { status: _s, ...rest } = file;
+  void _s;
+  return { ok: true, file: rest };
+}
+
+/** `/media/t/:fileId?v=<n>` cache policy (see thumbCache.ts). */
+export function thumbnailCache(file: GuardedFile, requested: string | null): 'immutable' | 'cookie' {
+  return thumbnailCacheFor(file.thumbVersion, requested);
+}
+
 /** Serves one guarded file: thumbnail, inline original or attachment. */
-export async function serveFile(req: Request, file: GuardedFile, variant: 'thumbnail' | 'inline' | 'download', cache: 'cookie' | 'signed') {
+export async function serveFile(
+  req: Request,
+  file: GuardedFile,
+  variant: 'thumbnail' | 'inline' | 'download',
+  cache: 'cookie' | 'signed' | 'immutable',
+) {
   if (variant === 'thumbnail') {
     if (!file.thumbVersion) return notFoundResponse();
     return fileResponse({ req, key: storageKeys.thumbnail(file.id, file.thumbVersion), mimeType: 'image/jpeg', cache });
@@ -146,6 +176,35 @@ export async function projectZipResponse(
   }
   if (!live.length) return notFoundResponse();
   return zipResponse({ entries: live, zipName: zipFileName(project.title), cache: 'cookie' });
+}
+
+/* ------------------------------------------------------------------ */
+/* Processed versions                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * `/media/p/:versionId` (Story 4.4): a processed version as an attachment.
+ * Authorised exactly like its parent file (`mediaGuard`: cookie actor,
+ * `media.download`, parent live, not trashed); Range and HEAD supported.
+ */
+export async function processedVersionResponse(req: Request, actor: Actor | null, versionId: string): Promise<Response> {
+  if (!actor) return Response.json({ code: 'UNAUTHENTICATED', message: 'Authentication required' }, { status: 401 });
+  if (!can(actor, 'media.download')) return forbiddenResponse();
+  if (!ID_RE.test(versionId)) return notFoundResponse();
+  const version = await prisma.processedVersion.findUnique({
+    where: { id: versionId },
+    select: { mediaFileId: true, kind: true, mimeType: true, storageKey: true },
+  });
+  if (!version) return notFoundResponse();
+  const g = await mediaGuard(actor, version.mediaFileId);
+  if (!g.ok) return g.response;
+  return fileResponse({
+    req,
+    key: version.storageKey,
+    mimeType: version.mimeType,
+    cache: 'cookie',
+    disposition: { kind: 'attachment', filename: processedFileName(g.file.originalName, version.kind, version.mimeType) },
+  });
 }
 
 /* ------------------------------------------------------------------ */

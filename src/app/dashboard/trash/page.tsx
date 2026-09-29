@@ -9,7 +9,9 @@
  *   `button-danger`  → Story 1.14
  *   `status-chip`    → Story 1.15 (dasar `remaining-chip`)
  *   `status-mark`    → Story 1.27 (layar tanpa izin)
- *   `rep-thumb`      → Story 2.14 (placeholder; thumbnail baris = FR40/Epic 4)
+ *   `rep-thumb`      → Story 2.14; real thumbnails since Story 4.5: a
+ *                      file's own thumbnail, a Section's `repFiles(limit: 3)`
+ *                      (trashed files keep their thumbnail for Trash viewers)
  *   `empty-state` / `skeleton-row` / `error-box` → Story 2.8 + 3.2
  *
  * `ConfirmModal` warisan TIDAK lagi dipakai di jalur ini.
@@ -22,6 +24,7 @@ import styles from "./page.module.css";
 import { useAuth } from "@/components/AuthContext";
 import { canPurgeTrash, canViewTrash } from "@/lib/permissions";
 import RepThumb from "@/components/dashboard/RepThumb";
+import type { RepFile } from "@/components/dashboard/ProjectCard";
 import StatusMark from "@/components/auth/StatusMark";
 import { ConfirmDialog } from "@/components/overlay/Dialog";
 import { useTranslations } from "next-intl";
@@ -40,6 +43,7 @@ const GET_ALL_TRASHED = gql`
       mimeType
       size
       trashedAt
+      thumbnailUrl
     }
     allTrashedFolders {
       id
@@ -48,6 +52,13 @@ const GET_ALL_TRASHED = gql`
       project {
         id
         title
+      }
+      repFiles(limit: 3) {
+        id
+        kind
+        thumbnailUrl
+        duration
+        extension
       }
     }
   }
@@ -128,6 +139,8 @@ type TrashedFile = {
   mimeType?: string | null;
   size: string | number;
   trashedAt?: string | null;
+  /** `/media/t/<id>?v=<n>`: served to Trash viewers although the file is trashed. */
+  thumbnailUrl?: string | null;
 };
 
 type TrashedFolder = {
@@ -135,16 +148,18 @@ type TrashedFolder = {
   name: string;
   trashedAt?: string | null;
   project?: { id: string; title: string } | null;
+  /** Up to 3 representative files of the trashed Section (Story 2.4 sample). */
+  repFiles?: RepFile[] | null;
 };
 
 /**
- * Placeholder `rep-thumb`: bentuk benar per tingkat, isi
- * `{colors.rep-placeholder}`. Data thumbnail baris = FR40/Epic 4.
+ * Fallback `rep-thumb` when a Section has no file with a thumbnail: the
+ * right shape, filled with `{colors.rep-placeholder}`.
  */
-const REP_PLACEHOLDER = [
-  { id: "ph-1", kind: "image" },
-  { id: "ph-2", kind: "image" },
-  { id: "ph-3", kind: "image" },
+const REP_PLACEHOLDER: RepFile[] = [
+  { id: "ph-1", kind: "photo", thumbnailUrl: null },
+  { id: "ph-2", kind: "photo", thumbnailUrl: null },
+  { id: "ph-3", kind: "photo", thumbnailUrl: null },
 ];
 
 /**
@@ -414,7 +429,9 @@ export default function TrashPage() {
                 {folders.map((f) => {
                   const { number, title } = parseSectionName(f.name);
                   const left = daysLeft(f.trashedAt);
-                  const thumb = <RepThumb variant="section" repFiles={REP_PLACEHOLDER} />;
+                  const thumb = (
+                    <RepThumb variant="section" repFiles={f.repFiles?.length ? f.repFiles : REP_PLACEHOLDER} />
+                  );
                   return (
                     <div key={f.id} className={styles.row} role="row">
                       <div className={`${styles.cell} ${styles.cellContent}`} role="cell">
@@ -517,7 +534,11 @@ export default function TrashPage() {
                   const thumb = (
                     <RepThumb
                       variant="file"
-                      file={{ kind: fileKind(file.mimeType), extension: fileExtension(file.originalName) }}
+                      file={{
+                        kind: fileKind(file.mimeType),
+                        extension: fileExtension(file.originalName),
+                        thumbnailUrl: file.thumbnailUrl ?? null,
+                      }}
                     />
                   );
                   return (

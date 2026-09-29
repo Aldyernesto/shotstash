@@ -349,6 +349,7 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
   const mapDead = (body: { state?: string; target?: string } | null): ShareInvalidKind | null => {
     if (!body?.state) return null;
     if (body.state === "expired") return "expired";
+    if (body.state === "revoked") return "revoked";
     if (body.state === "not-found") return "not-found";
     if (body.state === "private") return "private";
     if (body.state === "gone") {
@@ -556,7 +557,8 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
           </p>
           <div className={styles.chips}>
             <span className={`spine-chip ${styles.chip}`}>
-              {ICON_FILES}
+              {/* key-share-desktop 04: a single video reads "Video" with the clock mark. */}
+              {payload.kind === "file" && single?.kind === "video" ? ICON_CLOCK : ICON_FILES}
               {payload.kind === "file"
                 ? t(`kind.${single!.kind}`)
                 : payload.kind === "project" && !payload.section

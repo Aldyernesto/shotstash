@@ -12,7 +12,6 @@ import * as GoogleAuth from '../services/google-auth.service';
 import * as ProjectService from '../services/project.service';
 import * as PasswordReset from '../services/password-reset.service';
 import prisma from '../lib/prisma';
-import { esClient } from '../lib/elasticsearch';
 import { config } from '../lib/config';
 import { publicSignupRefusal } from '../lib/signupGuard';
 import { pubsub } from '../lib/pubsub';
@@ -33,8 +32,10 @@ import { limitBy, loginLimit } from '../lib/rateLimit';
 import { folderChainTrashed } from '../lib/shareLink';
 import * as Trash from '@/modules/trash';
 import * as Upload from '@/modules/upload';
+import * as Library from '@/modules/library';
 import { storage, storageKeys } from '@/modules/storage';
 import { isSupportedLocale } from '@/modules/i18n';
+import { previewOf } from '@/modules/media';
 import { LOGIN_INTERNAL_ERROR } from '../lib/authMessages';
 import { GraphQLError } from 'graphql';
 import { codedError } from '@/modules/errors';
@@ -284,14 +285,15 @@ function pickDeterministic<T>(items: T[], k: number, seedHex: string): T[] {
 
 // Id seluruh Section di subtree (diri sendiri + keturunan non-trash) — pola
 // rekursi countFilesRecursive; pemakaian: SATU groupBy untuk seluruh subtree.
-async function collectFolderSubtreeIds(folderId: string): Promise<string[]> {
+// `trashRoot`: for a Section in the Trash, also the descendants trashed with it.
+async function collectFolderSubtreeIds(folderId: string, trashRoot?: string): Promise<string[]> {
   const ids = [folderId];
   const children = await prisma.folder.findMany({
-    where: { parentId: folderId, trashedAt: null },
+    where: { parentId: folderId, OR: [{ trashedAt: null }, ...(trashRoot ? [{ trashRootId: trashRoot }] : [])] },
     select: { id: true },
   });
   for (const child of children) {
-    ids.push(...(await collectFolderSubtreeIds(child.id)));
+    ids.push(...(await collectFolderSubtreeIds(child.id, trashRoot)));
   }
   return ids;
 }
@@ -332,6 +334,54 @@ function toRepFile(file: {
   };
 }
 
+/**
+ * Story 4.5: the files of one Section for the library, in three queries
+ * whatever their number (a 10,000-file Section must stay fast): the rows
+ * with the columns the schema reads, every processed version of the
+ * Section, and the distinct uploaders.
+ */
+async function sectionFiles(folderId: string) {
+  const files = await prisma.mediaFile.findMany({
+    where: { folderId, trashedAt: null, status: 'ready' },
+    select: {
+      id: true,
+      filename: true,
+      originalName: true,
+      mimeType: true,
+      size: true,
+      md5Checksum: true,
+      thumbVersion: true,
+      duplicateOfId: true,
+      uploadedById: true,
+      folderId: true,
+      projectId: true,
+      trashedAt: true,
+      status: true,
+      createdAt: true,
+    },
+  });
+  const versions = await prisma.processedVersion.findMany({
+    where: { mediaFile: { folderId, trashedAt: null, status: 'ready' } },
+    orderBy: { createdAt: 'desc' },
+  });
+  const uploaderIds = [...new Set(files.map((f) => f.uploadedById))];
+  const users = uploaderIds.length ? await prisma.user.findMany({ where: { id: { in: uploaderIds } } }) : [];
+  const userById = new Map(users.map((u) => [u.id, u]));
+  const versionsOf = new Map<string, typeof versions>();
+  for (const v of versions) {
+    const list = versionsOf.get(v.mediaFileId) ?? [];
+    list.push(v);
+    versionsOf.set(v.mediaFileId, list);
+  }
+  return files.map((f) => ({ ...f, processedVersions: versionsOf.get(f.id) ?? [], uploadedBy: userById.get(f.uploadedById) ?? null }));
+}
+
+/** Processed versions of a file row, newest first (included by `folder(id)`). */
+async function processedVersionsOf(parent: { id: string; processedVersions?: unknown }) {
+  if (Array.isArray(parent.processedVersions)) return parent.processedVersions as { id: string; kind: string; mimeType: string }[];
+  return prisma.processedVersion.findMany({ where: { mediaFileId: parent.id }, orderBy: { createdAt: 'desc' } });
+}
+
 // Story 4.7: `includeTrashed` hanya untuk Section yang SUDAH di Trash
 // (`Folder.trashedAt` terisi) — baris Trash tetap punya kandidat walau
 // file di dalamnya ikut ter-`trashedAt`. Untuk Section aktif (dipakai
@@ -366,7 +416,7 @@ function projectRepFiles(project: { id: string }, limit: number) {
 }
 
 async function folderRepFiles(folder: { id: string; trashedAt?: Date | null }, limit: number) {
-  const ids = await collectFolderSubtreeIds(folder.id);
+  const ids = await collectFolderSubtreeIds(folder.id, folder.trashedAt ? folder.id : undefined);
   // Story 4.7: Section di Trash (`allTrashedFolders`) tetap memperoleh
   // kandidat meski file-nya ikut ter-`trashedAt`; Section aktif tidak.
   const includeTrashed = Boolean(folder.trashedAt);
@@ -462,69 +512,27 @@ const rawResolvers = {
       // A trashed Section (or one inside a trashed Section) answers null.
       const folder = await prisma.folder.findFirst({
         where: { id, trashedAt: null },
-        include: {
-          files: { where: { trashedAt: null, status: 'ready' } },
-          children: { where: { trashedAt: null } },
-          project: true,
-        },
+        include: { children: { where: { trashedAt: null } }, project: true },
       });
       if (!folder || (await folderChainTrashed(folder.parentId))) return null;
-      return folder;
+      return { ...folder, files: await sectionFiles(folder.id) };
     },
 
+    processedVersions: async (_: unknown, { fileId }: { fileId: string }, context: GraphQLContext) => {
+      assertCan(context.actor, 'project.view');
+      const file = await assertLiveFile(fileId);
+      return prisma.processedVersion.findMany({ where: { mediaFileId: file.id }, orderBy: { createdAt: 'desc' } });
+    },
+
+    // Story 4.5: one query shape with or without Elasticsearch (library module).
     searchFolders: async (_: any, { query, projectId }: { query: string; projectId?: string }, context: GraphQLContext) => {
       assertCan(context.actor, 'project.view');
-      return prisma.folder.findMany({
-        where: {
-          name: { contains: query, mode: 'insensitive' },
-          ...(projectId ? { projectId } : {}),
-          trashedAt: null,
-        },
-        include: { project: true },
-        take: 10,
-      });
+      return Library.searchFolders({ query, projectId });
     },
 
     searchFiles: async (_: any, { query, projectId }: { query: string; projectId?: string }, context: GraphQLContext) => {
       assertCan(context.actor, 'project.view');
-      // Try ES first, fall back to DB if ES fails or returns empty
-      let hits: any[] = [];
-      const es = esClient();
-      if (es) {
-        try {
-          const result = await es.search({
-            index: 'media_files',
-            query: {
-              bool: {
-                must: [{ multi_match: { query, fields: ['originalName^3', 'category'], fuzziness: 'AUTO' } }],
-                ...(projectId ? { filter: [{ term: { projectId } }] } : {})
-              }
-            }
-          });
-          hits = result.hits.hits;
-        } catch (err) {
-          log.warn('search: Elasticsearch failed, using the database', { err: errMessage(err) });
-        }
-      }
-      if (hits.length === 0) {
-        // Fallback to DB (ES index may be empty or out of sync)
-        const where: any = {
-          OR: [{ originalName: { contains: query, mode: 'insensitive' } }, { mimeType: { contains: query, mode: 'insensitive' } }],
-          ...(projectId ? { projectId } : {}),
-          trashedAt: null,
-          status: 'ready',
-        };
-        return prisma.mediaFile.findMany({ where, take: 20, include: { folder: true, project: true } });
-      }
-      // The index may lag behind the Trash: re-read the rows with the same
-      // trash filter as the DB branch, keeping the ES ranking.
-      const ids = hits.map((hit: any) => String(hit._id));
-      const rows = await prisma.mediaFile.findMany({
-        where: { id: { in: ids }, trashedAt: null, status: 'ready', ...(projectId ? { projectId } : {}) },
-        include: { folder: true, project: true },
-      });
-      const byId = new Map(rows.map((row) => [row.id, row]));
-      return ids.map((id) => byId.get(id)).filter(Boolean);
+      return Library.searchFiles({ query, projectId });
     },
 
     shareLinks: async (_: any, __: any, context: GraphQLContext) => {
@@ -835,11 +843,11 @@ const rawResolvers = {
       }
     },
 
-    completeUpload: async (_: any, { sessionId, md5Checksum, convertHeic }: any, context: GraphQLContext) => {
+    completeUpload: async (_: any, { sessionId, md5Checksum }: any, context: GraphQLContext) => {
       const actor = actorOf(context);
       assertCan(actor, 'upload');
       try {
-        return await Upload.completeUpload({ actor, sessionId, md5: md5Checksum ?? null, convertHeic: convertHeic !== false });
+        return await Upload.completeUpload({ actor, sessionId, md5: md5Checksum ?? null });
       } catch (err) {
         throw Upload.asGraphQLError(err);
       }
@@ -1120,6 +1128,9 @@ const rawResolvers = {
         });
         await Upload.resettle(tx, parked);
         return tx.mediaFile.findUniqueOrThrow({ where: { id: moved.id }, include: { folder: true, project: true, uploadedBy: true } });
+      }).then((row) => {
+        Library.syncSearchLater([row.id]);
+        return row;
       });
     },
 
@@ -1152,7 +1163,7 @@ const rawResolvers = {
       }
 
       try {
-        return await prisma.$transaction(async (tx) => {
+        const copy = await prisma.$transaction(async (tx) => {
           const original = await Upload.findOriginal(tx, targetFolder.projectId, file.md5Checksum);
           return tx.mediaFile.create({
             data: {
@@ -1173,6 +1184,8 @@ const rawResolvers = {
             include: { folder: true, project: true, uploadedBy: true },
           });
         });
+        Library.syncSearchLater([copy.id]);
+        return copy;
       } catch (err) {
         await store.delete(key).catch(() => {});
         if (thumbVersion) await store.delete(storageKeys.thumbnail(newId, 1)).catch(() => {});
@@ -1235,7 +1248,7 @@ const rawResolvers = {
       }
 
       // Database only: storage keys do not depend on where a file sits.
-      await prisma.$transaction(async (tx) => {
+      const movedFiles = await prisma.$transaction(async (tx) => {
         await tx.folder.update({
           where: { id: folderId },
           data: { parentId: targetFolderId ?? null, projectId: destProjectId },
@@ -1248,8 +1261,11 @@ const rawResolvers = {
           await tx.mediaFile.updateMany({ where: { folderId: { in: subtreeFolderIds } }, data: { projectId: destProjectId } });
           await Upload.resettle(tx, parked);
           await tx.uploadSession.updateMany({ where: { folderId: { in: subtreeFolderIds } }, data: { projectId: destProjectId } });
+          return moving.map((f) => f.id);
         }
+        return [] as string[];
       });
+      Library.syncSearchLater(movedFiles);
 
       return prisma.folder.findUnique({
         where: { id: folderId },
@@ -1357,11 +1373,22 @@ const rawResolvers = {
     thumbnailUrl: (parent: any) => (parent.thumbVersion ? mediaUrl.thumbnail(parent.id, parent.thumbVersion) : null),
     duplicateOf: (parent: any) => (parent.duplicateOfId && parent.duplicateOfId !== parent.id ? parent.duplicateOfId : null),
     downloadUrl: (parent: any) => mediaUrl.download(parent.id),
+    // Story 4.4: included by `folder(id)` (one query for every file of the
+    // Section); loaded per file elsewhere.
+    processedVersions: async (parent: any) => processedVersionsOf(parent),
+    previewUrl: async (parent: any) => {
+      const preview = previewOf(await processedVersionsOf(parent));
+      return preview ? mediaUrl.processed(preview.id) : null;
+    },
     uploadedBy: async (parent: any) => {
       if (parent.uploadedBy) return parent.uploadedBy;
       if (!parent.uploadedById) return null;
       return prisma.user.findUnique({ where: { id: parent.uploadedById } });
     },
+  },
+
+  ProcessedVersion: {
+    downloadUrl: (parent: { id: string }) => mediaUrl.processed(parent.id),
   },
 
   // Story 4.4 (aditif): `ShareLink.createdBy` dimuat dari createdById bila

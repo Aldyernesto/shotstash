@@ -18,7 +18,7 @@ async function deadResponse(slug: string) {
   if (res.state === 'gone') {
     return NextResponse.json({ code: 'GONE', state: res.state, target: res.target }, { status: 410 });
   }
-  if (res.state === 'expired') return NextResponse.json({ code: 'GONE', state: 'expired' }, { status: 410 });
+  if (res.state === 'expired' || res.state === 'revoked') return NextResponse.json({ code: 'GONE', state: res.state }, { status: 410 });
   return NextResponse.json({ code: 'NOT_FOUND', state: 'not-found' }, { status: 404 });
 }
 

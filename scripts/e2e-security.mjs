@@ -1,7 +1,8 @@
 // Local end-to-end check of Stories 2.1-2.8 (route auth, cookie media,
 // signed shares, permissions, holes, limits, headers, health, trash
-// lifecycle) and 4.1-4.3 (storage keys, parts, resume, dedup, cancel,
-// expiry). NOT part of CI.
+// lifecycle), 4.1-4.3 (storage keys, parts, resume, dedup, cancel,
+// expiry) and 4.4-4.6 (versioned thumbnails, processed versions, Trash
+// thumbnails, STORE ZIPs, inactive links 404). Runs in the CI e2e job.
 //
 //   npm run dev:db; npx prisma migrate deploy; npx tsx prisma/seed.ts
 //   EMAIL_TRANSPORT=log npm run dev   # reset-limit rows are skipped without an email transport
@@ -69,6 +70,34 @@ async function gql(token, query, variables) {
   return r.json();
 }
 const code = (res) => res.errors?.[0]?.extensions?.code;
+/**
+ * Which inactive-link message the 404 page renders: the `kind` prop of the
+ * ShareInvalid element in the page's server payload (the page also carries
+ * the whole message bundle, so matching message text would prove nothing).
+ */
+function inactiveKind(html) {
+  const m = /\{\\?"kind\\?":\\?"([a-z-]+)\\?"\}/.exec(html);
+  return m ? m[1] : null;
+}
+/** Central directory of a ZIP (ZIP64 sizes are not needed for these small archives). */
+function zipEntries(buf) {
+  const eocd = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  if (eocd < 0) return [];
+  const count = buf.readUInt16LE(eocd + 10);
+  let off = buf.readUInt32LE(eocd + 16);
+  const out = [];
+  for (let i = 0; i < count && buf.readUInt32LE(off) === 0x02014b50; i++) {
+    const nameLen = buf.readUInt16LE(off + 28);
+    out.push({
+      method: buf.readUInt16LE(off + 10),
+      compressed: buf.readUInt32LE(off + 20),
+      size: buf.readUInt32LE(off + 24),
+      name: buf.subarray(off + 46, off + 46 + nameLen).toString('utf8'),
+    });
+    off += 46 + nameLen + buf.readUInt16LE(off + 30) + buf.readUInt16LE(off + 32);
+  }
+  return out.filter((e) => !e.name.endsWith('/'));
+}
 /** Per-run suffix so rows that count per user or per email can run again. */
 const RUN = `${Date.now().toString(36)}${randomBytes(2).toString('hex')}`;
 
@@ -341,6 +370,59 @@ r = await fetch(`${B}/media/d/${vid.id}`, { method: 'HEAD', headers: { cookie: e
 ok(r.status === 200 && r.headers.get('content-length') === String(up1.buf.length), 'HEAD size', r.headers.get('content-length'));
 r = await fetch(`${B}/media/z?projectId=${project.id}&folderId=${folder.id}`, { headers: { cookie: editor.cookie } });
 ok(r.status === 200 && r.headers.get('content-type') === 'application/zip', 'dashboard zip', r.status);
+{
+  // Story 4.6: streamed (no Content-Length), every entry STORE (method 0).
+  const noLength = r.headers.get('content-length') === null;
+  const zip = Buffer.from(await r.arrayBuffer());
+  const entries = zipEntries(zip);
+  ok(noLength, 'zip has no Content-Length', r.headers.get('content-length'));
+  ok(entries.length >= 2 && entries.every((e) => e.method === 0 && e.compressed === e.size), 'zip entries stored uncompressed', JSON.stringify(entries.slice(0, 4)));
+  ok(entries.some((e) => e.name.endsWith('clip.mp4') && e.size === up1.buf.length), 'zip entry has the declared size');
+}
+
+// ---- Story 4.4: versioned thumbnails and processed versions
+const db44 = new pg.Client({ connectionString: process.env.DATABASE_URL });
+await db44.connect();
+const picRow = (await gql(editor.token, `{ folder(id:"${folder.id}") { files { id thumbnailUrl previewUrl processedVersions { id } } } }`)).data.folder.files.find((f) => f.id === pic.id);
+ok(/^\/media\/t\/[0-9a-f-]+\?v=\d+$/.test(picRow?.thumbnailUrl || ''), 'photo thumbnail URL carries its version', picRow?.thumbnailUrl);
+r = await fetch(`${B}${picRow.thumbnailUrl}`, { headers: { cookie: editor.cookie } });
+{
+  const cc = r.headers.get('cache-control');
+  const meta = await sharp(Buffer.from(await r.arrayBuffer())).metadata();
+  ok(r.status === 200 && cc === 'private, max-age=31536000, immutable', 'current thumbnail version is immutable for a year', `${r.status} ${cc}`);
+  // The 64x48 source keeps its 4:3 aspect (never enlarged, never cropped).
+  ok(meta.format === 'jpeg' && meta.width === 64 && meta.height === 48, 'thumbnail keeps the source aspect ratio', `${meta.width}x${meta.height}`);
+}
+r = await fetch(`${B}/media/t/${pic.id}?v=987`, { headers: { cookie: editor.cookie } });
+ok(r.status === 200 && r.headers.get('cache-control') === 'private, max-age=3600', 'stale thumbnail version gets the short policy', r.headers.get('cache-control'));
+ok(Array.isArray(picRow.processedVersions) && picRow.previewUrl === null, 'a JPEG has no processed versions and no preview');
+// A processed version row pointing at existing bytes (the pipeline that
+// produces them is Epic 5): served through /media/p with the file's permission.
+const versionId = randomUUID();
+{
+  const key = (await db44.query('SELECT storage_key, size FROM media_files WHERE id = $1', [pic.id])).rows[0];
+  await db44.query(
+    "INSERT INTO processed_versions (id, media_file_id, kind, storage_key, mime_type, size, attempt, created_at) VALUES ($1, $2, 'preview', $3, 'image/jpeg', $4, 1, now())",
+    [versionId, pic.id, key.storage_key, key.size],
+  );
+}
+const listedVersions = (await gql(editor.token, `{ folder(id:"${folder.id}") { files { id previewUrl processedVersions { id kind mimeType size downloadUrl } } } }`)).data.folder.files.find((f) => f.id === pic.id);
+ok(listedVersions.processedVersions.length === 1 && listedVersions.processedVersions[0].downloadUrl === `/media/p/${versionId}` && listedVersions.previewUrl === `/media/p/${versionId}`, 'MediaFile.processedVersions and previewUrl', JSON.stringify(listedVersions.processedVersions));
+{
+  const byFile = await gql(viewer.token, `{ processedVersions(fileId:"${pic.id}") { id kind downloadUrl } }`);
+  ok(byFile.data?.processedVersions?.length === 1 && byFile.data.processedVersions[0].kind === 'preview', 'processedVersions(fileId) for the viewer', JSON.stringify(byFile.errors ?? ''));
+  ok(code(await gql(null, `{ processedVersions(fileId:"${pic.id}") { id } }`)) === 'UNAUTHENTICATED', 'processedVersions needs a session');
+}
+r = await fetch(`${B}/media/p/${versionId}`, { headers: { cookie: editor.cookie } });
+ok(r.status === 200 && /^attachment;/.test(r.headers.get('content-disposition') || '') && /\.preview\.jpg/.test(r.headers.get('content-disposition') || ''), 'processed version 200 attachment', `${r.status} ${r.headers.get('content-disposition')}`);
+r = await fetch(`${B}/media/p/${versionId}`, { headers: { cookie: viewer.cookie, range: 'bytes=0-9' } });
+ok(r.status === 206 && (await r.arrayBuffer()).byteLength === 10, 'processed version Range 206 (viewer)', r.status);
+r = await fetch(`${B}/media/p/${versionId}`, { method: 'HEAD', headers: { cookie: viewer.cookie } });
+ok(r.status === 200 && Number(r.headers.get('content-length')) > 0, 'processed version HEAD', r.status);
+r = await fetch(`${B}/media/p/${versionId}`);
+ok(r.status === 401, 'processed version without a session 401', r.status);
+r = await fetch(`${B}/media/p/${randomUUID()}`, { headers: { cookie: editor.cookie } });
+ok(r.status === 404, 'unknown processed version 404', r.status);
 for (const old of [`/api/thumbnail/${pic.id}`, `/api/download?projectId=${project.id}&fileIds=${pic.id}&token=${editor.token}`, `/api/cover/x`]) {
   r = await fetch(`${B}${old}`);
   ok(r.status === 404, `old route 404 ${old.split('?')[0]}`, r.status);
@@ -431,7 +513,21 @@ ok(rv.data?.revokeShareLink === true, 'editor revokes own link');
 r = await fetch(`${B}${signed[0]}`);
 ok(r.status === 404, 'signed URL 404 after revoke', r.status);
 r = await fetch(`${B}/s/${pubLink.slug}`);
-ok(r.status === 404, 'revoked page 404', r.status);
+ok(r.status === 404 && inactiveKind(await r.text()) === 'revoked', 'revoked page 404 with its message', r.status);
+{
+  // Story 4.6: an expired link answers 404 with its own message.
+  const exp = (await gql(editor.token, `mutation { createShareLink(input:{folderId:"${folder.id}", mode:PUBLIC, expiresInHours:24}) { id slug } }`)).data.createShareLink;
+  // A UTC wall-clock string: the column has no time zone, and the database session may not be UTC.
+  const past = new Date(Date.now() - 60_000).toISOString().replace('Z', '');
+  await db44.query('UPDATE share_links SET "expiresAt" = $2 WHERE id = $1', [exp.id, past]);
+  r = await fetch(`${B}/s/${exp.slug}`);
+  const body = await r.text();
+  ok(r.status === 404 && inactiveKind(body) === 'expired' && !/\/media\/s\//.test(body), 'expired page 404 with its message, no content', `${r.status} ${inactiveKind(body)}`);
+  r = await fetch(`${B}/s/${pl.slug}`);
+  ok(r.status === 200, 'private link without its code stays 200 (unlock form)', r.status);
+  r = await fetch(`${B}/s/no-such-link-${RUN}`);
+  ok(r.status === 404 && inactiveKind(await r.text()) === 'not-found', 'unknown link 404', r.status);
+}
 
 // trash: signed URL and cookie media 404
 ok((await gql(editor.token, `mutation { moveToTrash(fileId:"${vid.id}") }`)).data?.moveToTrash === true, 'editor moves to trash');
@@ -444,6 +540,22 @@ ok(!/\/media\/s\//.test(html), 'page for trashed target shows no media');
 ok((await gql(editor.token, `mutation { restoreFile(fileId:"${vid.id}") { id } }`)).data?.restoreFile, 'editor restores');
 ok(code(await gql(admin.token, `mutation { permanentDelete(fileId:"${pic.id}") }`)) === 'NOT_IN_TRASH', 'permanentDelete needs the Trash first');
 ok((await gql(editor.token, `mutation { moveToTrash(fileId:"${pic.id}") }`)).data?.moveToTrash === true, 'editor trashes photo');
+// Story 4.4/4.5: a trashed parent hides its processed versions; the
+// thumbnail stays visible to Trash viewers only.
+r = await fetch(`${B}/media/p/${versionId}`, { headers: { cookie: editor.cookie } });
+ok(r.status === 404, 'processed version of a trashed file 404', r.status);
+r = await fetch(`${B}/media/t/${pic.id}`, { headers: { cookie: editor.cookie } });
+ok(r.status === 200 && r.headers.get('content-type') === 'image/jpeg', 'trashed file thumbnail for a Trash viewer (editor)', r.status);
+r = await fetch(`${B}/media/t/${pic.id}`, { headers: { cookie: admin.cookie } });
+ok(r.status === 200, 'trashed file thumbnail for an admin', r.status);
+r = await fetch(`${B}/media/t/${pic.id}`, { headers: { cookie: viewer.cookie } });
+ok(r.status === 404, 'trashed file thumbnail 404 for a viewer (no Trash)', r.status);
+r = await fetch(`${B}/media/i/${pic.id}`, { headers: { cookie: editor.cookie } });
+ok(r.status === 404, 'trashed file original stays 404', r.status);
+{
+  const trashRows = (await gql(editor.token, '{ allTrashedFiles { id thumbnailUrl } }')).data.allTrashedFiles;
+  ok(!!trashRows.find((f) => f.id === pic.id)?.thumbnailUrl, 'Trash row carries the thumbnail URL');
+}
 const purge = await gql(admin.token, `mutation { permanentDelete(fileId:"${pic.id}") }`);
 ok(purge.data?.permanentDelete === true, 'admin permanentDelete allowed (link revoked first)', JSON.stringify(purge.errors ?? ''));
 r = await fetch(`${B}/s/${p2.slug}`);
@@ -602,7 +714,7 @@ ok(r.status === 404, 'cascaded file media 404', r.status);
 r = await fetch(`${B}${innerSigned}`);
 ok(r.status === 404, 'cascaded file signed URL 404', r.status);
 r = await fetch(`${B}/s/${link.slug}`);
-ok(r.status === 404, 'share page of trashed target 404', r.status);
+ok(r.status === 404 && inactiveKind(await r.text()) === 'section-gone', 'share page of trashed target 404 with its message', r.status);
 const search = await gql(editor.token, `{ searchFiles(query:"inner") { id } }`);
 ok(!(search.data?.searchFiles ?? []).some((f) => f.id === inFile.id), 'search hides cascaded file');
 const trashList = await gql(editor.token, '{ allTrashedFolders { id } allTrashedFiles { id } }');
@@ -647,5 +759,6 @@ ok(code(await gql(flooder.token, '{ projects { id } }')) === 'UNAUTHENTICATED', 
 r = await fetch(`${B}/media/i/${vid.id}`, { headers: { cookie: flooder.cookie } });
 ok(r.status === 401, 'old token fails media', r.status);
 
+await db44.end();
 console.log(fails ? `${fails} FAILED` : 'ALL PASS');
 process.exit(fails ? 1 : 0);

@@ -35,6 +35,11 @@ jobs:
           node-version: 24
           cache: npm
 
+      # Story 4.4/4.6: the thumbnail orientation tests need ffmpeg; the ZIP64
+      # check needs unzip and zipinfo.
+      - name: Install ffmpeg and unzip
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg unzip
+
       - name: Install dependencies
         run: npm ci
 
@@ -73,6 +78,11 @@ jobs:
 
       - name: Tests
         run: npm test
+
+      # Story 4.6: one synthetic 4.1 GiB entry through the ZIP code, written to
+      # a temporary file, must pass `unzip -t` and show its size in zipinfo.
+      - name: ZIP64 archive above 4 GiB
+        run: npm run zip64:check
 
       # Story 3.5: required for the whole src/ tree (exceptions in scripts/i18n-scope.json).
       - name: No Indonesian leftovers (whole tree)
@@ -283,6 +293,16 @@ jobs:
         ports:
           - 6379:6379
         options: --ulimit memlock=-1
+      # Story 4.5: the local leg searches through Elasticsearch, the s3 leg
+      # without it; both run the search parity check.
+      elasticsearch:
+        image: ${{ matrix.backend == 'local' && 'elasticsearch:9.5.3' || '' }}
+        ports:
+          - 9200:9200
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          ES_JAVA_OPTS: -Xms512m -Xmx512m
       rustfs:
         # An empty image skips the service on the local leg.
         image: ${{ matrix.backend == 's3' && 'rustfs/rustfs:1.0.0' || '' }}
@@ -297,6 +317,7 @@ jobs:
       EMAIL_TRANSPORT: log
       NEXT_TELEMETRY_DISABLED: "1"
       STORAGE_BACKEND: ${{ matrix.backend }}
+      ELASTICSEARCH_NODE_URL: ${{ matrix.backend == 'local' && 'http://127.0.0.1:9200' || '' }}
       STORAGE_LOCAL_ROOT: ./data/media
       S3_ENDPOINT: ${{ matrix.backend == 's3' && 'http://127.0.0.1:9000' || '' }}
       S3_BUCKET: ${{ matrix.backend == 's3' && 'shotstash-e2e' || '' }}
@@ -341,6 +362,18 @@ jobs:
         run: |
           npx prisma migrate deploy
           npx tsx prisma/seed.ts
+
+      - name: Wait for Elasticsearch (local leg)
+        if: matrix.backend == 'local'
+        run: |
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:9200/_cluster/health >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:9200/_cluster/health
+
+      - name: Search parity (with Elasticsearch on the local leg, database only on s3)
+        run: npm run e2e:search
 
       - name: Build
         run: npm run build

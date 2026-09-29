@@ -26,10 +26,10 @@ import { bigIntToNumber } from '@/lib/bigint';
 import { errMessage, logger } from '@/lib/logger';
 import { codedError } from '@/modules/errors';
 import { can, type Actor } from '@/modules/auth';
-import { convertHeicToJpeg, generateThumbnail, isHeicMime } from '@/modules/media';
+import { createHeicPreview, generateThumbnail, isHeicMime } from '@/modules/media';
+import { syncSearchLater } from '@/modules/library';
 import {
   SNIFF_BYTES,
-  StorageError,
   expectedPartSize,
   extensionFor,
   isStorageError,
@@ -351,7 +351,7 @@ export const COMPLETION_ABANDON_MS = 60 * 60 * 1000;
 const FAIL_AFTER_ASSEMBLY = '__fail_after_assembly__';
 const failedOnce = new Set<string>();
 
-export type CompleteInput = { actor: Actor; sessionId: string; md5?: string | null; convertHeic?: boolean };
+export type CompleteInput = { actor: Actor; sessionId: string; md5?: string | null };
 
 /**
  * Completion is resumable: every step records its result before the next
@@ -388,7 +388,7 @@ export async function completeUpload(input: CompleteInput) {
     // FAILED or EXPIRED session is never resurrected: the update is conditional).
     await reopen();
     if (err instanceof UploadFailure) throw err;
-    if (err instanceof StorageError) throw storageFailure(err, 'complete');
+    if (isStorageError(err)) throw storageFailure(err, 'complete');
     throw err;
   }
 }
@@ -442,7 +442,7 @@ async function finishUpload(session: Awaited<ReturnType<typeof ownSession>>, inp
         parts.map((p) => ({ partNumber: p.partNumber, etag: p.etag, size: p.size })),
       );
     } catch (err) {
-      if (err instanceof StorageError && (err.code === 'NOT_FOUND' || err.code === 'PART_SIZE_MISMATCH' || err.code === 'INVALID_PART')) {
+      if (isStorageError(err) && (err.code === 'NOT_FOUND' || err.code === 'PART_SIZE_MISMATCH' || err.code === 'INVALID_PART')) {
         await prisma.uploadPart.deleteMany({ where: { sessionId: session.id } });
         throw fail('MISSING_PARTS', 'Stored parts are incomplete: send them again', 409, { missing: '', count: plan.partCount });
       }
@@ -479,32 +479,16 @@ async function finishUpload(session: Awaited<ReturnType<typeof ownSession>>, inp
     await prisma.mediaFile.update({ where: { id: file.id }, data: { md5Checksum: md5 } });
   }
 
-  let originalName = file.originalName;
-  let size = Number(file.size);
+  const originalName = file.originalName;
+  const size = Number(file.size);
   const sniffed = sniffType(await readHead(key, SNIFF_BYTES), originalName);
-  let mimeType = sniffed.mime;
+  const mimeType = sniffed.mime;
   const finalKey = storageKeys.original(file.id, sniffed.ext);
   if (finalKey !== key) {
     await store.move(key, finalKey);
     key = finalKey;
     await prisma.mediaFile.update({ where: { id: file.id }, data: { storageKey: key, mimeType } });
   }
-  if (input.convertHeic !== false && isHeicMime(mimeType)) {
-    try {
-      const converted = await convertHeicToJpeg({ id: file.id, storageKey: key, originalName });
-      key = converted.storageKey;
-      originalName = converted.originalName;
-      mimeType = converted.mimeType;
-      size = converted.size;
-      await prisma.mediaFile.update({
-        where: { id: file.id },
-        data: { storageKey: key, originalName, mimeType, size: BigInt(size) },
-      });
-    } catch (err) {
-      log.warn('HEIC conversion failed, keeping original', { err: errMessage(err) });
-    }
-  }
-
   // Flip to ready. The dedup index decides races: two identical uploads
   // finishing together cannot both become originals.
   const flip = () =>
@@ -558,12 +542,26 @@ async function finishUpload(session: Awaited<ReturnType<typeof ownSession>>, inp
     throw err;
   }
 
-  const thumbVersion = await generateThumbnail({ id: ready.id, storageKey: key, mimeType });
+  // Originals are immutable (Story 4.4): a HEIC stays as uploaded and gets
+  // a JPEG preview version, which the thumbnail is rendered from.
+  let preview: Buffer | undefined;
+  if (isHeicMime(mimeType)) {
+    try {
+      preview = (await createHeicPreview({ id: ready.id, storageKey: key, size })).jpeg;
+    } catch (err) {
+      log.warn('HEIC preview failed, keeping the original only', { fileId: ready.id, err: errMessage(err) });
+    }
+  }
+  const thumbVersion =
+    isHeicMime(mimeType) && !preview
+      ? 0
+      : await generateThumbnail({ id: ready.id, storageKey: key, mimeType, thumbVersion: ready.thumbVersion }, { from: preview });
   if (thumbVersion) {
     await prisma.mediaFile.update({ where: { id: ready.id }, data: { thumbVersion } });
     ready.thumbVersion = thumbVersion;
   }
 
+  syncSearchLater([ready.id]);
   await announce(ready, session.uploadedById);
   log.info('completed', { sessionId: session.id, fileId: ready.id, size });
   return bigIntToNumber(ready) as typeof ready;
