@@ -150,8 +150,9 @@ jobs:
 
       - name: The app process is not root
         run: |
-          uid=$(docker compose exec -T app awk '/^Uid:/ {print $2}' /proc/1/status)
-          echo "app uid: $uid"
+          # PID 1 is the init process (compose init: true); check the node server itself.
+          uid=$(docker compose exec -T app sh -c 'for d in /proc/[0-9]*; do if [ "$(tr "\0" " " < "$d/cmdline" 2>/dev/null)" = "node dist/server.js " ]; then stat -c %u "$d"; fi; done')
+          echo "node server uid: $uid"
           test -n "$uid" && test "$uid" != "0"
 
       - name: Restart keeps working (migrations are a no-op)
