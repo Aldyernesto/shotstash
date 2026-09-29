@@ -29,7 +29,7 @@ export async function liveSubtree(rootIds: string[]): Promise<TreeFolder[]> {
 }
 
 export type ZipPlan = {
-  entries: { path: string; name: string }[];
+  entries: { key: string; name: string }[];
   emptyDirs: string[];
 };
 
@@ -56,8 +56,8 @@ export async function zipPlanForFolders(rootIds: string[]): Promise<ZipPlan> {
 
   const files = folders.length
     ? await prisma.mediaFile.findMany({
-        where: { folderId: { in: folders.map((f) => f.id) }, trashedAt: null },
-        select: { folderId: true, originalName: true, storagePath: true },
+        where: { folderId: { in: folders.map((f) => f.id) }, trashedAt: null, status: 'ready' },
+        select: { folderId: true, originalName: true, storageKey: true },
         orderBy: { createdAt: 'asc' },
       })
     : [];
@@ -74,7 +74,7 @@ export async function zipPlanForFolders(rootIds: string[]): Promise<ZipPlan> {
       name = `${stem} (${n})${ext}`;
     }
     used.add(name);
-    return { path: f.storagePath, name };
+    return { key: f.storageKey, name };
   });
 
   const nonEmpty = new Set<string>();

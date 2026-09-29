@@ -190,6 +190,18 @@ jobs:
             -e DATABASE_URL=postgresql://guard@127.0.0.1:5432/none \
             node:24-bookworm-slim node scripts/e2e-setup.mjs
 
+      # Story 4.3: a 1 GiB upload through a proxy that cuts the connection
+      # twice resumes and arrives with the right MD5 (the owner from e2e:setup).
+      - name: Interrupted upload resumes (1 GiB)
+        run: |
+          docker run --rm --network "container:$(docker compose ps -q app)" \
+            -v "$PWD:/w" -w /w \
+            -e E2E_BASE_URL=http://127.0.0.1:3005 \
+            -e E2E_EMAIL=owner@example.com,other@example.com \
+            -e E2E_PASSWORD=owner-password-1 \
+            -e E2E_UPLOAD_MB=1024 \
+            node:24-bookworm-slim node scripts/e2e-upload-resume.mjs
+
       - name: Logs on failure
         if: failure()
         run: docker compose logs --no-color
@@ -197,3 +209,162 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose down -v
+
+  # Story 4.2: the storage contract on a real S3-compatible server (RustFS;
+  # the upstream MinIO images can no longer be pulled), plus a Range and ZIP
+  # smoke through the media module. The test creates its bucket.
+  s3:
+    name: S3 backend contract (RustFS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      rustfs:
+        image: rustfs/rustfs:1.0.0
+        ports:
+          - 9000:9000
+        env:
+          RUSTFS_ACCESS_KEY: shotstash
+          RUSTFS_SECRET_KEY: shotstash-secret
+    env:
+      S3_TEST_ENDPOINT: http://127.0.0.1:9000
+      S3_TEST_ACCESS_KEY_ID: shotstash
+      S3_TEST_SECRET_ACCESS_KEY: shotstash-secret
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Wait for RustFS
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:9000/health >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:9000/health
+
+      - name: Storage contract, Range and ZIP on S3
+        run: npm run test:s3 -- --test-timeout=60000
+
+  # Stories 4.1-4.3: uploads end to end on both backends. The built app runs
+  # against PostgreSQL, Dragonfly and (s3 leg) RustFS service containers;
+  # e2e:security covers part ownership, every part error code, dedup
+  # (initiate refusal, upload anyway, race), cancel, checksum mismatch and
+  # sweeper expiry, and the harness resumes a 256 MiB upload through a
+  # proxy that cuts the connection twice. Throwaway credentials only.
+  e2e:
+    name: E2E uploads (${{ matrix.backend }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [local, s3]
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      cache:
+        image: docker.dragonflydb.io/dragonflydb/dragonfly:v2.0.0
+        ports:
+          - 6379:6379
+        options: --ulimit memlock=-1
+      rustfs:
+        # An empty image skips the service on the local leg.
+        image: ${{ matrix.backend == 's3' && 'rustfs/rustfs:1.0.0' || '' }}
+        ports:
+          - 9000:9000
+        env:
+          RUSTFS_ACCESS_KEY: shotstash
+          RUSTFS_SECRET_KEY: shotstash-secret
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable
+      DRAGONFLY_HOST: 127.0.0.1
+      EMAIL_TRANSPORT: log
+      NEXT_TELEMETRY_DISABLED: "1"
+      STORAGE_BACKEND: ${{ matrix.backend }}
+      STORAGE_LOCAL_ROOT: ./data/media
+      S3_ENDPOINT: ${{ matrix.backend == 's3' && 'http://127.0.0.1:9000' || '' }}
+      S3_BUCKET: ${{ matrix.backend == 's3' && 'shotstash-e2e' || '' }}
+      S3_ACCESS_KEY_ID: ${{ matrix.backend == 's3' && 'shotstash' || '' }}
+      S3_SECRET_ACCESS_KEY: ${{ matrix.backend == 's3' && 'shotstash-secret' || '' }}
+      S3_FORCE_PATH_STYLE: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install ffmpeg (video thumbnails)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Session secret
+        run: echo "SESSION_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Create the bucket (s3 leg)
+        if: matrix.backend == 's3'
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:9000/health >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          node -e "
+            const { S3Client, CreateBucketCommand } = require('@aws-sdk/client-s3');
+            const c = new S3Client({ endpoint: process.env.S3_ENDPOINT, region: 'us-east-1', forcePathStyle: true,
+              credentials: { accessKeyId: process.env.S3_ACCESS_KEY_ID, secretAccessKey: process.env.S3_SECRET_ACCESS_KEY } });
+            c.send(new CreateBucketCommand({ Bucket: process.env.S3_BUCKET })).then(() => console.log('bucket created'));
+          "
+
+      - name: Migrate and seed
+        run: |
+          npx prisma migrate deploy
+          npx tsx prisma/seed.ts
+
+      - name: Build
+        run: npm run build
+
+      - name: Start the app
+        run: |
+          NODE_ENV=production nohup node dist/server.js > /tmp/app.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3005/api/health >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:3005/api/health
+
+      - name: e2e:security (uploads, dedup, cancel, expiry, shares, trash)
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3005
+        run: npm run e2e:security
+
+      - name: Interrupted upload resumes (256 MiB)
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3005
+          E2E_UPLOAD_MB: "256"
+        run: npm run e2e:upload
+
+      - name: App log on failure
+        if: failure()
+        run: tail -n 300 /tmp/app.log

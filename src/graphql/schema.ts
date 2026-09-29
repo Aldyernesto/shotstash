@@ -4,7 +4,6 @@
 export const typeDefs = `#graphql
   scalar DateTime
   scalar BigInt
-  scalar Upload
 
   # ============================================
   # ENUMS
@@ -134,8 +133,8 @@ export const typeDefs = `#graphql
     total: Int!
   }
 
-  # Story 2.4: satu file perwakilan. thumbnailUrl = /media/t/{id}
-  # bila thumbnailPath ada, selain itu null (klien merender placeholder);
+  # Story 2.4: satu file perwakilan. thumbnailUrl = /media/t/{id}?v={n}
+  # bila file punya thumbnail, selain itu null (klien merender placeholder);
   # duration null (tidak ada kolomnya di DB); extension hanya dokumen.
   type RepFile {
     id: ID!
@@ -152,8 +151,11 @@ export const typeDefs = `#graphql
     mimeType: String!
     size: BigInt!
     md5Checksum: String!
+    # /media/t/{id}?v={n}, null while the file has no thumbnail.
     thumbnailUrl: String
-    thumbnailPath: String
+    # Set when this file was uploaded anyway although identical bytes were
+    # already in the project (or copied): the id of that original.
+    duplicateOf: ID
     downloadUrl: String!
     folder: Folder!
     uploadedBy: User!
@@ -210,26 +212,44 @@ export const typeDefs = `#graphql
     createdAt: DateTime!
   }
 
+  # Story 4.3: one upload. Parts (1 to partCount) go to
+  # PUT /api/v1/uploads/{id}/parts/{n} with a Content-MD5 header; every part
+  # but the last is partSize bytes.
   type UploadSession {
     id: ID!
+    # The file row this upload fills (status uploading until completion).
+    fileId: ID
     filename: String!
     totalSize: BigInt!
-    chunkSize: Int!
-    totalChunks: Int!
-    uploadedChunks: Int!
+    partSize: Int!
+    partCount: Int!
+    # IN_PROGRESS, COMPLETING, COMPLETED, FAILED or EXPIRED.
     status: String!
-    uploadMode: String!
-    presignedUrl: String
-    r2Key: String
+    # Part numbers the server already stored (resume sends only the rest).
+    confirmedParts: [Int!]!
+    projectId: ID!
+    folderId: ID!
+    expiresAt: DateTime!
   }
 
   type UploadProgress {
     sessionId: ID!
     filename: String!
-    totalChunks: Int!
-    uploadedChunks: Int!
+    partCount: Int!
+    confirmedParts: Int!
     percentage: Float!
-    speed: Float
+  }
+
+  # Story 4.3: advisory dedup check before bytes are sent.
+  type DuplicateMatch {
+    name: String!
+    size: BigInt!
+    md5: String
+    # "name": same name and size (hash the file and ask again with md5);
+    # "exact": identical bytes are already in the project.
+    match: String!
+    existingFileId: ID!
+    existingName: String!
   }
 
   type AuthPayload {
@@ -268,17 +288,13 @@ export const typeDefs = `#graphql
     attemptsLeft: Int
   }
 
-  type ChunkResult {
-    chunkIndex: Int!
-    received: Boolean!
-    uploadedChunks: Int!
-    totalChunks: Int!
-  }
-
   type StorageStats {
-    totalSpace: Float!
+    # local or s3.
+    backend: String!
+    # Disk size and free space; null when the backend cannot tell (S3).
+    totalSpace: Float
     usedSpace: Float!
-    freeSpace: Float!
+    freeSpace: Float
     totalFiles: Int!
     totalProjects: Int!
   }
@@ -295,11 +311,18 @@ export const typeDefs = `#graphql
   input InitiateUploadInput {
     filename: String!
     totalSize: BigInt!
+    # MD5 of the whole file (hex), when the client already computed it.
     md5Checksum: String
     projectId: ID!
-    folderId: ID
-    clientLatencyMs: Int
-    clientChunkSize: Int
+    folderId: ID!
+    # "Upload anyway": identical bytes may already be in the project.
+    allowDuplicate: Boolean
+  }
+
+  input DuplicateCandidateInput {
+    name: String!
+    size: BigInt!
+    md5: String
   }
 
   input ShareLinkInput {
@@ -351,6 +374,11 @@ export const typeDefs = `#graphql
     # link tim, role lain hanya miliknya. Urut createdAt menurun.
     shareLinksForTarget(fileId: ID, folderId: ID, projectId: ID): [ShareLink!]!
 
+    # Uploads (Story 4.3): resume state of an own upload, and the advisory
+    # dedup check (by name and size, then by md5).
+    uploadSession(id: ID!): UploadSession
+    checkDuplicates(projectId: ID!, candidates: [DuplicateCandidateInput!]!): [DuplicateMatch!]!
+
     # Trash
     allTrashedFiles: [MediaFile!]!
     allTrashedFolders: [Folder!]!
@@ -393,10 +421,10 @@ export const typeDefs = `#graphql
     copyFile(fileId: ID!, targetFolderId: ID!): MediaFile!
     moveFolder(folderId: ID!, targetFolderId: ID, targetProjectId: ID): Folder!
 
-    # Upload (Multipart Chunking)
+    # Upload (Story 4.3): parts travel over REST, see UploadSession.
     initiateUpload(input: InitiateUploadInput!): UploadSession!
-    uploadChunk(sessionId: ID!, chunkIndex: Int!, data: Upload!): ChunkResult!
-    completeUpload(sessionId: ID!, r2Key: String, convertHeic: Boolean): MediaFile!
+    # md5Checksum: MD5 of the whole file, when not sent at initiate.
+    completeUpload(sessionId: ID!, md5Checksum: String, convertHeic: Boolean): MediaFile!
     cancelUpload(sessionId: ID!): Boolean!
 
     # Share

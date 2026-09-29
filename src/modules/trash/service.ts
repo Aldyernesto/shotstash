@@ -10,20 +10,23 @@
  *            Section, is refused ("restore the containing Section").
  *   purge    one path for Delete forever, project deletion and the sweeper:
  *            links to every purged item are revoked (`target_deleted`)
- *            and rows deleted in one transaction; bytes and directories go
- *            after the commit.
+ *            and rows deleted in one transaction; every storage key of the
+ *            purged files (original, thumbnails, processed versions) and a
+ *            deleted project's cover are removed through the storage
+ *            backend after the commit. A backend error is logged; the keys
+ *            of a later sweep are removed independently.
+ *
+ * Restoring a file whose bytes meanwhile arrived again in its Project marks
+ * the restored file as a duplicate (see the upload module's dedup index).
  */
-import { promises as fs } from 'fs';
-import path from 'path';
 import { GraphQLError } from 'graphql';
 import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { folderChainTrashed } from '@/lib/shareLink';
-import { isInsideStorageRoot, storageRoot } from '@/lib/storageRoot';
 import { revokeLinksForTargets } from '@/services/share.service';
-import { getFolderPhysicalPath } from '@/services/folder.service';
-import { getProjectPhysicalPath } from '@/services/project.service';
-import { COVER_EXTENSIONS, coversDir } from '@/modules/media';
+import { coverIdFromUrl, deleteCover } from '@/modules/media';
+import { storage, storageKeys } from '@/modules/storage';
+import { detachDuplicates, detachDuplicatesOfProject, markConflictsAsDuplicates, resettle } from '@/modules/upload';
 import { batches, expiredRootWhere, planFolderTrash, retentionCutoff, subtreeFolderIds } from './plan';
 import { errMessage, logger } from '@/lib/logger';
 
@@ -40,8 +43,8 @@ const RESTORE_PARENT_FIRST = 'This item is inside a trashed Section: restore the
 /* ------------------------------------------------------------------ */
 
 export async function trashFile(fileId: string) {
-  const file = await prisma.mediaFile.findUnique({ where: { id: fileId }, select: { id: true, trashedAt: true } });
-  if (!file) throw trashError('NOT_FOUND', 'File not found');
+  const file = await prisma.mediaFile.findUnique({ where: { id: fileId }, select: { id: true, trashedAt: true, status: true } });
+  if (!file || file.status !== 'ready') throw trashError('NOT_FOUND', 'File not found');
   if (file.trashedAt) throw trashError('ALREADY_TRASHED', 'File is already in the Trash');
   await prisma.mediaFile.update({ where: { id: fileId }, data: { trashedAt: new Date(), trashRootId: null } });
   return true;
@@ -60,8 +63,10 @@ export async function trashFolder(folderId: string) {
       select: { id: true, parentId: true, trashedAt: true },
     });
     const subtree = subtreeFolderIds(root.id, folders);
+    // Uploads still running into the Section are not trashed: their
+    // completion finds the target gone and discards them.
     const files = await tx.mediaFile.findMany({
-      where: { folderId: { in: subtree } },
+      where: { folderId: { in: subtree }, status: 'ready' },
       select: { id: true, folderId: true, trashedAt: true },
     });
     const plan = planFolderTrash(root.id, folders, files);
@@ -91,10 +96,13 @@ export async function restoreFile(fileId: string) {
   if (file.trashRootId || (await folderChainTrashed(file.folderId))) {
     throw trashError('ANCESTOR_TRASHED', RESTORE_PARENT_FIRST);
   }
-  return prisma.mediaFile.update({
-    where: { id: fileId },
-    data: { trashedAt: null, trashRootId: null },
-    include: { folder: true, project: true },
+  return prisma.$transaction(async (tx) => {
+    await markConflictsAsDuplicates(tx, [fileId]);
+    return tx.mediaFile.update({
+      where: { id: fileId },
+      data: { trashedAt: null, trashRootId: null },
+      include: { folder: true, project: true },
+    });
   });
 }
 
@@ -108,14 +116,16 @@ export async function restoreFolder(folderId: string) {
   if (folder.trashRootId || (folder.parentId && (await folderChainTrashed(folder.parentId)))) {
     throw trashError('ANCESTOR_TRASHED', RESTORE_PARENT_FIRST);
   }
-  await prisma.$transaction([
-    prisma.folder.update({ where: { id: folderId }, data: { trashedAt: null, trashRootId: null } }),
-    prisma.folder.updateMany({ where: { trashRootId: folderId }, data: { trashedAt: null, trashRootId: null } }),
-    prisma.mediaFile.updateMany({ where: { trashRootId: folderId }, data: { trashedAt: null, trashRootId: null } }),
-  ]);
+  await prisma.$transaction(async (tx) => {
+    const files = await tx.mediaFile.findMany({ where: { trashRootId: folderId }, select: { id: true } });
+    await markConflictsAsDuplicates(tx, files.map((f) => f.id));
+    await tx.folder.update({ where: { id: folderId }, data: { trashedAt: null, trashRootId: null } });
+    await tx.folder.updateMany({ where: { trashRootId: folderId }, data: { trashedAt: null, trashRootId: null } });
+    await tx.mediaFile.updateMany({ where: { trashRootId: folderId }, data: { trashedAt: null, trashRootId: null } });
+  });
   return prisma.folder.findUnique({
     where: { id: folderId },
-    include: { children: { where: { trashedAt: null } }, files: { where: { trashedAt: null } } },
+    include: { children: { where: { trashedAt: null } }, files: { where: { trashedAt: null, status: 'ready' } } },
   });
 }
 
@@ -126,7 +136,7 @@ export async function restoreFolder(folderId: string) {
 /** Trash page rows: trash roots only (cascaded rows come back with their root). */
 export function trashedFileRoots() {
   return prisma.mediaFile.findMany({
-    where: { trashedAt: { not: null }, trashRootId: null },
+    where: { trashedAt: { not: null }, trashRootId: null, status: 'ready' },
     include: { folder: { include: { project: true } } },
     orderBy: { trashedAt: 'desc' },
   });
@@ -149,18 +159,41 @@ export const PURGE_BATCH_SIZE = 100;
 const PURGE_TX_TIMEOUT_MS = 60_000;
 
 type Tx = Prisma.TransactionClient;
-type PurgedFile = { id: string; storagePath: string; thumbnailPath: string | null };
+type PurgedFile = {
+  id: string;
+  storageKey: string;
+  thumbVersion: number;
+  processedVersions: { storageKey: string }[];
+};
 
-async function removeBytes(files: (string | null | undefined)[], dirs: (string | null | undefined)[]) {
-  const root = storageRoot();
-  for (const p of files) {
-    if (p && isInsideStorageRoot(p, root)) await fs.unlink(p).catch(() => {});
+const PURGED_FILE_SELECT = {
+  id: true,
+  storageKey: true,
+  thumbVersion: true,
+  processedVersions: { select: { storageKey: true } },
+} as const;
+
+/** Every storage key a file owns: the original, each thumbnail version and processed versions. */
+export function keysOfFile(f: PurgedFile): string[] {
+  const keys = [f.storageKey];
+  for (let v = 1; v <= f.thumbVersion; v++) keys.push(storageKeys.thumbnail(f.id, v));
+  for (const p of f.processedVersions) keys.push(p.storageKey);
+  return keys;
+}
+
+/** Deletes keys through the backend; failures are logged, never thrown (rows are already gone). */
+async function removeKeys(keys: string[]) {
+  const store = storage();
+  let failed = 0;
+  for (const key of keys) {
+    try {
+      await store.delete(key);
+    } catch (err) {
+      failed++;
+      if (failed <= 5) logger('trash').warn('storage delete failed', { key, err: errMessage(err) });
+    }
   }
-  for (const d of dirs) {
-    // Never recurse outside the storage root, and never remove the root itself.
-    if (!d || !isInsideStorageRoot(d, root) || path.resolve(d) === root) continue;
-    await fs.rm(d, { recursive: true, force: true }).catch(() => {});
-  }
+  if (failed) logger('trash').error('some storage keys could not be deleted', { failed, total: keys.length });
 }
 
 /** Best effort: drop purged files from the search index when Elasticsearch is configured. */
@@ -202,12 +235,15 @@ async function purgeBatchTx(tx: Tx, folderRootIds: string[], fileRootIds: string
         ...(folderIds.size ? [{ folderId: { in: [...folderIds] } }] : []),
       ],
     },
-    select: { id: true, storagePath: true, thumbnailPath: true },
+    select: PURGED_FILE_SELECT,
   });
   const fileIds = files.map((f) => f.id);
   const allFolderIds = [...folderIds];
   await revokeLinksForTargets({ fileIds, folderIds: allFolderIds }, 'target_deleted', tx);
+  const survivors = await detachDuplicates(tx, fileIds);
   if (fileIds.length) await tx.mediaFile.deleteMany({ where: { id: { in: fileIds } } });
+  // The oldest surviving duplicate of a purged original becomes the original.
+  await resettle(tx, survivors);
   if (allFolderIds.length) await tx.folder.deleteMany({ where: { id: { in: allFolderIds } } });
   return { files, folderCount: allFolderIds.length };
 }
@@ -236,14 +272,11 @@ export async function purgeRoots(
     }
     const folderRootIds = batch.filter((b) => b.kind === 'folder').map((b) => b.id);
     const fileRootIds = batch.filter((b) => b.kind === 'file').map((b) => b.id);
-    // Directory paths derive from the rows, so they are resolved before the delete.
-    const dirs: (string | null)[] = [];
-    for (const id of folderRootIds) dirs.push(await getFolderPhysicalPath(id).catch(() => null));
 
     const done = await prisma.$transaction((tx) => purgeBatchTx(tx, folderRootIds, fileRootIds), {
       timeout: PURGE_TX_TIMEOUT_MS,
     });
-    await removeBytes(done.files.flatMap((f) => [f.storagePath, f.thumbnailPath]), dirs);
+    await removeKeys(done.files.flatMap(keysOfFile));
     await removeFromSearch(done.files.map((f) => f.id));
     total.files += done.files.length;
     total.folders += done.folderCount;
@@ -251,32 +284,43 @@ export async function purgeRoots(
   return total;
 }
 
-/** Deletes a project with everything in it: links revoked first, then rows, then bytes, cover and directory. */
+/** Deletes a project with everything in it: links revoked first, then rows, then bytes and the cover. */
 export async function purgeProject(projectId: string) {
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, coverImage: true } });
   if (!project) throw trashError('NOT_FOUND', 'Project not found');
-  const dir = await getProjectPhysicalPath(projectId).catch(() => null);
   // Revoke and delete in one transaction, selecting the final set inside it:
   // a link or file created in between is revoked / removed too.
+  const uploads: string[] = [];
   const files = await prisma.$transaction(
     async (tx) => {
       const folders = await tx.folder.findMany({ where: { projectId }, select: { id: true } });
       const rows: PurgedFile[] = await tx.mediaFile.findMany({
         where: { projectId },
-        select: { id: true, storagePath: true, thumbnailPath: true },
+        select: PURGED_FILE_SELECT,
       });
       await revokeLinksForTargets(
         { projectIds: [projectId], folderIds: folders.map((f) => f.id), fileIds: rows.map((f) => f.id) },
         'target_deleted',
         tx,
       );
+      const survivors = await detachDuplicatesOfProject(tx, projectId);
+      // Uploads still running into this project end with it.
+      const sessions = await tx.uploadSession.findMany({
+        where: { projectId, status: { in: ['IN_PROGRESS', 'COMPLETING'] } },
+        select: { backendUploadId: true },
+      });
+      await tx.uploadSession.updateMany({ where: { projectId, status: { in: ['IN_PROGRESS', 'COMPLETING'] } }, data: { status: 'FAILED' } });
+      uploads.push(...sessions.map((u) => u.backendUploadId).filter((u): u is string => !!u));
       await tx.project.delete({ where: { id: projectId } });
+      await resettle(tx, survivors);
       return rows;
     },
     { timeout: PURGE_TX_TIMEOUT_MS },
   );
-  const covers = COVER_EXTENSIONS.map((ext) => path.join(coversDir(), `${projectId}${ext}`));
-  await removeBytes([...files.flatMap((f) => [f.storagePath, f.thumbnailPath]), ...covers], [dir]);
+  await removeKeys(files.flatMap(keysOfFile));
+  for (const u of uploads) await storage().abortUpload(u).catch(() => {});
+  const cover = coverIdFromUrl(project.coverImage);
+  if (cover?.kind === 'project') await deleteCover('project', cover.id).catch(() => {});
   await removeFromSearch(files.map((f) => f.id));
   return true;
 }
@@ -285,6 +329,6 @@ export async function purgeProject(projectId: string) {
 export async function purgeExpired(retentionDays: number, now: number = Date.now(), opts: { deadline?: number } = {}) {
   const where = expiredRootWhere(retentionCutoff(retentionDays, now));
   const folders = await prisma.folder.findMany({ where, select: { id: true } });
-  const files = await prisma.mediaFile.findMany({ where, select: { id: true } });
+  const files = await prisma.mediaFile.findMany({ where: { ...where, status: 'ready' }, select: { id: true } });
   return purgeRoots({ folderIds: folders.map((f) => f.id), fileIds: files.map((f) => f.id) }, opts);
 }

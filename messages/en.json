@@ -721,14 +721,24 @@
       "SERVICE_UNAVAILABLE": "The server isn't ready yet. Try again in a moment.",
       "SETUP_ALREADY_DONE": "Setup is already complete. Sign in instead.",
       "SETUP_TOKEN_INVALID": "The setup token is missing or wrong.",
-      "STORAGE_UNAVAILABLE": "The media folder can't be written to right now.",
+      "STORAGE_UNAVAILABLE": "Storage isn't available right now.",
       "SUPER_ADMIN_PROTECTED": "A super admin account can't be reset or deleted here.",
       "TOKEN_INVALID": "Your reset session has ended. Start again.",
       "UNAVAILABLE": "Password reset isn't available yet.",
       "UPLOAD_SESSION_CLOSED": "This upload already ended. Start it again.",
       "UPLOAD_SESSION_NOT_FOUND": "This upload can't be found anymore. Start it again.",
       "USER_HAS_ACTIVITY": "This account has activity (uploads, share links or messages), so it can't be deleted. Deactivate it instead to block access and keep its data.",
-      "USER_NOT_FOUND": "That account no longer exists."
+      "USER_NOT_FOUND": "That account no longer exists.",
+      "DUPLICATE_FILE": "This file is already in the project.",
+      "PART_CHECKSUM_MISMATCH": "Part of the file got damaged on the way. Try the upload again.",
+      "PART_CHECKSUM_REQUIRED": "The upload is missing a checksum. Reload the page and try again.",
+      "PART_SIZE_MISMATCH": "Part of the file has the wrong size. Try the upload again.",
+      "PART_INCOMPLETE": "The connection dropped while sending. Try the upload again.",
+      "INVALID_PART_NUMBER": "The upload sent a part that doesn't exist. Try the upload again.",
+      "UPLOAD_SESSION_EXPIRED": "This upload expired after 24 hours. Start it again.",
+      "MISSING_PARTS": "Some parts of the file didn't arrive. Try the upload again.",
+      "CHECKSUM_REQUIRED": "The upload is missing its checksum. Try the upload again.",
+      "INVALID_FILENAME": "This file name can't be used. Rename the file and try again."
     },
     "forbidden": "You don't have access to do that."
   },
@@ -961,7 +971,10 @@
       "checksum": "The file got damaged on the way. Try the upload again.",
       "offline": "You're offline. Reconnect, then press Upload again.",
       "generic": "The upload couldn't start. Try again in a moment.",
-      "storage": "Storage isn't available right now. Ask your admin to check it, then try again."
+      "storage": "Storage isn't available right now. Ask your admin to check it, then try again.",
+      "expired": "This upload ended before it finished. Start it again.",
+      "duplicate": "This file is already in the project.",
+      "rateLimited": "Too many uploads at once. Wait a moment, then try again."
     },
     "rowReason": {
       "session": "your session has ended",
@@ -971,9 +984,12 @@
       "tooLarge": "file too large",
       "unsupportedType": "file type not allowed",
       "checksum": "file damaged in transit",
-      "offline": "connection lost after 3 tries",
+      "offline": "connection lost after 5 tries",
       "generic": "rejected by the server",
-      "storage": "storage unavailable"
+      "storage": "storage unavailable",
+      "expired": "the upload ended, start it again",
+      "duplicate": "already in this project",
+      "rateLimited": "too many uploads, try again soon"
     },
     "live": {
       "fileDone": "{name} done.",
@@ -996,15 +1012,17 @@
       "minimizeLabel": "Minimize the upload panel (uploads keep running)",
       "to": "to {number, select, none {} other {<sticker>{number}</sticker>}}<name>{section}</name>",
       "sectionFallback": "Section",
-      "helpPointer": "Drag files here or click to choose. Big files go up in 10 MB pieces.",
-      "helpTouch": "Tap to choose files. Big files go up in 10 MB pieces.",
+      "helpPointer": "Drag files here or click to choose. Big files go up in pieces and pick up where they stopped.",
+      "helpTouch": "Tap to choose files. Big files go up in pieces and pick up where they stopped.",
       "dropzonePointer": "Click or drag files here",
       "dropzoneTouch": "Tap to choose files",
       "dropHere": "Drop the files here",
       "pickOtherSection": "Pick another Section",
       "summaryDone": "{done, plural, one {# file uploaded} other {# files uploaded}}",
       "summaryDoneFailed": "{done, plural, one {# file uploaded} other {# files uploaded}}, {failed, number} failed",
-      "summaryRunning": "{done, number} of {total, plural, one {# file} other {# files}} done · {running, number} uploading · {waiting, number} waiting"
+      "summaryRunning": "{done, number} of {total, plural, one {# file} other {# files}} done · {running, number} uploading · {waiting, number} waiting",
+      "summaryDoneSkipped": "{done, plural, one {# file uploaded} other {# files uploaded}}, {skipped, number} skipped{failed, plural, =0 {} other {, # failed}}",
+      "reupload": "Re-upload ({count, number})"
     },
     "row": {
       "statusDone": "Done",
@@ -1016,7 +1034,19 @@
       "unknownCause": "unknown cause",
       "newSubSection": "New sub-Section: {name}",
       "progressOf": "Progress of {name}",
-      "remove": "Remove {name} from the queue"
+      "remove": "Remove {name} from the queue",
+      "statusRetrying": "Uploading {progress, number}% · retrying in {seconds, number} s",
+      "statusChecking": "Checking for duplicates {progress, number}%",
+      "statusSkipped": "Skipped: already in this project",
+      "statusPaused": "Paused · {done, number} of {total, plural, one {# part} other {# parts}} sent",
+      "statusWaitingDuplicate": "Waiting · uploading anyway",
+      "chooseFile": "Choose file",
+      "chooseFileFor": "Choose {name} again to continue its upload",
+      "retry": "Retry",
+      "retryLabel": "Retry {name}",
+      "uploadAnyway": "Upload anyway",
+      "uploadAnywayLabel": "Upload {name} anyway",
+      "discard": "Discard the unfinished upload of {name}"
     },
     "batch": {
       "ofDone": "<figure>{done, number}</figure> of {total, plural, one {# file} other {# files}} done",
@@ -1048,14 +1078,28 @@
       "titleRunning": "Uploading to {section}",
       "subDone": "{done, number} of {total, plural, one {# file} other {# files}} uploaded",
       "subDoneFailed": "{done, number} of {total, plural, one {# file} other {# files}} uploaded · {failed, number} failed",
-      "subRunning": "{done, number} of {total, plural, one {# file} other {# files}} · {running, number} uploading",
-      "subRunningFailed": "{done, number} of {total, plural, one {# file} other {# files}} · {failed, number} failed",
+      "subRunning": "{done, number} of {total, plural, one {# file} other {# files}} · {running, number} uploading · {waiting, number} waiting",
+      "subRunningFailed": "{done, number} of {total, plural, one {# file} other {# files}} · {running, number} uploading · {waiting, number} waiting · {failed, number} failed",
       "region": "Upload in progress",
       "showList": "Show the upload list",
       "show": "Show",
       "closePanel": "Close the upload panel",
       "close": "Close",
-      "progress": "Batch progress"
+      "progress": "Batch progress",
+      "titlePaused": "{count, plural, one {# unfinished upload} other {# unfinished uploads}}",
+      "subPaused": "Choose the files again to continue"
+    },
+    "duplicate": {
+      "title": "Already in this project",
+      "body": "<b>{name}</b> has the same content as {existing}, which is already in this project.",
+      "bodySame": "<b>{name}</b> is already in this project with exactly the same content.",
+      "note": "Skip keeps the project free of copies. Upload anyway adds a second file.",
+      "applyAll": "Do the same for the other {count, plural, one {# duplicate} other {# duplicates}}",
+      "skip": "Skip",
+      "uploadAnyway": "Upload anyway"
+    },
+    "resume": {
+      "mismatch": "That is not the file {name} was started with, so it was added as a new upload."
     }
   },
   "shared": {
@@ -1356,6 +1400,7 @@
     "version": "Version",
     "storageBackend": "Storage backend",
     "backendLocal": "Local disk",
+    "backendS3": "S3",
     "storage": "Storage",
     "database": "Database",
     "cache": "Cache",

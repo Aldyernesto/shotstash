@@ -5,11 +5,11 @@
  * representative thumbnails (they expire like any signed URL).
  * PRIVATE links need the `shotstash_share_<slug>` cookie (401 otherwise).
  */
-import { stat } from 'fs/promises';
 import { NextResponse } from 'next/server';
 import { defineRoute } from '@/lib/defineRoute';
 import { findLiveShare, resolveShare, shareFilesInScope, shareRoots, shareZipPlan } from '@/lib/shareLink';
 import { shareSigner, shareUnlocked } from '@/modules/share';
+import { storage } from '@/modules/storage';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,12 +22,9 @@ async function deadResponse(slug: string) {
   return NextResponse.json({ code: 'NOT_FOUND', state: 'not-found' }, { status: 404 });
 }
 
-async function readable(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isFile();
-  } catch {
-    return false;
-  }
+/** The object can be read from storage (a missing object or an unreachable backend answers false). */
+async function readable(key: string): Promise<boolean> {
+  return storage().exists(key).catch(() => false);
 }
 
 type SignBody = { fileIds?: unknown; zip?: unknown; section?: unknown; thumbs?: unknown } | null;
@@ -51,7 +48,7 @@ export const POST = defineRoute<{ slug: string }>({
     for (const f of await shareFilesInScope(link, ids)) {
       const url = shareSigner(link.id, f.id);
       files[f.id] = {
-        thumbnailUrl: f.thumbnailPath ? shareSigner(link.id, `t:${f.id}`) : null,
+        thumbnailUrl: f.thumbVersion ? shareSigner(link.id, `t:${f.id}`) : null,
         inlineUrl: url,
         downloadUrl: `${url}?dl=1`,
       };
@@ -63,14 +60,14 @@ export const POST = defineRoute<{ slug: string }>({
       if (roots.kind === 'file') {
         const [file] = await shareFilesInScope(link, [roots.fileId]);
         if (!file) cause = 'NOT_FOUND';
-        else if (!(await readable(file.storagePath))) cause = 'UNREADABLE';
+        else if (!(await readable(file.storageKey))) cause = 'UNREADABLE';
         else zipUrl = `${shareSigner(link.id, file.id)}?dl=1`;
       } else {
         const section = typeof body.section === 'string' && body.section ? body.section : null;
         const plan = await shareZipPlan(link, section);
         if (!plan) cause = 'NOT_FOUND';
         else if (!plan.entries.length) cause = 'EMPTY';
-        else if (!(await readable(plan.entries[0].path))) cause = 'UNREADABLE';
+        else if (!(await readable(plan.entries[0].key))) cause = 'UNREADABLE';
         else zipUrl = shareSigner(link.id, section ? `zip:${section}` : 'zip');
       }
     }

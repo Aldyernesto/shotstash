@@ -29,6 +29,7 @@ import { summarize } from "./uploadTypes";
 import UploadRow from "./UploadRow";
 import BatchProgress from "./BatchProgress";
 import { HeicActions, HeicBody } from "./HeicQuestion";
+import { DuplicateActions, DuplicateBody, useApplyAll } from "./DuplicateQuestion";
 import styles from "./upload.module.css";
 
 const CHEVRON_DOWN = (
@@ -67,6 +68,9 @@ export default function UploadPanel() {
   const [dragOver, setDragOver] = useState(false);
   const [askHeic, setAskHeic] = useState(false);
   const heicTitleId = useId();
+  const dupeTitleId = useId();
+  const [applyAll, setApplyAll] = useApplyAll(q.duplicatePrompt);
+  const askDupe = !!q.duplicatePrompt;
 
   const parsed = parseSectionName(q.target?.folderName || "");
   const accept = acceptForFolder(q.target?.folderType || q.target?.folderName || "");
@@ -85,9 +89,12 @@ export default function UploadPanel() {
   const summaryText = useMemo(() => {
     if (!q.tasks.length) return "";
     if (finished) {
+      if (sum.skipped) {
+        return t("panel.summaryDoneSkipped", { done: sum.uploaded, skipped: sum.skipped, failed: sum.failed });
+      }
       return sum.failed
-        ? t("panel.summaryDoneFailed", { done: sum.done, failed: sum.failed })
-        : t("panel.summaryDone", { done: sum.done });
+        ? t("panel.summaryDoneFailed", { done: sum.uploaded, failed: sum.failed })
+        : t("panel.summaryDone", { done: sum.uploaded });
     }
     if (q.running) {
       return t("panel.summaryRunning", {
@@ -125,23 +132,25 @@ export default function UploadPanel() {
   };
 
   const primaryLabel = finished ? t("panel.done") : t("panel.uploadCount", { count: sum.waiting });
+  const locked = q.running || askHeic || askDupe;
+  const retryable = q.tasks.filter((x) => x.status === "error" && x.file && x.error?.reason !== "duplicate").length;
 
   return (
     <Dialog
       size="lg"
       mobilePlacement="bottom"
       mobilePreviewFirst={false}
-      title={askHeic ? t("heic.title") : t("panel.title")}
+      title={askDupe ? t("duplicate.title") : askHeic ? t("heic.title") : t("panel.title")}
       closeLabel={t("panel.close")}
-      closeDisabled={q.running || askHeic}
-      /* Esc tidak berefek selama batch berjalan ATAU selama pertanyaan
-         HEIC belum dijawab (AC 3.12 & 3.13). */
-      locked={q.running || askHeic}
-      onClose={q.running || askHeic ? () => undefined : q.closePanel}
+      closeDisabled={locked}
+      /* Esc does nothing while a batch runs or a question (HEIC, duplicate)
+         waits for its answer (AC 3.12, 3.13, 4.3). */
+      locked={locked}
+      onClose={locked ? () => undefined : q.closePanel}
       headerExtra={
         /* Story 3.15: "Kecilkan" — serah-terima ke `upload-dock`.
            Upload TETAP berjalan setelah panel diperkecil. */
-        !askHeic && q.tasks.length > 0 ? (
+        !askHeic && !askDupe && q.tasks.length > 0 ? (
           <button
             type="button"
             aria-label={t("panel.minimizeLabel")}
@@ -154,7 +163,9 @@ export default function UploadPanel() {
         ) : null
       }
       footer={
-        askHeic ? (
+        askDupe ? (
+          <DuplicateActions onSkip={() => q.answerDuplicate("skip", applyAll)} onUpload={() => q.answerDuplicate("upload", applyAll)} />
+        ) : askHeic ? (
           <HeicActions onConvert={() => answerHeic(true)} onKeep={() => answerHeic(false)} />
         ) : (
           <div className={styles.footer}>
@@ -163,14 +174,20 @@ export default function UploadPanel() {
                 {summaryText}
               </span>
             ) : null}
-            <PillButton
-              variant="surface"
-              aria-disabled={q.running || undefined}
-              className={q.running ? styles.disabled : undefined}
-              onClick={() => (q.running ? undefined : q.closePanel())}
-            >
-              {t("panel.cancel")}
-            </PillButton>
+            {finished && retryable ? (
+              <PillButton variant="surface" onClick={q.retryFailed}>
+                {t("panel.reupload", { count: retryable })}
+              </PillButton>
+            ) : (
+              <PillButton
+                variant="surface"
+                aria-disabled={q.running || undefined}
+                className={q.running ? styles.disabled : undefined}
+                onClick={() => (q.running ? undefined : q.closePanel())}
+              >
+                {t("panel.cancel")}
+              </PillButton>
+            )}
             <PillButton
               variant="accent"
               busy={q.running}
@@ -189,7 +206,10 @@ export default function UploadPanel() {
         )
       }
     >
-      {askHeic ? (
+      {askDupe && q.duplicatePrompt ? (
+        /* The duplicate question REPLACES the panel content, like HEIC. */
+        <DuplicateBody prompt={q.duplicatePrompt} titleId={dupeTitleId} applyAll={applyAll} onApplyAll={setApplyAll} />
+      ) : askHeic ? (
         /* Pertanyaan HEIC MENGGANTI isi panel — bukan dialog kedua. */
         <HeicBody titleId={heicTitleId} />
       ) : (
@@ -258,7 +278,15 @@ export default function UploadPanel() {
           {q.tasks.length > 0 ? (
             <ul className={styles.queue}>
               {q.tasks.map((task) => (
-                <UploadRow key={task.id} task={task} onRemove={q.removeTask} />
+                <UploadRow
+                  key={task.id}
+                  task={task}
+                  disabled={q.running}
+                  onRemove={q.removeTask}
+                  onRetry={q.retryTask}
+                  onUploadAnyway={q.uploadAnyway}
+                  onPickFile={q.pickResumeFile}
+                />
               ))}
               <li className={styles.queueFade} aria-hidden="true" />
             </ul>

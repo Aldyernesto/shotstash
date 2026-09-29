@@ -7,7 +7,7 @@ import styles from './status.module.css';
 
 type Status = {
   version: string;
-  storage: { backend: 'local'; reachable: boolean };
+  storage: { backend: 'local' | 's3'; reachable: boolean };
   database: boolean;
   cache: boolean;
   search: boolean;
@@ -43,7 +43,7 @@ export default function StatusView() {
     state.kind === 'ready'
       ? [
           { key: 'version', label: t('version'), value: state.status.version },
-          { key: 'backend', label: t('storageBackend'), value: t('backendLocal') },
+          { key: 'backend', label: t('storageBackend'), value: state.status.storage.backend === 's3' ? t('backendS3') : t('backendLocal') },
           { key: 'storage', label: t('storage'), value: reach(state.status.storage.reachable), bad: !state.status.storage.reachable },
           { key: 'database', label: t('database'), value: reach(state.status.database), bad: !state.status.database },
           { key: 'cache', label: t('cache'), value: reach(state.status.cache), bad: !state.status.cache },

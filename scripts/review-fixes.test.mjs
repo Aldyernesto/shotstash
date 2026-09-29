@@ -8,7 +8,7 @@ import path from 'node:path';
 const rl = await import('../src/lib/rateLimit.ts');
 const { withLockOn, RELEASE_LOCK_LUA } = await import('../src/lib/lock.ts');
 const { allowedBeforeSetup, isApiPath } = await import('../src/lib/setupGate.ts');
-const { isInsideStorageRoot } = await import('../src/lib/storageRoot.ts');
+const { isInsideRoot: isInsideStorageRoot } = await import('../src/modules/storage/local.ts');
 const { googleEmailDecision } = await import('../src/lib/googleEmail.ts');
 const plan = await import('../src/modules/trash/plan.ts');
 

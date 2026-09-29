@@ -24,7 +24,7 @@ Shotstash sits in the gap: **video-first storage and sharing for creators and sm
 ## What you get (v1 scope)
 
 - **Projects → Sections → Files** with 3D folder cards, grid and list views, sort and search.
-- **Uploads that survive bad Wi-Fi**: chunked, resumable, parallel; local disk, NAS mount, or any S3-compatible bucket (Cloudflare R2 supported).
+- **Uploads that survive bad Wi-Fi**: parallel parts with retries, resumable after a reload or a dropped connection, checksum-verified, with duplicate detection per project; stored on a local disk, a NAS mount, or any S3-compatible bucket (AWS S3, Cloudflare R2, MinIO, RustFS, SeaweedFS). See [docs/storage.md](docs/storage.md).
 - **Viewer** for photos and video that follows the file's real aspect ratio, custom video controls, keyboard navigation, an info panel with dimensions and duration.
 - **Share links** per file, section or project, public or private, with a clean client page and ZIP download.
 - **Roles and onboarding**: super admin, admin, crew, editor, viewer; account approval; email password reset.
@@ -78,6 +78,8 @@ What runs: `app` (Shotstash with ffmpeg), `db` (PostgreSQL 17) and `cache` (Drag
 
 **Configuration.** Every setting is an environment variable in `.env`, read when the app starts: change it and run `docker compose up -d` again, no rebuild. The full list, with defaults: [docs/configuration.md](docs/configuration.md). The app refuses to start when a value is wrong and names each bad variable in `docker compose logs app`.
 
+**Storage.** Media goes to `./data/media` by default. To use an S3-compatible bucket instead (AWS S3, Cloudflare R2, MinIO, RustFS, SeaweedFS), set `STORAGE_BACKEND=s3` and the `S3_*` variables: [docs/storage.md](docs/storage.md).
+
 **Media folder permissions.** The app runs as uid 1000 and fixes the owner of `./data/media` at start. On NFS with `root_squash` or on a CIFS/SMB share it cannot, and the app stops with a message: on the host, make the folder writable by uid 1000 (`sudo chown -R 1000:1000 ./data/media`, or mount the share with `uid=1000,gid=1000`).
 
 **Port already taken.** `docker/preflight.sh` tells you. Set `SHOTSTASH_PORT=8080` (any free port) in `.env`, set `APP_URL=http://localhost:8080` to match, and start again.
@@ -95,7 +97,7 @@ What runs: `app` (Shotstash with ffmpeg), `db` (PostgreSQL 17) and `cache` (Drag
 - **Logs:** `docker compose logs -f app`. The app writes one JSON line per event.
 - **Status:** a super admin can open `/status` for the version, storage, database and cache. `GET /api/health` answers `{ ok, setupRequired, version }` for monitoring.
 - **Upgrade:** `git pull && docker compose up -d --build`. Once images are published, upgrading becomes `docker compose pull && docker compose up -d`.
-- **Rollback:** check out the previous release tag and run `docker compose up -d --build` (with published images: pin the previous image tag). Every migration stays compatible with the previous release, so the older version still runs on the upgraded database. Before v1.0.0 databases are throwaway: a pre-release upgrade may ask you to start with an empty database.
+- **Rollback:** check out the previous release tag and run `docker compose up -d --build` (with published images: pin the previous image tag). Every migration stays compatible with the previous release, so the older version still runs on the upgraded database. Before v1.0.0 databases are throwaway: a pre-release upgrade may ask you to start with an empty database. **Upgrade note (storage keys):** from migration `0006_storage_keys_uploads` on, files live under hierarchy-free keys and old bytes are not moved; reset pre-1.0 development data after upgrading (empty database and `./data/media`, see [docs/storage.md](docs/storage.md)).
 - **Backup:** stop the app first so files and database match (`docker compose stop app`), dump the database with `docker compose exec -T db pg_dump -U shotstash shotstash > shotstash.sql`, copy `./data/media`, then `docker compose start app`.
 - **Restore:** into an empty database, before the app runs (the app creates its tables at start, and a dump restored on top of them fails with "relation already exists"). Put the files back in `./data/media`, keep the `POSTGRES_PASSWORD` you want in `.env`, then:
 
@@ -121,7 +123,7 @@ npm run dev:seed    # then create the development accounts (refuses NODE_ENV=pro
 npm run dev         # app on http://localhost:3005
 ```
 
-A fresh install without the seed starts at `/setup`: until the first super admin exists, every page redirects there and `/api/*` and `/media/*` answer `503 SETUP_REQUIRED`. The wizard checks that the storage folder (`STORAGE_LOCAL_ROOT`) is writable and creates the owner account. Whoever submits it first becomes the super admin: set `SETUP_TOKEN` (the form then asks for it) or finish setup before exposing the instance. `GET /api/health` answers `{ ok, setupRequired, version }`; from the server itself (loopback) or with a super admin session it also reports version, database, cache, storage and `schemeMismatch`.
+A fresh install without the seed starts at `/setup`: until the first super admin exists, every page redirects there and `/api/*` and `/media/*` answer `503 SETUP_REQUIRED`. The wizard checks that the storage backend is writable (the `STORAGE_LOCAL_ROOT` folder, or the S3 bucket) and creates the owner account. Whoever submits it first becomes the super admin: set `SETUP_TOKEN` (the form then asks for it) or finish setup before exposing the instance. `GET /api/health` answers `{ ok, setupRequired, version }`; from the server itself (loopback) or with a super admin session it also reports version, database, cache, storage and `schemeMismatch`.
 
 Demo instances: after setup, `SHOTSTASH_DEMO_MODE=true DEMO_ADMIN_PASSWORD=... npm run demo:seed` adds read-only demo accounts and a sample project. Trashed items are deleted for good after `SHOTSTASH_TRASH_RETENTION_DAYS` (default 30) by an hourly sweeper.
 
@@ -142,7 +144,7 @@ npm run build                         # next build plus the compiled server (dis
 
 Configuration lives in one place, `src/lib/config.ts`: add a variable to its table, run `npm run env:example`, and read it with `config()`. Lint rejects `process.env` anywhere else in `src/` and `server.ts` (`process.env.NODE_ENV` excepted). `npm start` runs the compiled server after `npm run build`.
 
-Local end-to-end checks (not in CI). First-run setup on an empty database: `npm run dev:db:reset`, `npm run dev:db`, `npx prisma migrate deploy`, `npm run dev`, then `npm run e2e:setup` (gate redirect and 503, setup, concurrent 409, redirect after setup). Security: with `npm run dev:db`, `npx prisma migrate deploy`, `npx tsx prisma/seed.ts` and `npm run dev` running, `npm run e2e:security` exercises login, cookie media, signed shares, access codes, role checks, rate limits, security headers, health and the trash lifecycle (start the server with `EMAIL_TRANSPORT=log` to include the reset-limit rows; login limits mean a second run needs 15 minutes or a server restart) against `http://localhost:3005` (override with `E2E_BASE_URL`). Both refuse to run unless the base URL and `DATABASE_URL` point at localhost, and they write test data into that database.
+Local end-to-end checks (not in CI). First-run setup on an empty database: `npm run dev:db:reset`, `npm run dev:db`, `npx prisma migrate deploy`, `npm run dev`, then `npm run e2e:setup` (gate redirect and 503, setup, concurrent 409, redirect after setup). Security: with `npm run dev:db`, `npx prisma migrate deploy`, `npx tsx prisma/seed.ts` and `npm run dev` running, `npm run e2e:security` exercises login, cookie media, signed shares, access codes, role checks, rate limits, security headers, health and the trash lifecycle (start the server with `EMAIL_TRANSPORT=log` to include the reset-limit rows; login limits mean a second run needs 15 minutes or a server restart) against `http://localhost:3005` (override with `E2E_BASE_URL`). `e2e:security` also covers uploads: parts, resume, wrong checksums, duplicates, cancel and expiry. `npm run e2e:upload` uploads a 256 MiB synthetic file through a proxy that cuts the connection twice and checks it resumes and arrives intact (`E2E_UPLOAD_MB` changes the size). `npm run test:s3` runs the storage contract against an S3-compatible server (see [docs/storage.md](docs/storage.md)). They refuse to run unless the base URL and `DATABASE_URL` point at localhost, and they write test data into that database.
 
 Every route handler is wrapped in `defineRoute({ auth })` and every GraphQL root field has an entry in `src/graphql/auth-map.ts`; the generated table lives in [docs/security/route-matrix.md](docs/security/route-matrix.md). Media bytes are served only under `/media/*` with an HttpOnly session cookie or a signed share URL; `MEDIA_SIGNING_SECRET` signs those URLs.
 

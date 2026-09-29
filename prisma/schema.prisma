@@ -40,8 +40,17 @@ enum ShareMode {
 
 enum UploadStatus {
   IN_PROGRESS
+  COMPLETING
   COMPLETED
   FAILED
+  EXPIRED
+}
+
+// A file row exists from initiateUpload on (Story 4.3); only `ready` rows
+// are part of the library. Every read of files filters status = ready.
+enum MediaFileStatus {
+  uploading
+  ready
 }
 
 // ============================================
@@ -152,13 +161,27 @@ model Folder {
 
 model MediaFile {
   id            String       @id @default(uuid())
-  filename      String       // Nama file di storage (UUID-based)
-  originalName  String       // Nama asli dari user
-  mimeType      String
+  filename      String       // Stored name: <id>.<ext> (display and legacy clients)
+  originalName  String       // Name the uploader's file had
+  mimeType      String       // Sniffed from the bytes at completion
   size          BigInt
-  md5Checksum   String       // MD5 hash untuk file integrity & dedup
-  storagePath   String       // Path di NAS: ./data/media/...
-  thumbnailPath String?
+  // MD5 of the uploaded bytes (empty until they were verified). After a
+  // HEIC conversion it stays the MD5 of what the user uploaded (the dedup
+  // key) until Story 4.4 keeps originals immutable. Dedup authority: a
+  // partial unique index on (projectId, md5Checksum) over ready, untrashed
+  // rows that are not marked duplicateOf (migration 0006).
+  md5Checksum   String
+  // Hierarchy-free key of the original (files/<id>/original.<ext>); set at
+  // completion and never recomputed from names.
+  storageKey    String       @map("storage_key")
+  // 0 = no thumbnail; n = files/<id>/thumb-<n>.jpg exists.
+  thumbVersion  Int          @default(0) @map("thumb_version")
+  status        MediaFileStatus @default(ready)
+  // Set when the uploader chose "Upload anyway" for identical bytes (or a
+  // copy): the file this one duplicates. Such rows are outside the dedup index.
+  duplicateOfId String?      @map("duplicate_of")
+  duplicateOf   MediaFile?   @relation("MediaFileDuplicates", fields: [duplicateOfId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  duplicates    MediaFile[]  @relation("MediaFileDuplicates")
   folderId      String
   folder        Folder       @relation(fields: [folderId], references: [id], onDelete: Cascade)
   projectId     String
@@ -167,6 +190,8 @@ model MediaFile {
   uploadedBy    User         @relation(fields: [uploadedById], references: [id])
   shareLinks    ShareLink[]
   chatMentions  ProjectChat[]
+  uploadSessions UploadSession[]
+  processedVersions ProcessedVersion[]
   trashedAt     DateTime?
   // See Folder.trashRootId.
   trashRootId   String?      @map("trash_root_id")
@@ -176,7 +201,26 @@ model MediaFile {
   @@index([md5Checksum])
   @@index([trashedAt])
   @@index([trashRootId])
+  @@index([status])
   @@map("media_files")
+}
+
+// Outputs derived from a file (Epic 5 pipeline). Created now and empty until
+// the pipeline exists; purge deletes their keys with the file.
+model ProcessedVersion {
+  id          String    @id @default(uuid())
+  mediaFileId String    @map("media_file_id")
+  mediaFile   MediaFile @relation(fields: [mediaFileId], references: [id], onDelete: Cascade)
+  kind        String
+  jobId       String?   @map("job_id")
+  attempt     Int       @default(1)
+  storageKey  String    @map("storage_key")
+  mimeType    String    @map("mime_type")
+  size        BigInt
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([mediaFileId])
+  @@map("processed_versions")
 }
 
 model ProjectChat {
@@ -226,19 +270,46 @@ model UploadSession {
   id             String       @id @default(uuid())
   filename       String
   totalSize      BigInt
-  chunkSize      Int          @default(10485760) // 10MB default
-  totalChunks    Int
-  uploadedChunks Int          @default(0)
-  md5Expected    String?      // Client-provided MD5 untuk verifikasi
+  totalChunks    Int          // number of parts
+  partSize       Int          @map("part_size")
+  md5Expected    String?      // Client MD5 of the whole file (at initiate or completion)
+  // Opt-in "Upload anyway" for identical bytes already in the Project.
+  allowDuplicate Boolean      @default(false) @map("allow_duplicate")
   projectId      String
   folderId       String
   uploadedById   String
   uploadedBy     User         @relation(fields: [uploadedById], references: [id])
+  // The `uploading` file row this session fills (null once it is gone).
+  mediaFileId    String?      @map("media_file_id")
+  mediaFile      MediaFile?   @relation(fields: [mediaFileId], references: [id], onDelete: SetNull)
+  // Opaque id of the storage backend's multipart upload.
+  backendUploadId String?     @map("backend_upload_id")
   status         UploadStatus @default(IN_PROGRESS)
+  // When the current completion claimed the session (status COMPLETING):
+  // a retry may take over a claim older than 15 min, the sweeper ends one
+  // older than 1 h.
+  completingAt   DateTime?    @map("completing_at")
+  parts          UploadPart[]
   createdAt      DateTime     @default(now())
-  expiresAt      DateTime     // Auto-cleanup temp files setelah 24 jam
+  expiresAt      DateTime     // 24 h after initiate; the hourly sweeper expires it
 
+  @@index([status, expiresAt])
+  @@index([mediaFileId])
   @@map("upload_sessions")
+}
+
+// Confirmed parts of an upload session; a re-sent part replaces its row.
+model UploadPart {
+  sessionId  String        @map("session_id")
+  session    UploadSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  partNumber Int           @map("part_number")
+  size       Int
+  etag       String
+  md5        String
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  @@id([sessionId, partNumber])
+  @@map("upload_parts")
 }
 
 // Reset password mandiri via email (kode OTP). Kode & token hanya disimpan sebagai hash.

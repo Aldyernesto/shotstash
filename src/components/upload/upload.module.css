@@ -646,3 +646,87 @@
     -webkit-box-orient: vertical;
   }
 }
+
+/* ---------- Story 4.3: row actions, resume rows, duplicate question ---------- */
+
+/* Retry, Upload anyway and Choose file sit in the fixed action slot. */
+.rowPill {
+  min-height: 36px;
+  padding-inline: 14px;
+  white-space: nowrap;
+}
+
+/* An unfinished upload from before a reload: waiting for its file. */
+.rowPaused {
+  margin: 4px 0;
+  border-bottom-color: transparent;
+  border-radius: var(--spine-radius-input-mobile);
+  background: var(--app-spine-surface-2);
+}
+
+@media (max-width: 899px) {
+  .row:has(.rowPill) {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .row:has(.rowPill) .rowAction {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+}
+
+.dupeCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-input-mobile);
+  background: var(--app-spine-surface-2);
+}
+
+.dupeIcon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--spine-radius-xs);
+  background: var(--app-spine-surface);
+  color: var(--app-spine-accent-2);
+}
+
+:global(html[data-theme="light"]) .dupeIcon {
+  color: var(--app-spine-accent-text-light);
+}
+
+.dupeIcon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.dupeName {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  color: var(--app-spine-text);
+}
+
+.dupeAll {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  margin-top: 8px;
+  color: var(--app-spine-text-soft);
+  cursor: pointer;
+}
+
+.dupeAll input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--app-spine-accent);
+}

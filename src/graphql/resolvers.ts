@@ -1,9 +1,9 @@
 // Shotstash — GraphQL Resolvers
 // Layer 2: Core Business logic wrapper
 
-import { createHash, randomUUID } from 'crypto';
+import { createHash } from 'crypto';
+import { v7 as uuidv7 } from 'uuid';
 import * as AuthService from '../services/auth.service';
-import * as UploadService from '../services/upload.service';
 import * as ShareService from '../services/share.service';
 import * as FolderService from '../services/folder.service';
 import * as ChatService from '../services/chat.service';
@@ -17,7 +17,6 @@ import { config } from '../lib/config';
 import { publicSignupRefusal } from '../lib/signupGuard';
 import { pubsub } from '../lib/pubsub';
 import { isRenderableImageUrl, mediaUrl } from '../lib/mediaUrls';
-import { storageRoot } from '../lib/storageRoot';
 import {
   assertCan,
   assertCanWriteSelf,
@@ -33,6 +32,8 @@ import { applyAuthMap } from './withAuth';
 import { limitBy, loginLimit } from '../lib/rateLimit';
 import { folderChainTrashed } from '../lib/shareLink';
 import * as Trash from '@/modules/trash';
+import * as Upload from '@/modules/upload';
+import { storage, storageKeys } from '@/modules/storage';
 import { isSupportedLocale } from '@/modules/i18n';
 import { LOGIN_INTERNAL_ERROR } from '../lib/authMessages';
 import { GraphQLError } from 'graphql';
@@ -63,7 +64,7 @@ async function assertLiveFolder(folderId: string, label = 'Section') {
 
 async function assertLiveFile(fileId: string) {
   const file = await prisma.mediaFile.findUnique({ where: { id: fileId } });
-  if (!file || file.trashedAt || (await folderChainTrashed(file.folderId))) throw notFound('File not found');
+  if (!file || file.status !== 'ready' || file.trashedAt || (await folderChainTrashed(file.folderId))) throw notFound('File not found');
   return file;
 }
 
@@ -220,7 +221,7 @@ async function getRootFolderType(folderId: string): Promise<string | null> {
 }
 
 async function countFilesRecursive(folderId: string): Promise<number> {
-  let count = await prisma.mediaFile.count({ where: { folderId, trashedAt: null } });
+  let count = await prisma.mediaFile.count({ where: { folderId, trashedAt: null, status: 'ready' } });
   const children = await prisma.folder.findMany({
     where: { parentId: folderId, trashedAt: null },
     select: { id: true },
@@ -317,7 +318,7 @@ const REPFILE_MAX = { project: 5, folder: 3 } as const;
 function toRepFile(file: {
   id: string;
   mimeType: string;
-  thumbnailPath: string | null;
+  thumbVersion: number;
   originalName: string;
 }) {
   const kind = kindFromMime(file.mimeType);
@@ -325,7 +326,7 @@ function toRepFile(file: {
   return {
     id: file.id,
     kind,
-    thumbnailUrl: file.thumbnailPath ? mediaUrl.thumbnail(file.id) : null,
+    thumbnailUrl: file.thumbVersion ? mediaUrl.thumbnail(file.id, file.thumbVersion) : null,
     duration: null as number | null,
     extension: ext || null,
   };
@@ -349,8 +350,8 @@ async function repFilesFor(
     throw codedError('INVALID_LIMIT', `limit must be at most ${max} (got ${limit})`, { max });
   }
   const files = await prisma.mediaFile.findMany({
-    where: includeTrashed ? where : { ...where, trashedAt: null },
-    select: { id: true, mimeType: true, thumbnailPath: true, originalName: true },
+    where: includeTrashed ? { ...where, status: 'ready' } : { ...where, trashedAt: null, status: 'ready' },
+    select: { id: true, mimeType: true, thumbVersion: true, originalName: true },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
   });
   const k = Math.min(limit, files.length);
@@ -462,7 +463,7 @@ const rawResolvers = {
       const folder = await prisma.folder.findFirst({
         where: { id, trashedAt: null },
         include: {
-          files: { where: { trashedAt: null } },
+          files: { where: { trashedAt: null, status: 'ready' } },
           children: { where: { trashedAt: null } },
           project: true,
         },
@@ -511,6 +512,7 @@ const rawResolvers = {
           OR: [{ originalName: { contains: query, mode: 'insensitive' } }, { mimeType: { contains: query, mode: 'insensitive' } }],
           ...(projectId ? { projectId } : {}),
           trashedAt: null,
+          status: 'ready',
         };
         return prisma.mediaFile.findMany({ where, take: 20, include: { folder: true, project: true } });
       }
@@ -518,7 +520,7 @@ const rawResolvers = {
       // trash filter as the DB branch, keeping the ES ranking.
       const ids = hits.map((hit: any) => String(hit._id));
       const rows = await prisma.mediaFile.findMany({
-        where: { id: { in: ids }, trashedAt: null, ...(projectId ? { projectId } : {}) },
+        where: { id: { in: ids }, trashedAt: null, status: 'ready', ...(projectId ? { projectId } : {}) },
         include: { folder: true, project: true },
       });
       const byId = new Map(rows.map((row) => [row.id, row]));
@@ -583,31 +585,47 @@ const rawResolvers = {
 
     storageStats: async (_: any, __: any, context: GraphQLContext) => {
       assertCan(context.actor, 'instance.configure');
-      const totalFiles = await prisma.mediaFile.count();
+      const totalFiles = await prisma.mediaFile.count({ where: { status: 'ready' } });
       const totalProjects = await prisma.project.count();
-      const sizeResult = await prisma.mediaFile.aggregate({ _sum: { size: true } });
+      const sizeResult = await prisma.mediaFile.aggregate({ where: { status: 'ready' }, _sum: { size: true } });
       const usedSpace = Number(sizeResult._sum.size || 0);
+      // Disk size and free space come from the backend when it can tell
+      // (local disk); S3 has no capacity, so the fields are null.
+      const store = storage();
+      const capacity = await store.capacity().catch(() => null);
+      return {
+        backend: store.name,
+        totalSpace: capacity?.total ?? null,
+        usedSpace,
+        freeSpace: capacity?.free ?? null,
+        totalFiles,
+        totalProjects,
+      };
+    },
 
-      // Get real NAS disk stats via statfs (Node.js 18+)
-      let totalSpace = 0;
-      let freeSpace = 0;
+    uploadSession: async (_: unknown, { id }: { id: string }, context: GraphQLContext) => {
+      const actor = actorOf(context);
+      assertCan(actor, 'upload');
       try {
-        const fs = await import('fs/promises');
-        const { execSync } = await import('child_process');
-        const nasPath = storageRoot();
-        // Use --output for machine-parseable columns (avoids path-with-spaces issue)
-        const dfOut = execSync(`df -B1 --output=size,avail "${nasPath}" | tail -1`, { encoding: 'utf8', timeout: 3000 });
-        const parts = dfOut.trim().split(/\s+/);
-        if (parts.length >= 2) {
-          totalSpace = parseInt(parts[0], 10) || 0;
-          freeSpace = parseInt(parts[1], 10) || 0;
-        }
-      } catch {
-        totalSpace = 0;
-        freeSpace = 0;
+        return await Upload.uploadSessionInfo(actor, id);
+      } catch (err) {
+        if (err instanceof Upload.UploadFailure && err.code === 'UPLOAD_SESSION_NOT_FOUND') return null;
+        throw Upload.asGraphQLError(err);
       }
+    },
 
-      return { totalSpace, usedSpace, freeSpace, totalFiles, totalProjects };
+    checkDuplicates: async (
+      _: unknown,
+      { projectId, candidates }: { projectId: string; candidates: { name: string; size: bigint | number; md5?: string | null }[] },
+      context: GraphQLContext,
+    ) => {
+      assertCan(context.actor, 'upload');
+      await assertProject(projectId);
+      const list = (candidates ?? []).map((c) => ({ name: String(c.name), size: Number(c.size), md5: c.md5 ?? null }));
+      if (list.some((c) => !Number.isSafeInteger(c.size) || c.size < 0)) {
+        throw codedError('BAD_REQUEST', 'Every candidate size must be a whole, non-negative number of bytes');
+      }
+      return Upload.checkDuplicates(projectId, list);
     },
 
     notifications: async (_: any, { unreadOnly }: any, context: GraphQLContext) => {
@@ -766,7 +784,7 @@ const rawResolvers = {
       return prisma.folder.update({
         where: { id: folderId },
         data: { name },
-        include: { children: true, files: true },
+        include: { children: { where: { trashedAt: null } }, files: { where: { trashedAt: null, status: 'ready' } } },
       });
     },
 
@@ -774,59 +792,57 @@ const rawResolvers = {
       const actor = actorOf(context);
       assertCan(actor, 'upload');
       await assertProject(input.projectId);
-      if (input.folderId) {
-        const target = await assertLiveFolder(input.folderId);
-        if (target.projectId !== input.projectId) throw notFound('Section not found');
+      const target = await assertLiveFolder(input.folderId);
+      if (target.projectId !== input.projectId) throw notFound('Section not found');
+
+      // Validate file type: inherited rules from the root default Sections.
+      const ext = String(input.filename).split('.').pop()?.toLowerCase() || '';
+      const rootType = await getRootFolderType(input.folderId);
+      if (rootType) {
+        const invalid = validateFileTypeForFolder(rootType, ext);
+        if (invalid) throw invalid;
       }
 
-      // Validate file type — check inherited folder rules from root default folders
-      if (input.folderId) {
-        const ext = input.filename.split('.').pop()?.toLowerCase() || '';
-        const rootType = await getRootFolderType(input.folderId);
-        if (rootType) {
-          const invalid = validateFileTypeForFolder(rootType, ext);
-          if (invalid) throw invalid;
-        }
+      // Story 4.3: starting uploads is limited per user.
+      const limited = await limitBy('uploadInitiate', actor.id);
+      if (!limited.ok) throw rateLimited(limited.retryAfter);
+
+      try {
+        const r = await Upload.initiateUpload({
+          actor,
+          projectId: input.projectId,
+          folderId: input.folderId,
+          filename: input.filename,
+          size: Number(input.totalSize),
+          md5: input.md5Checksum ?? null,
+          allowDuplicate: input.allowDuplicate === true,
+        });
+        return {
+          id: r.sessionId,
+          fileId: r.fileId,
+          filename: input.filename,
+          totalSize: r.size,
+          partSize: r.partSize,
+          partCount: r.partCount,
+          status: 'IN_PROGRESS',
+          confirmedParts: [],
+          projectId: input.projectId,
+          folderId: input.folderId,
+          expiresAt: r.expiresAt,
+        };
+      } catch (err) {
+        throw Upload.asGraphQLError(err);
       }
-
-      const countryCode = context.req.headers.get('cf-ipcountry') || undefined;
-      const result = await UploadService.initiateUpload({
-        uploadedById: actor.id,
-        projectId: input.projectId,
-        filename: input.filename,
-        totalSize: BigInt(input.totalSize),
-        md5Checksum: input.md5Checksum,
-        folderId: input.folderId,
-        clientLatencyMs: input.clientLatencyMs,
-        clientChunkSize: input.clientChunkSize,
-        countryCode,
-      });
-      log.info('upload initiated', { file: input.filename, country: countryCode || undefined, latencyMs: input.clientLatencyMs || undefined, mode: result.uploadMode });
-
-      return {
-        id: result.session.id,
-        chunkSize: result.session.chunkSize,
-        totalChunks: result.session.totalChunks,
-        uploadMode: result.uploadMode,
-        presignedUrl: result.presignedUrl,
-        r2Key: result.r2Key,
-      };
     },
 
-    completeUpload: async (_: any, { sessionId, r2Key, convertHeic }: any, context: GraphQLContext) => {
-      await assertUploadOwner(context, sessionId);
-      // The target may have been trashed or deleted since initiateUpload.
-      const upload = await prisma.uploadSession.findUnique({ where: { id: sessionId }, select: { projectId: true, folderId: true } });
+    completeUpload: async (_: any, { sessionId, md5Checksum, convertHeic }: any, context: GraphQLContext) => {
+      const actor = actorOf(context);
+      assertCan(actor, 'upload');
       try {
-        if (!upload) throw notFound('Upload session not found');
-        await assertProject(upload.projectId);
-        const target = await assertLiveFolder(upload.folderId);
-        if (target.projectId !== upload.projectId) throw notFound('Section not found');
+        return await Upload.completeUpload({ actor, sessionId, md5: md5Checksum ?? null, convertHeic: convertHeic !== false });
       } catch (err) {
-        await UploadService.abandonUpload(sessionId);
-        throw err;
+        throw Upload.asGraphQLError(err);
       }
-      return UploadService.completeUpload(sessionId, r2Key, convertHeic);
     },
 
     createShareLink: async (_: any, { input }: any, context: GraphQLContext) => {
@@ -1078,65 +1094,90 @@ const rawResolvers = {
     },
 
     cancelUpload: async (_: any, { sessionId }: { sessionId: string }, context: GraphQLContext) => {
-      await assertUploadOwner(context, sessionId);
-      await prisma.uploadSession.update({
-        where: { id: sessionId },
-        data: { status: 'FAILED' },
-      });
-      return true;
+      const actor = actorOf(context);
+      assertCan(actor, 'upload');
+      try {
+        await Upload.cancelUpload(actor, sessionId);
+        return true;
+      } catch (err) {
+        throw Upload.asGraphQLError(err);
+      }
     },
 
+    // Story 4.1: storage keys never encode hierarchy, so moves and renames
+    // are database-only; bytes stay where they are.
     moveFile: async (_: any, { fileId, targetFolderId }: { fileId: string; targetFolderId: string }, context: GraphQLContext) => {
       assertCan(context.actor, 'item.move');
       const file = await assertLiveFile(fileId);
       const targetFolder = await assertLiveFolder(targetFolderId, 'Target Section');
-
-      // Move file on NAS — use proper folder physical path
-      const path = await import('path');
-      const fs = await import('fs/promises');
-      const targetDir = await FolderService.getFolderPhysicalPath(targetFolderId);
-      await fs.mkdir(targetDir, { recursive: true });
-      const newPath = path.join(targetDir, path.basename(file.storagePath));
-      fs.rename(file.storagePath, newPath).catch(() => { });
-
-      return prisma.mediaFile.update({
-        where: { id: fileId },
-        data: { folderId: targetFolderId, projectId: targetFolder.projectId, storagePath: newPath },
-        include: { folder: true, project: true, uploadedBy: true },
+      return prisma.$transaction(async (tx) => {
+        const cross = targetFolder.projectId !== file.projectId;
+        const parked = cross ? await Upload.detachForMove(tx, [fileId]) : [];
+        if (cross) await Upload.markConflictsAsDuplicates(tx, [fileId], targetFolder.projectId);
+        const moved = await tx.mediaFile.update({
+          where: { id: fileId },
+          data: { folderId: targetFolderId, projectId: targetFolder.projectId },
+        });
+        await Upload.resettle(tx, parked);
+        return tx.mediaFile.findUniqueOrThrow({ where: { id: moved.id }, include: { folder: true, project: true, uploadedBy: true } });
       });
     },
 
+    // A copy duplicates the bytes (and the thumbnail) through the storage
+    // backend under the new file's own keys.
     copyFile: async (_: any, { fileId, targetFolderId }: { fileId: string; targetFolderId: string }, context: GraphQLContext) => {
       const actor = actorOf(context);
       assertCan(actor, 'upload');
       const file = await assertLiveFile(fileId);
       const targetFolder = await assertLiveFolder(targetFolderId, 'Target Section');
 
-      const path = await import('path');
-      const fs = await import('fs/promises');
-      const targetDir = await FolderService.getFolderPhysicalPath(targetFolderId);
-      await fs.mkdir(targetDir, { recursive: true });
-      const newId = randomUUID();
-      const ext = path.extname(file.originalName);
-      const newName = `${newId}${ext}`;
-      const newPath = path.join(targetDir, newName);
-      try { await fs.copyFile(file.storagePath, newPath); } catch { /* skip if NAS copy fails */ }
+      const store = storage();
+      const newId = uuidv7();
+      const ext = file.storageKey.split('.').pop() || 'bin';
+      const key = storageKeys.original(newId, ext);
+      try {
+        await store.copy(file.storageKey, key);
+      } catch (err) {
+        log.error('copyFile: storage copy failed', { err: errMessage(err) });
+        throw codedError('STORAGE_UNAVAILABLE', 'The file could not be copied');
+      }
+      let thumbVersion = 0;
+      if (file.thumbVersion) {
+        try {
+          await store.copy(storageKeys.thumbnail(file.id, file.thumbVersion), storageKeys.thumbnail(newId, 1));
+          thumbVersion = 1;
+        } catch (err) {
+          log.warn('copyFile: thumbnail copy failed', { err: errMessage(err) });
+        }
+      }
 
-      return prisma.mediaFile.create({
-        data: {
-          id: newId,
-          filename: newName,
-          originalName: file.originalName,
-          mimeType: file.mimeType,
-          size: file.size,
-          md5Checksum: file.md5Checksum,
-          storagePath: newPath,
-          folderId: targetFolderId,
-          projectId: targetFolder.projectId,
-          uploadedById: actor.id,
-        },
-        include: { folder: true, project: true, uploadedBy: true },
-      });
+      try {
+        return await prisma.$transaction(async (tx) => {
+          const original = await Upload.findOriginal(tx, targetFolder.projectId, file.md5Checksum);
+          return tx.mediaFile.create({
+            data: {
+              id: newId,
+              filename: `${newId}.${ext}`,
+              originalName: file.originalName,
+              mimeType: file.mimeType,
+              size: file.size,
+              md5Checksum: file.md5Checksum,
+              storageKey: key,
+              thumbVersion,
+              status: 'ready',
+              duplicateOfId: original?.id ?? null,
+              folderId: targetFolderId,
+              projectId: targetFolder.projectId,
+              uploadedById: actor.id,
+            },
+            include: { folder: true, project: true, uploadedBy: true },
+          });
+        });
+      } catch (err) {
+        await store.delete(key).catch(() => {});
+        if (thumbVersion) await store.delete(storageKeys.thumbnail(newId, 1)).catch(() => {});
+        throw err;
+      }
     },
 
     moveFolder: async (
@@ -1179,8 +1220,7 @@ const rawResolvers = {
 
       const crossProject = destProjectId !== folder.projectId;
 
-      // Collect all folder IDs in the moved subtree (including self) — needed for
-      // projectId cascade and file storagePath rewrite.
+      // Every folder in the moved subtree (including self), for the projectId cascade.
       const subtreeFolderIds: string[] = [folderId];
       let frontier: string[] = [folderId];
       while (frontier.length) {
@@ -1194,60 +1234,26 @@ const rawResolvers = {
         frontier = ids;
       }
 
-      // Capture old physical path BEFORE DB changes
-      const oldPath = await FolderService.getFolderPhysicalPath(folderId);
-
-      // 1) Re-parent the folder (parentId may be null when dropping at project root)
-      await prisma.folder.update({
-        where: { id: folderId },
-        data: {
-          parentId: targetFolderId ?? null,
-          projectId: destProjectId,
-        },
-      });
-
-      // 2) Cascade projectId to descendants if crossing projects
-      if (crossProject) {
-        await prisma.$transaction([
-          prisma.folder.updateMany({
-            where: { id: { in: subtreeFolderIds } },
-            data: { projectId: destProjectId },
-          }),
-          prisma.mediaFile.updateMany({
-            where: { folderId: { in: subtreeFolderIds } },
-            data: { projectId: destProjectId },
-          }),
-        ]);
-      }
-
-      // 3) Move physical directory on NAS
-      const newPath = await FolderService.getFolderPhysicalPath(folderId);
-      const fs = await import('fs/promises');
-      const pathLib = await import('path');
-      try {
-        await fs.mkdir(pathLib.dirname(newPath), { recursive: true });
-        await fs.rename(oldPath, newPath);
-      } catch (err) {
-        log.warn('moveFolder: rename on disk failed', { from: oldPath, to: newPath, err: errMessage(err) });
-      }
-
-      // 4) Rewrite storagePath for every file in the moved subtree
-      const files = await prisma.mediaFile.findMany({
-        where: { folderId: { in: subtreeFolderIds } },
-        select: { id: true, storagePath: true },
-      });
-      for (const f of files) {
-        if (f.storagePath?.startsWith(oldPath)) {
-          await prisma.mediaFile.update({
-            where: { id: f.id },
-            data: { storagePath: newPath + f.storagePath.slice(oldPath.length) },
-          });
+      // Database only: storage keys do not depend on where a file sits.
+      await prisma.$transaction(async (tx) => {
+        await tx.folder.update({
+          where: { id: folderId },
+          data: { parentId: targetFolderId ?? null, projectId: destProjectId },
+        });
+        if (crossProject) {
+          const moving = await tx.mediaFile.findMany({ where: { folderId: { in: subtreeFolderIds } }, select: { id: true } });
+          const parked = await Upload.detachForMove(tx, moving.map((f) => f.id));
+          await Upload.markConflictsAsDuplicates(tx, moving.map((f) => f.id), destProjectId);
+          await tx.folder.updateMany({ where: { id: { in: subtreeFolderIds } }, data: { projectId: destProjectId } });
+          await tx.mediaFile.updateMany({ where: { folderId: { in: subtreeFolderIds } }, data: { projectId: destProjectId } });
+          await Upload.resettle(tx, parked);
+          await tx.uploadSession.updateMany({ where: { folderId: { in: subtreeFolderIds } }, data: { projectId: destProjectId } });
         }
-      }
+      });
 
       return prisma.folder.findUnique({
         where: { id: folderId },
-        include: { children: true, files: true },
+        include: { children: { where: { trashedAt: null } }, files: { where: { trashedAt: null, status: 'ready' } } },
       });
     },
 
@@ -1274,7 +1280,7 @@ const rawResolvers = {
   Project: {
     files: async (parent: any) => {
       return prisma.mediaFile.findMany({
-        where: { projectId: parent.id, trashedAt: null },
+        where: { projectId: parent.id, trashedAt: null, status: 'ready' },
         take: 50,
         orderBy: { createdAt: 'desc' },
       });
@@ -1283,11 +1289,11 @@ const rawResolvers = {
       // Story 2.4: file di Trash tidak dihitung (paritas Project.files yang
       // menyaring trashedAt: null) — angka beberapa project turun; itu
       // memang perbaikannya (keputusan user 21 Sep 2026).
-      return prisma.mediaFile.count({ where: { projectId: parent.id, trashedAt: null } });
+      return prisma.mediaFile.count({ where: { projectId: parent.id, trashedAt: null, status: 'ready' } });
     },
     totalSize: async (parent: any) => {
       const result = await prisma.mediaFile.aggregate({
-        where: { projectId: parent.id, trashedAt: null },
+        where: { projectId: parent.id, trashedAt: null, status: 'ready' },
         _sum: { size: true },
       });
       return Number(result._sum.size || 0);
@@ -1297,7 +1303,7 @@ const rawResolvers = {
     contentSummary: async (parent: any) => {
       const rows = await prisma.mediaFile.groupBy({
         by: ['mimeType'],
-        where: { projectId: parent.id, trashedAt: null },
+        where: { projectId: parent.id, trashedAt: null, status: 'ready' },
         _count: { _all: true },
       });
       return summarizeCounts(rows);
@@ -1317,7 +1323,7 @@ const rawResolvers = {
       const ids = await collectFolderSubtreeIds(parent.id);
       const rows = await prisma.mediaFile.groupBy({
         by: ['mimeType'],
-        where: { folderId: { in: ids }, trashedAt: null },
+        where: { folderId: { in: ids }, trashedAt: null, status: 'ready' },
         _count: { _all: true },
       });
       return summarizeCounts(rows);
@@ -1348,7 +1354,8 @@ const rawResolvers = {
   // non-null-nya mengembalikan null dan SELURUH query isi Section gagal.
   MediaFile: {
     // Story 2.2: cookie-authorised media paths, never a token in the URL.
-    thumbnailUrl: (parent: any) => (parent.thumbnailPath ? mediaUrl.thumbnail(parent.id) : null),
+    thumbnailUrl: (parent: any) => (parent.thumbVersion ? mediaUrl.thumbnail(parent.id, parent.thumbVersion) : null),
+    duplicateOf: (parent: any) => (parent.duplicateOfId && parent.duplicateOfId !== parent.id ? parent.duplicateOfId : null),
     downloadUrl: (parent: any) => mediaUrl.download(parent.id),
     uploadedBy: async (parent: any) => {
       if (parent.uploadedBy) return parent.uploadedBy;
@@ -1383,7 +1390,7 @@ const rawResolvers = {
           parent.file !== undefined
             ? parent.file
             : await prisma.mediaFile.findUnique({ where: { id: parent.fileId } });
-        return file && !file.trashedAt ? [toRepFile(file)] : [];
+        return file && !file.trashedAt && file.status === 'ready' ? [toRepFile(file)] : [];
       }
 
       if (parent.folderId) {
@@ -1432,7 +1439,7 @@ const rawResolvers = {
           : parent.referencedFileId
             ? await prisma.mediaFile.findUnique({ where: { id: parent.referencedFileId } })
             : null;
-      return file && !file.trashedAt ? file : null;
+      return file && !file.trashedAt && file.status === 'ready' ? file : null;
     },
   },
 

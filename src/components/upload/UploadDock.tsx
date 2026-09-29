@@ -92,18 +92,26 @@ export default function UploadDock() {
   const s = summarize(q.tasks);
   const section = parseSectionName(q.target!.folderName || "").title || t("sectionFallback");
   const stopped = !q.running && s.running === 0 && s.waiting === 0;
-  const donePct = (s.done / s.total) * 100;
-  const failPct = (s.failed / s.total) * 100;
+  // Story 4.3: after a reload, unfinished uploads wait for their files.
+  const onlyPaused = stopped && s.paused > 0 && s.total === 0;
+  const donePct = s.total ? (s.done / s.total) * 100 : 0;
+  const failPct = s.total ? (s.failed / s.total) * 100 : 0;
 
   // Kegagalan DITULIS sebagai teks, tidak pernah hanya segmen berwarna.
-  const title = stopped && !s.failed ? t("titleDone", { section }) : t("titleRunning", { section });
-  const sub = stopped
-    ? s.failed
-      ? t("subDoneFailed", { done: s.done, total: s.total, failed: s.failed })
-      : t("subDone", { done: s.done, total: s.total })
-    : s.failed
-      ? t("subRunningFailed", { done: s.done, total: s.total, failed: s.failed })
-      : t("subRunning", { done: s.done, total: s.total, running: s.running });
+  const title = onlyPaused
+    ? t("titlePaused", { count: s.paused })
+    : stopped && !s.failed
+      ? t("titleDone", { section })
+      : t("titleRunning", { section });
+  const sub = onlyPaused
+    ? t("subPaused")
+    : stopped
+      ? s.failed
+        ? t("subDoneFailed", { done: s.done, total: s.total, failed: s.failed })
+        : t("subDone", { done: s.done, total: s.total })
+      : s.failed
+        ? t("subRunningFailed", { done: s.done, total: s.total, running: s.running, waiting: s.waiting, failed: s.failed })
+        : t("subRunning", { done: s.done, total: s.total, running: s.running, waiting: s.waiting });
 
   return (
     <div className={styles.dock} ref={ref} role="region" aria-label={t("region")}>
@@ -147,7 +155,7 @@ export default function UploadDock() {
         aria-label={t("progress")}
         aria-valuenow={s.done}
         aria-valuemin={0}
-        aria-valuemax={s.total}
+        aria-valuemax={Math.max(1, s.total)}
         aria-valuetext={sub}
       >
         <i style={{ width: `${donePct}%` }} />

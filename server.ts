@@ -20,12 +20,14 @@ import { allowedBeforeSetup, isApiPath } from './src/lib/setupGate';
 import { closeDragonfly, dfClient, withLock } from './src/lib/dragonfly';
 import { disconnectPrisma } from './src/lib/prisma';
 import { purgeExpired } from './src/modules/trash';
+import { expireSessions } from './src/modules/upload';
 import { ConfigError, assertConfig, config } from './src/lib/config';
 import { errMessage, logger } from './src/lib/logger';
 import type { Server, ServerResponse } from 'http';
 
 const log = logger('server');
 const sweepLog = logger('trash-sweeper');
+const uploadSweepLog = logger('upload-sweeper');
 const wsLog = logger('websocket');
 
 /* ------------------------------------------------------------------ */
@@ -137,6 +139,27 @@ async function sweepTrash() {
     }
   } catch (err) {
     sweepLog.error('failed', { err: errMessage(err) });
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Upload sweeper (Story 4.3): hourly, sessions older than 24 h are    */
+/* aborted on the storage backend, their parts and `uploading` rows    */
+/* removed and marked EXPIRED. Same lock rule as the trash sweeper.    */
+/* ------------------------------------------------------------------ */
+const UPLOAD_SWEEP_LOCK = 'shotstash:lock:upload-sweeper';
+
+async function sweepUploads() {
+  const run = () => expireSessions(new Date());
+  try {
+    const locked = await withLock(UPLOAD_SWEEP_LOCK, SWEEP_LOCK_TTL_MS, run);
+    let expired: number;
+    if (locked.ran) expired = locked.value;
+    else if (locked.reason === 'unavailable') expired = await run();
+    else return;
+    if (expired) uploadSweepLog.info('expired', { sessions: expired });
+  } catch (err) {
+    uploadSweepLog.error('failed', { err: errMessage(err) });
   }
 }
 
@@ -320,7 +343,11 @@ app.prepare().then(() => {
     log.info('ready', { url: `http://${hostname}:${port}`, version: config().version, dev });
     setTimeout(() => {
       void sweepTrash();
-      setInterval(() => void sweepTrash(), SWEEP_EVERY_MS).unref();
+      void sweepUploads();
+      setInterval(() => {
+        void sweepTrash();
+        void sweepUploads();
+      }, SWEEP_EVERY_MS).unref();
     }, 60 * 1000).unref();
   });
 });

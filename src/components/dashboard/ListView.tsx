@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { mediaUrl } from "@/lib/mediaUrls";
 import styles from "./ListView.module.css";
 import RepThumb from "./RepThumb";
 import SelectCheck from "./SelectCheck";
@@ -651,10 +650,7 @@ export default function ListView(props: ListViewProps) {
             kind: kindLabel,
             size: sizeText,
           });
-          const thumb =
-            file.thumbnailPath || file.thumbnailUrl
-              ? mediaUrl.thumbnail(file.id)
-              : null;
+          const thumb = (file.thumbnailUrl as string | null | undefined) ?? null;
           const uploader = file.uploadedBy?.name as string | undefined;
           return (
             <div

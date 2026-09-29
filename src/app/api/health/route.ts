@@ -14,11 +14,12 @@
  * proxy without `TRUST_PROXY=true`).
  *
  * `version` is `SHOTSTASH_VERSION` (set by the Docker image), else the
- * version in package.json. Storage is the local storage root until the
- * storage backend abstraction (Epic 4) lands.
+ * version in package.json. `storage` is the configured backend answering
+ * (local root readable and writable, or the S3 bucket reachable).
  */
 import { NextResponse } from 'next/server';
-import { cacheUp, dbUp, storageUp } from '@/lib/healthChecks';
+import { cacheUp, dbUp } from '@/lib/healthChecks';
+import { storageHealth } from '@/modules/storage';
 import { defineRoute } from '@/lib/defineRoute';
 import { CLIENT_IP_HEADER, configuredScheme, requestScheme } from '@/lib/request';
 import { bearerToken, validateSessionToken } from '@/lib/sessionStore';
@@ -42,9 +43,11 @@ export const GET = defineRoute({
   auth: 'public',
   allowBeforeSetup: true,
   handler: async ({ req }) => {
-    const [db, cache, storage] = [await dbUp(), await cacheUp(), await storageUp()];
+    const [db, cache] = [await dbUp(), await cacheUp()];
     let setupRequired = true;
     if (db) setupRequired = !(await isSetupComplete().catch(() => false));
+    // Before first-run setup a fresh local root may be initialised (marker file).
+    const storage = (await storageHealth({ init: setupRequired })).reachable;
     const configured = configuredScheme();
     const ok = db && cache && storage;
     const status = ok ? 200 : 503;

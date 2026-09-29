@@ -182,7 +182,6 @@ const GET_FOLDER = gql`
         mimeType
         size
         createdAt
-        thumbnailPath
         thumbnailUrl
         # Story 2.15 (aditif): kolom "Diunggah oleh" — HANYA ada di tingkat
         # isi Section karena skema hanya menyimpan MediaFile.uploadedBy.
@@ -1077,7 +1076,11 @@ export default function DashboardPage() {
 
   /** Kalimat chip tujuan; selalu tertulis, tidak pernah warna saja. */
   const dragOverChipLabel = (folderName: string): string | null => {
-    if (dragOverKind === "files") return t('drag.pickSection');
+    if (dragOverKind === "files") {
+      // Story 4.3 (key-upload 02a): OS files dropped on a Section card upload into it.
+      const { number, title } = parseSectionName(folderName);
+      return t('drag.uploadTo', { target: `${number ? `NO ${number} ` : ""}${title}` });
+    }
     if (dragOverKind === "item") {
       const { number, title } = parseSectionName(folderName);
       return t('drag.moveTo', { target: `${number ? `NO ${number} ` : ""}${title}` });
@@ -1390,6 +1393,30 @@ export default function DashboardPage() {
   const handleDropOnFolder = async (e: React.DragEvent, targetId: string) => {
     setDragOverFolderId(null);
     setDragOverKind(null);
+    // Story 4.3 (key-upload 02a): files from the computer dropped on a
+    // Section card upload straight into that Section; folders inside the
+    // drop become new sub-Sections of it.
+    if (!dragItem && e.dataTransfer.types.includes('Files')) {
+      if (!currentProjectId || !canUpload) return;
+      e.preventDefault();
+      e.stopPropagation();
+      dropCounterRef.current = 0;
+      setIsDroppingFiles(false);
+      const trees = await readDropAsTrees(e.dataTransfer);
+      if (!trees.length) return;
+      const target = (folders as { id: string; name: string }[]).find((f) => f.id === targetId);
+      const tasks: Parameters<typeof queueDropTree>[3] = [];
+      for (const tree of trees) await queueDropTree(tree, targetId, currentProjectId, tasks);
+      if (tasks.length) {
+        setLiveMessage(t('live.readyToUpload', { count: tasks.length }));
+        upload.open(
+          { projectId: currentProjectId, folderId: targetId, folderName: target?.name ?? null, folderType: null },
+          { tasks: tasks.map((task) => (task.targetFolderId === targetId && !task.subSectionName ? { file: task.file } : task)) },
+        );
+      } else if (currentFolderId) refetchFolder();
+      else refetchRoot();
+      return;
+    }
     // Role yang tidak boleh memindahkan tidak pernah menerima drop item.
     if (!dragItem || !canMove) {
       // Allow bubbling up to the global grid for OS file drops
@@ -1672,7 +1699,7 @@ export default function DashboardPage() {
       file: file
         ? {
             kind: determineType(file.mimeType),
-            thumbnailUrl: file.thumbnailPath ? mediaUrl.thumbnail(file.id) : null,
+            thumbnailUrl: file.thumbnailUrl ?? null,
             extension: (file.originalName?.split(".").pop() || null) as string | null,
           }
         : null,
@@ -2446,8 +2473,8 @@ export default function DashboardPage() {
                   kind={determineType(file.mimeType) as any}
                   sizeBytes={Number(file.size) || 0}
                   thumbnailUrl={
-                    file.thumbnailPath
-                      ? mediaUrl.thumbnail(file.id)
+                    file.thumbnailUrl
+                      ? file.thumbnailUrl
                       : file.mimeType?.startsWith('image/')
                         ? mediaUrl.inline(file.id)
                         : null
@@ -2803,7 +2830,7 @@ export default function DashboardPage() {
           onIndexChange={(i) => setPreviewFile(viewerFiles[i])}
           onClose={() => setPreviewFile(null)}
           srcOf={(f) => inlineSrcOf(f)}
-          posterOf={(f) => (f.thumbnailPath ? mediaUrl.thumbnail(f.id) : undefined)}
+          posterOf={(f) => f.thumbnailUrl ?? undefined}
           projectTitle={currentProjectTitle}
           sectionName={currentFolderName}
           onShare={

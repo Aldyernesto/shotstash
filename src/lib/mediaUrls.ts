@@ -5,7 +5,8 @@
  */
 
 export const mediaUrl = {
-  thumbnail: (fileId: string) => `/media/t/${fileId}`,
+  /** `v` is the file's thumbnail version: a new thumbnail gets a new URL (cache buster). */
+  thumbnail: (fileId: string, v?: number | null) => (v ? `/media/t/${fileId}?v=${v}` : `/media/t/${fileId}`),
   inline: (fileId: string) => `/media/i/${fileId}`,
   download: (fileId: string) => `/media/d/${fileId}`,
   cover: (kind: 'project' | 'user', id: string) => `/media/c/${kind}/${id}`,
@@ -17,10 +18,11 @@ export const mediaUrl = {
   },
 };
 
-const COVER_PATH_RE = /^\/media\/c\/(project|user)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const COVER_PATH_RE = /^\/media\/c\/(project|user)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\?v=\d{1,20})?$/;
 
 /**
- * True only for our own cover paths (`/media/c/(project|user)/<uuid>`), the
+ * True only for our own cover paths (`/media/c/(project|user)/<uuid>`, with an
+ * optional `?v=<n>` cache buster), the
  * values stored for project covers and avatars. External URLs are refused
  * (tracking pixels, mixed content).
  */

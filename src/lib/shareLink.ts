@@ -59,7 +59,7 @@ type RawFile = {
   originalName: string;
   mimeType: string;
   size: bigint | number;
-  thumbnailPath: string | null;
+  thumbVersion: number;
   createdAt: Date;
 };
 
@@ -83,7 +83,7 @@ function toShareFile(f: RawFile, sign: BoundSigner, locale: string): ShareFile {
     kind: fileKindOf(f.mimeType),
     sizeBytes: bytes,
     sizeText: formatFileSize(bytes, { locale }),
-    thumbnailUrl: f.thumbnailPath ? sign(`t:${f.id}`) : null,
+    thumbnailUrl: f.thumbVersion ? sign(`t:${f.id}`) : null,
     inlineUrl: original,
     downloadUrl: original ? `${original}?dl=1` : null,
     duration: null,
@@ -122,9 +122,9 @@ function totalSizeText(files: { size: bigint | number }[], locale: string): stri
 }
 
 function repThumbsOf(files: RawFile[], sign: BoundSigner): (string | null)[] {
-  const withThumb = files.filter((f) => f.thumbnailPath);
+  const withThumb = files.filter((f) => f.thumbVersion);
   const picked = (withThumb.length ? withThumb : files).slice(0, REP_MAX);
-  return picked.map((f) => (f.thumbnailPath ? sign(`t:${f.id}`) : null));
+  return picked.map((f) => (f.thumbVersion ? sign(`t:${f.id}`) : null));
 }
 
 /** True when the folder or any ancestor Section is in the Trash (or the folder is gone). */
@@ -177,10 +177,10 @@ export async function resolveShare(
       folder: {
         include: {
           project: true,
-          files: { where: { trashedAt: null }, orderBy: { createdAt: "desc" } },
+          files: { where: { trashedAt: null, status: "ready" }, orderBy: { createdAt: "desc" } },
           children: {
             where: { trashedAt: null },
-            include: { files: { where: { trashedAt: null }, orderBy: { createdAt: "desc" } } },
+            include: { files: { where: { trashedAt: null, status: "ready" }, orderBy: { createdAt: "desc" } } },
           },
         },
       },
@@ -190,10 +190,10 @@ export async function resolveShare(
             where: { parentId: null, trashedAt: null },
             orderBy: { name: "asc" },
             include: {
-              files: { where: { trashedAt: null }, orderBy: { createdAt: "desc" } },
+              files: { where: { trashedAt: null, status: "ready" }, orderBy: { createdAt: "desc" } },
               children: {
                 where: { trashedAt: null },
-                include: { files: { where: { trashedAt: null }, orderBy: { createdAt: "desc" } } },
+                include: { files: { where: { trashedAt: null, status: "ready" }, orderBy: { createdAt: "desc" } } },
               },
             },
           },
@@ -326,7 +326,7 @@ export async function resolveShare(
 
   /* ---------------- varian file tunggal ---------------- */
   const file = link.file;
-  if (!file || file.trashedAt || (await folderChainTrashed(file.folderId))) {
+  if (!file || file.status !== "ready" || file.trashedAt || (await folderChainTrashed(file.folderId))) {
     return { state: "gone", target: "file" };
   }
   const singleUrl = sign(file.id);
@@ -449,9 +449,9 @@ export async function shareRoots(
   if (link.fileId) {
     const f = await prisma.mediaFile.findUnique({
       where: { id: link.fileId },
-      select: { trashedAt: true, folderId: true },
+      select: { trashedAt: true, folderId: true, status: true },
     });
-    if (!f || f.trashedAt || (await folderChainTrashed(f.folderId))) return null;
+    if (!f || f.status !== "ready" || f.trashedAt || (await folderChainTrashed(f.folderId))) return null;
     return { kind: "file", fileId: link.fileId };
   }
   if (link.folderId) {
@@ -475,8 +475,8 @@ export type ShareMediaFile = {
   id: string;
   originalName: string;
   mimeType: string;
-  storagePath: string;
-  thumbnailPath: string | null;
+  storageKey: string;
+  thumbVersion: number;
 };
 
 /** The file when it is live and inside the share; otherwise null. */
@@ -485,15 +485,16 @@ export async function shareFileInScope(link: LiveShare, fileId: string): Promise
   if (!roots) return null;
   const file = await prisma.mediaFile.findUnique({
     where: { id: fileId },
-    select: { id: true, originalName: true, mimeType: true, storagePath: true, thumbnailPath: true, trashedAt: true, folderId: true },
+    select: { id: true, originalName: true, mimeType: true, storageKey: true, thumbVersion: true, trashedAt: true, folderId: true, status: true },
   });
-  if (!file || file.trashedAt) return null;
+  if (!file || file.trashedAt || file.status !== "ready") return null;
   if (roots.kind === "file") return roots.fileId === file.id ? file : null;
   const scope = await liveSubtree(roots.rootIds);
   if (!scope.some((f) => f.id === file.folderId)) return null;
-  const { trashedAt: _t, folderId: _f, ...rest } = file;
+  const { trashedAt: _t, folderId: _f, status: _s, ...rest } = file;
   void _t;
   void _f;
+  void _s;
   return rest;
 }
 
@@ -521,8 +522,8 @@ export async function shareFilesInScope(link: LiveShare, fileIds: string[]): Pro
   const roots = await shareRoots(link);
   if (!roots) return [];
   const files = await prisma.mediaFile.findMany({
-    where: { id: { in: fileIds }, trashedAt: null },
-    select: { id: true, originalName: true, mimeType: true, storagePath: true, thumbnailPath: true, folderId: true },
+    where: { id: { in: fileIds }, trashedAt: null, status: "ready" },
+    select: { id: true, originalName: true, mimeType: true, storageKey: true, thumbVersion: true, folderId: true },
   });
   let allowed: (f: { id: string; folderId: string }) => boolean;
   if (roots.kind === "file") {

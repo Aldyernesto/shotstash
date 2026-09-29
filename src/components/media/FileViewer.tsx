@@ -28,7 +28,6 @@ export type ViewerFile = ViewerInfoFile & {
   id: string;
   originalName: string;
   mimeType: string;
-  thumbnailPath?: string | null;
   thumbnailUrl?: string | null;
 };
 

@@ -40,6 +40,10 @@ export const LIMITS = {
   setup: { limit: 10, windowMs: 15 * MIN },
   /** Worker endpoints per token (Epic 5 wires the routes). */
   worker: { limit: 600, windowMs: MIN },
+  /** Upload sessions started per user (Story 4.3). */
+  uploadInitiate: { limit: 10000, windowMs: HOUR },
+  /** Upload parts per user: 16 MiB parts at 1 Gbit/s are about 480 a minute. */
+  uploadPart: { limit: 1200, windowMs: MIN },
 } as const satisfies Record<string, Limit>;
 
 /* ------------------------------------------------------------------ */

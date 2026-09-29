@@ -192,13 +192,67 @@ export const VARIABLES = {
   }),
 
   /* ---------- Storage ---------- */
+  STORAGE_BACKEND: withDefault({
+    group: 'Storage',
+    kind: 'infra',
+    schema: z.enum(['local', 's3']),
+    default: 'local' as 'local' | 's3',
+    example: 'local',
+    description:
+      'local (a directory, STORAGE_LOCAL_ROOT) or s3 (any S3-compatible bucket: AWS S3, Cloudflare R2, MinIO, RustFS, SeaweedFS). ' +
+      'One backend per installation; switching later is a copy procedure (docs/storage.md).',
+  }),
   STORAGE_LOCAL_ROOT: withDefault({
     group: 'Storage',
     kind: 'infra',
     schema: text,
     default: './data/media',
     example: './data/media',
-    description: 'Root directory for originals, thumbnails and temporary uploads. The Docker image uses /data/media.',
+    description:
+      'local backend: directory for originals, thumbnails, covers and upload parts (any path, including a NAS mount). ' +
+      'The Docker image uses /data/media.',
+  }),
+  S3_ENDPOINT: opt({
+    group: 'Storage',
+    kind: 'infra',
+    schema: url,
+    description: 's3 backend: endpoint URL, such as https://<account>.r2.cloudflarestorage.com or http://minio:9000. Empty for AWS S3.',
+  }),
+  S3_REGION: withDefault({
+    group: 'Storage',
+    kind: 'infra',
+    schema: text,
+    default: 'us-east-1',
+    example: 'us-east-1',
+    description: 's3 backend: region. R2 uses auto; MinIO and RustFS accept us-east-1.',
+  }),
+  S3_BUCKET: opt({
+    group: 'Storage',
+    kind: 'infra',
+    schema: text,
+    description: 's3 backend: bucket name (required with STORAGE_BACKEND=s3). Keep the bucket private.',
+  }),
+  S3_ACCESS_KEY_ID: opt({
+    group: 'Storage',
+    kind: 'infra',
+    schema: text,
+    description: 's3 backend: access key id (required with STORAGE_BACKEND=s3).',
+  }),
+  S3_SECRET_ACCESS_KEY: opt({
+    group: 'Storage',
+    kind: 'infra',
+    secret: true,
+    generate: false,
+    schema: text,
+    description: 's3 backend: secret access key (required with STORAGE_BACKEND=s3).',
+  }),
+  S3_FORCE_PATH_STYLE: withDefault({
+    group: 'Storage',
+    kind: 'infra',
+    schema: bool,
+    default: false,
+    example: 'false',
+    description: 's3 backend: true for servers that need path-style URLs (MinIO, RustFS, SeaweedFS); false for AWS S3 and R2.',
   }),
 
   /* ---------- Cache ---------- */
@@ -430,6 +484,11 @@ export function loadConfig(env: Env): { config: Config; problems: string[] } {
   // Cross-field rules, after every variable parsed on its own.
   if (values.EMAIL_TRANSPORT === 'resend' && !values.RESEND_API_KEY) {
     problems.push('RESEND_API_KEY: required when EMAIL_TRANSPORT=resend');
+  }
+  if (values.STORAGE_BACKEND === 's3') {
+    for (const name of ['S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const) {
+      if (!values[name]) problems.push(`${name}: required when STORAGE_BACKEND=s3`);
+    }
   }
   const v = values as ConfigValues;
   const config: Config = {

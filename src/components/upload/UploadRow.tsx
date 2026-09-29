@@ -9,14 +9,16 @@
  *
  * Keadaan SELALU tertulis sebagai teks, tidak pernah warna saja (NFR15).
  *
- * Slot aksi kanan sengaja punya lebar minimum: Epic 4 (FR30 / Story 4.9)
- * menyisipkan pill "Coba lagi" di sana tanpa menggeser tata letak. Di
- * gelombang ini pill itu TIDAK dirender.
+ * The fixed-width action slot on the right holds, per state: remove (waiting,
+ * paused), percent (running), a check (done), "Retry" or "Upload anyway"
+ * (failed), and "Choose file" for an unfinished upload from before a reload
+ * (Story 4.3; mock key-upload 04).
  */
 
-import React from "react";
+import React, { useRef } from "react";
 import { useTranslations } from "next-intl";
 import { useFormat } from "@/i18n/useFormat";
+import { PillButton } from "@/components/form/buttons";
 import type { UploadTask } from "./uploadTypes";
 import { useUploadFailureText } from "./useUploadFailureText";
 import styles from "./upload.module.css";
@@ -79,38 +81,58 @@ function statusSentence(task: UploadTask, t: ReturnType<typeof useTranslations<"
     case "merging":
       return t("statusMerging");
     case "uploading":
-      return t("statusUploading", { progress: task.progress });
+      return task.retryIn
+        ? t("statusRetrying", { progress: task.progress, seconds: task.retryIn })
+        : t("statusUploading", { progress: task.progress });
+    case "checking":
+      return t("statusChecking", { progress: task.progress });
+    case "skipped":
+      return t("statusSkipped");
+    case "paused":
+      return t("statusPaused", { done: task.resume?.confirmed ?? 0, total: task.resume?.partCount ?? 0 });
     case "error":
       return t("statusFailed");
     default:
-      return t("statusWaiting");
+      return task.allowDuplicate ? t("statusWaitingDuplicate") : t("statusWaiting");
   }
 }
 
 export default function UploadRow({
   task,
   onRemove,
+  onRetry,
+  onUploadAnyway,
+  onPickFile,
+  disabled = false,
 }: {
   task: UploadTask;
   onRemove: (id: string) => void;
+  onRetry?: (id: string) => void;
+  onUploadAnyway?: (id: string) => void;
+  onPickFile?: (id: string, file: File) => void;
+  /** A batch is running: actions that start uploads wait for it. */
+  disabled?: boolean;
 }) {
   const t = useTranslations("upload.row");
   const f = useFormat();
   const failureText = useUploadFailureText();
+  const pickRef = useRef<HTMLInputElement>(null);
   const failed = task.status === "error";
-  const active = task.status === "uploading" || task.status === "merging";
-  const sizeText = f.fileSize(task.file.size);
+  const active = task.status === "uploading" || task.status === "merging" || task.status === "checking";
+  const name = task.file?.name ?? task.resume?.name ?? "";
+  const sizeText = f.fileSize(task.file?.size ?? task.resume?.size ?? 0);
   const status = statusSentence(task, t);
+  const duplicate = failed && task.error?.reason === "duplicate";
 
   return (
-    <li className={`${styles.row} ${failed ? styles.rowFailed : ""}`}>
+    <li className={`${styles.row} ${failed ? styles.rowFailed : ""} ${task.status === "paused" ? styles.rowPaused : ""}`}>
       <span className={styles.rowTile} aria-hidden="true">
-        {iconFor(task.file.name)}
+        {iconFor(name)}
       </span>
 
       <span className={styles.rowBody}>
-        <span className={`spine-body-sm ${styles.rowName}`} title={task.file.name}>
-          {task.file.name}
+        <span className={`spine-body-sm ${styles.rowName}`} title={name}>
+          {name}
         </span>
 
         {failed ? (
@@ -145,7 +167,7 @@ export default function UploadRow({
           <span
             className={styles.rowBar}
             role="progressbar"
-            aria-label={t("progressOf", { name: task.file.name })}
+            aria-label={t("progressOf", { name })}
             aria-valuenow={task.progress}
             aria-valuemin={0}
             aria-valuemax={100}
@@ -158,10 +180,51 @@ export default function UploadRow({
 
       {/* Slot aksi kanan berukuran tetap (Epic 4 menyisipkan "Coba lagi"). */}
       <span className={styles.rowAction}>
-        {task.status === "pending" ? (
+        {task.status === "paused" && onPickFile ? (
+          <>
+            <PillButton variant="accent" className={styles.rowPill} onClick={() => pickRef.current?.click()}>
+              {t("chooseFile")}
+            </PillButton>
+            <input
+              ref={pickRef}
+              type="file"
+              className="spine-visually-hidden"
+              tabIndex={-1}
+              aria-label={t("chooseFileFor", { name })}
+              onChange={(e) => {
+                const picked = e.target.files?.[0];
+                e.target.value = "";
+                if (picked) onPickFile(task.id, picked);
+              }}
+            />
+          </>
+        ) : null}
+        {failed && !duplicate && onRetry && task.file ? (
+          <PillButton
+            variant="surface"
+            className={styles.rowPill}
+            aria-disabled={disabled || undefined}
+            aria-label={t("retryLabel", { name })}
+            onClick={() => (disabled ? undefined : onRetry(task.id))}
+          >
+            {t("retry")}
+          </PillButton>
+        ) : null}
+        {duplicate && onUploadAnyway && task.file ? (
+          <PillButton
+            variant="surface"
+            className={styles.rowPill}
+            aria-disabled={disabled || undefined}
+            aria-label={t("uploadAnywayLabel", { name })}
+            onClick={() => (disabled ? undefined : onUploadAnyway(task.id))}
+          >
+            {t("uploadAnyway")}
+          </PillButton>
+        ) : null}
+        {task.status === "pending" || task.status === "paused" || task.status === "skipped" ? (
           <button
             type="button"
-            aria-label={t("remove", { name: task.file.name })}
+            aria-label={task.status === "paused" ? t("discard", { name }) : t("remove", { name })}
             className={`spine-focus-ring ${styles.rowRemove}`}
             onClick={() => onRemove(task.id)}
           >

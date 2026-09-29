@@ -6,12 +6,9 @@
     "src/services/email.service.ts",
     "src/services/folder.service.ts",
     "src/services/google-auth.service.ts",
-    "src/services/heic-convert.service.ts",
     "src/services/notification.service.ts",
     "src/services/password-reset.service.ts",
     "src/services/project.service.ts",
-    "src/services/share.service.ts",
-    "src/services/thumbnail.service.ts",
-    "src/services/upload.service.ts"
+    "src/services/share.service.ts"
   ]
 }

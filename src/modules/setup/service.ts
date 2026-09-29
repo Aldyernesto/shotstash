@@ -6,12 +6,9 @@
  * in the same transaction, so of two concurrent submissions exactly one wins;
  * the other gets `SETUP_ALREADY_DONE` and nothing is written.
  */
-import { randomBytes } from 'crypto';
-import { promises as fs } from 'fs';
-import path from 'path';
 import * as bcrypt from 'bcryptjs';
 import prisma from '@/lib/prisma';
-import { storageRoot } from '@/lib/storageRoot';
+import { storage } from '@/modules/storage';
 import { isSetupComplete, markSetupComplete } from '@/lib/setupState';
 import type { SetupInput } from './validate';
 
@@ -29,22 +26,12 @@ export class SetupError extends Error {
 
 export type StorageProbe = { ok: true } | { ok: false; reason: string };
 
-/** Writes, reads back and deletes a probe file under the storage root. */
+/** Writes, reads back and deletes a probe object through the configured storage backend. */
 export async function probeStorage(): Promise<StorageProbe> {
-  const root = storageRoot();
-  const probe = path.join(root, `.shotstash-probe-${randomBytes(8).toString('hex')}`);
-  const payload = randomBytes(16).toString('hex');
   try {
-    await fs.mkdir(root, { recursive: true });
-    await fs.writeFile(probe, payload, { flag: 'wx' });
-    const back = await fs.readFile(probe, 'utf8');
-    if (back !== payload) return { ok: false, reason: 'Storage returned different bytes than were written.' };
-    return { ok: true };
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException)?.code;
-    return { ok: false, reason: code ? `Storage is not writable (${code}).` : 'Storage is not writable.' };
-  } finally {
-    await fs.unlink(probe).catch(() => {});
+    return await storage().probe('write');
+  } catch {
+    return { ok: false, reason: 'Storage is not configured correctly.' };
   }
 }
 

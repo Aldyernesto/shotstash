@@ -298,7 +298,7 @@ export async function deleteUserAccount(targetId: string) {
     const target = await findAdminTarget(targetId, tx);
 
     const [uploads, shareLinks, chats] = await Promise.all([
-      tx.mediaFile.count({ where: { uploadedById: target.id } }),
+      tx.mediaFile.count({ where: { uploadedById: target.id, status: 'ready' } }),
       tx.shareLink.count({ where: { createdById: target.id } }),
       tx.projectChat.count({ where: { senderId: target.id } }),
     ]);
@@ -312,6 +312,9 @@ export async function deleteUserAccount(targetId: string) {
     }
 
     // UploadSession.uploadedById FK Restrict → hapus dulu sebelum user.
+    // Unfinished uploads are not activity: their rows go with the account
+    // (staged parts are removed by the upload sweeper after 48 h).
+    await tx.mediaFile.deleteMany({ where: { uploadedById: target.id, status: 'uploading' } });
     await tx.uploadSession.deleteMany({ where: { uploadedById: target.id } });
     await tx.user.delete({ where: { id: target.id } });
 

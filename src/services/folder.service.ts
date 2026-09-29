@@ -1,56 +1,25 @@
-import { promises as fs } from 'fs';
-import path from 'path';
 import prisma from '../lib/prisma';
-import { getProjectPhysicalPath, sanitizeName } from './project.service';
 import { codedError } from '@/modules/errors';
 
+/**
+ * Creates a Section (optionally inside another). Database only: storage
+ * keys never encode hierarchy, so a Section has no directory (Story 4.1).
+ */
 export async function createFolder(projectId: string, name: string, parentId?: string) {
-  // 1. Validate project
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
   if (!project) throw codedError('NOT_FOUND', 'Project not found');
 
-  // 2. Resolve paths
-  const projectPhysicalPath = await getProjectPhysicalPath(projectId);
-  let parentPhysicalPath = projectPhysicalPath;
-
-  // Validate parent folder if provided
   if (parentId) {
-    const parent = await prisma.folder.findUnique({ where: { id: parentId } });
+    const parent = await prisma.folder.findUnique({ where: { id: parentId }, select: { projectId: true } });
     if (!parent) throw codedError('NOT_FOUND', 'Parent Section not found');
     if (parent.projectId !== projectId) throw codedError('NOT_FOUND', 'Parent Section belongs to a different project');
-    
-    // We would need a recursive function to build the full path if folders are deeply nested,
-    // but for now, let's store folders physically as flat under the project, OR deeply nested.
-    // Deeply nested is better for NAS readability.
-    parentPhysicalPath = await getFolderPhysicalPath(parentId);
   }
 
-  // 3. Create Database Record
-  const folder = await prisma.folder.create({
+  return prisma.folder.create({
     data: {
       name,
       projectId,
       parentId: parentId || null,
     },
   });
-
-  // 4. Create Physical Directory
-  const dirName = `${sanitizeName(name)}-${folder.id}`;
-  const dirPath = path.join(parentPhysicalPath, dirName);
-  await fs.mkdir(dirPath, { recursive: true });
-
-  return folder;
-}
-
-export async function getFolderPhysicalPath(folderId: string): Promise<string> {
-  const folder = await prisma.folder.findUnique({ where: { id: folderId } });
-  if (!folder) throw codedError('NOT_FOUND', 'Section not found');
-
-  if (folder.parentId) {
-    const parentPath = await getFolderPhysicalPath(folder.parentId);
-    return path.join(parentPath, `${sanitizeName(folder.name)}-${folder.id}`);
-  } else {
-    const projectPath = await getProjectPhysicalPath(folder.projectId);
-    return path.join(projectPath, `${sanitizeName(folder.name)}-${folder.id}`);
-  }
 }

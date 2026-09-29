@@ -1,6 +1,7 @@
 // Local end-to-end check of Stories 2.1-2.8 (route auth, cookie media,
 // signed shares, permissions, holes, limits, headers, health, trash
-// lifecycle). NOT part of CI.
+// lifecycle) and 4.1-4.3 (storage keys, parts, resume, dedup, cancel,
+// expiry). NOT part of CI.
 //
 //   npm run dev:db; npx prisma migrate deploy; npx tsx prisma/seed.ts
 //   EMAIL_TRANSPORT=log npm run dev   # reset-limit rows are skipped without an email transport
@@ -11,7 +12,8 @@
 // purged file in that database. Login limits (10 per 15 min per IP and per
 // email) mean a second run within 15 minutes needs a server restart.
 import 'dotenv/config';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import pg from 'pg';
 
@@ -33,10 +35,24 @@ if (!LOCAL.has(hostOf(process.env.DATABASE_URL || ''))) {
   process.exit(2);
 }
 
+// Every upload gets unique bytes: identical bytes in one project are a
+// duplicate (Story 4.3). The clip starts with an ISO media header, so its
+// sniffed type is video/mp4.
+const JPEG = await sharp({ create: { width: 64, height: 48, channels: 3, background: '#808080' } }).jpeg().toBuffer();
 const FIXTURES = {
-  'clip.mp4': randomBytes(17204),
-  'photo.jpg': await sharp({ create: { width: 64, height: 48, channels: 3, background: '#808080' } }).jpeg().toBuffer(),
+  'clip.mp4': () => Buffer.concat([Buffer.from('000000186674797069736f6d0000020069736f6d6d703431', 'hex'), randomBytes(17180)]),
+  'photo.jpg': () => Buffer.concat([JPEG, randomBytes(16)]),
 };
+const md5hex = (buf) => createHash('md5').update(buf).digest('hex');
+const md5b64 = (buf) => createHash('md5').update(buf).digest('base64');
+const putPart = (tok, sessionId, n, buf, md5 = md5b64(buf)) =>
+  fetch(`${B}/api/v1/uploads/${sessionId}/parts/${n}`, {
+    method: 'PUT',
+    headers: { ...(tok ? { authorization: `Bearer ${tok}` } : {}), 'content-md5': md5, 'content-type': 'application/octet-stream' },
+    body: buf,
+  });
+const INIT = 'mutation($i: InitiateUploadInput!){ initiateUpload(input:$i){ id fileId partSize partCount } }';
+const COMPLETE = 'mutation($s: ID!, $m: String){ completeUpload(sessionId:$s, md5Checksum:$m){ id thumbnailUrl downloadUrl md5Checksum duplicateOf } }';
 
 let fails = 0;
 const ok = (cond, label, extra = '') => { console.log(`${cond ? 'PASS' : 'FAIL'} ${label} ${extra}`); if (!cond) fails++; };
@@ -97,19 +113,17 @@ ok(!vme.data.me.permissions.includes('upload'), 'viewer permissions', JSON.strin
 const proj = await gql(editor.token, '{ projects { id title folders { id name } } }');
 const project = proj.data.projects.find((p) => p.title === 'Sample project');
 const folder = project.folders[0];
-async function upload(tok, path, name, folderId = folder.id) {
-  const buf = FIXTURES[path];
-  const init = await gql(tok, 'mutation($i: InitiateUploadInput!){ initiateUpload(input:$i){ id chunkSize totalChunks } }', { i: { filename: name, totalSize: buf.length, projectId: project.id, folderId } });
+async function upload(tok, path, name, folderId = folder.id, buf = FIXTURES[path]()) {
+  const init = await gql(tok, INIT, { i: { filename: name, totalSize: buf.length, projectId: project.id, folderId } });
   if (init.errors) return { init };
   const s = init.data.initiateUpload;
-  const fd = new FormData();
-  fd.append('sessionId', s.id); fd.append('chunkIndex', '0'); fd.append('file', new Blob([buf]), name);
-  const cr = await fetch(`${B}/api/upload/chunk`, { method: 'POST', headers: { authorization: `Bearer ${tok}` }, body: fd });
-  const done = await gql(tok, 'mutation($s: ID!){ completeUpload(sessionId:$s){ id thumbnailUrl downloadUrl } }', { s: s.id });
-  return { init, session: s, chunkStatus: cr.status, done };
+  const pr = await putPart(tok, s.id, 1, buf);
+  const done = await gql(tok, COMPLETE, { s: s.id, m: md5hex(buf) });
+  return { init, session: s, partStatus: pr.status, done, buf };
 }
 const up1 = await upload(editor.token, 'clip.mp4', 'clip.mp4');
-ok(up1.chunkStatus === 200 && up1.done.data?.completeUpload?.id, 'editor uploads video', JSON.stringify(up1.done.errors ?? ''));
+ok(up1.partStatus === 200 && up1.done.data?.completeUpload?.id, 'editor uploads video', JSON.stringify(up1.done.errors ?? ''));
+ok(up1.session.partSize === 16 * 1024 * 1024 && up1.session.partCount === 1, 'server decides the part size (16 MiB) and count', JSON.stringify(up1.session));
 const up2 = await upload(editor.token, 'photo.jpg', 'photo.jpg');
 ok(up2.done.data?.completeUpload?.id, 'editor uploads photo');
 const vid = up1.done.data.completeUpload;
@@ -118,14 +132,198 @@ ok(!/token=/.test(JSON.stringify([vid, pic])), 'no token in media URLs', JSON.st
 const vup = await upload(viewer.token, 'photo.jpg', 'v.jpg');
 ok(code(vup.init) === 'FORBIDDEN', 'viewer initiateUpload FORBIDDEN');
 
-// chunk without session / other's session
-const init3 = await gql(editor.token, 'mutation($i: InitiateUploadInput!){ initiateUpload(input:$i){ id } }', { i: { filename: 'x.jpg', totalSize: 10, projectId: project.id, folderId: folder.id } });
+// ---- Stories 4.1-4.3: parts, resume, checksums, dedup, cancel, expiry
+// One short-lived connection per query: the PGlite dev database serves one
+// connection at a time, so a client held open would block the server.
+const db43 = {
+  async query(text, params) {
+    const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await c.connect();
+    try {
+      return await c.query(text, params);
+    } finally {
+      await c.end();
+    }
+  },
+};
+{
+  const row = (await db43.query('SELECT storage_key, status, "md5Checksum" FROM media_files WHERE id = $1', [vid.id])).rows[0];
+  ok(row?.storage_key === `files/${vid.id}/original.mp4` && row.status === 'ready' && row.md5Checksum === md5hex(up1.buf), 'hierarchy-free key from the sniffed type, ready, MD5 of the bytes', JSON.stringify(row));
+}
+const init3 = await gql(editor.token, INIT, { i: { filename: 'x.jpg', totalSize: 10, projectId: project.id, folderId: folder.id } });
 const sid = init3.data.initiateUpload.id;
-const fd = () => { const f = new FormData(); f.append('sessionId', sid); f.append('chunkIndex', '0'); f.append('file', new Blob([Buffer.alloc(10)]), 'x'); return f; };
-let r = await fetch(`${B}/api/upload/chunk`, { method: 'POST', body: fd() });
-ok(r.status === 401, 'chunk without session 401', r.status);
-r = await fetch(`${B}/api/upload/chunk`, { method: 'POST', headers: { authorization: `Bearer ${crew.token}` }, body: fd() });
-ok(r.status === 403, "chunk into another user's session 403", r.status);
+let r = await putPart(null, sid, 1, Buffer.alloc(10));
+ok(r.status === 401, 'part without session 401', r.status);
+r = await putPart(crew.token, sid, 1, Buffer.alloc(10));
+ok(r.status === 403, "part into another user's session 403", r.status);
+r = await putPart(editor.token, sid, 1, Buffer.alloc(10), md5b64(Buffer.alloc(11)));
+ok(r.status === 400 && (await r.json()).code === 'PART_CHECKSUM_MISMATCH', 'wrong part MD5 400 PART_CHECKSUM_MISMATCH', r.status);
+r = await putPart(editor.token, sid, 1, Buffer.alloc(12));
+ok(r.status === 400 && (await r.json()).code === 'PART_SIZE_MISMATCH', 'part longer than its size 400', r.status);
+r = await putPart(editor.token, sid, 2, Buffer.alloc(10));
+ok(r.status === 400 && (await r.json()).code === 'INVALID_PART_NUMBER', 'part number out of range 400', r.status);
+r = await fetch(`${B}/api/v1/uploads/${sid}/parts/1`, { method: 'PUT', headers: { authorization: `Bearer ${editor.token}` }, body: Buffer.alloc(10) });
+ok(r.status === 400 && (await r.json()).code === 'PART_CHECKSUM_REQUIRED', 'part without Content-MD5 400', r.status);
+ok((await gql(viewer.token, `{ uploadSession(id:"${sid}") { id } }`)).errors, "viewer cannot read an upload session");
+ok(code(await gql(crew.token, `{ uploadSession(id:"${sid}") { id } }`)) === 'FORBIDDEN', "another user's upload session FORBIDDEN");
+// cancel: bytes and row go away, later parts are refused
+ok((await gql(editor.token, `mutation { cancelUpload(sessionId:"${sid}") }`)).data?.cancelUpload === true, 'cancel an upload');
+r = await putPart(editor.token, sid, 1, Buffer.alloc(10));
+ok(r.status === 409 && (await r.json()).code === 'UPLOAD_SESSION_CLOSED', 'part after cancel 409', r.status);
+ok((await db43.query('SELECT 1 FROM media_files WHERE id = $1', [init3.data.initiateUpload.fileId])).rowCount === 0, 'cancel removes the uploading row');
+r = await fetch(`${B}/api/upload/chunk`, { method: 'POST', headers: { authorization: `Bearer ${editor.token}` } });
+ok(r.status === 404, 'old chunk route is gone', r.status);
+
+// resume: two parts, the second sent after asking what the server has
+{
+  const big = randomBytes(16 * 1024 * 1024 + 4321);
+  const i = await gql(editor.token, INIT, { i: { filename: `resume-${RUN}.bin`, totalSize: big.length, projectId: project.id, folderId: folder.id } });
+  const s = i.data.initiateUpload;
+  ok(s.partCount === 2, 'a 16 MiB + 4 KiB file is two parts', s.partCount);
+  const inProgress = await db43.query('SELECT status FROM media_files WHERE id = $1', [s.fileId]);
+  ok(inProgress.rows[0]?.status === 'uploading', 'the file row exists as uploading from initiate on');
+  const listed = await gql(editor.token, `{ folder(id:"${folder.id}") { files { id } } }`);
+  ok(!listed.data.folder.files.some((f) => f.id === s.fileId), 'an uploading file is not listed');
+  ok((await putPart(editor.token, s.id, 1, big.subarray(0, s.partSize))).status === 200, 'part 1 stored');
+  ok((await putPart(editor.token, s.id, 1, big.subarray(0, s.partSize))).status === 200, 'part 1 again (idempotent)');
+  const early = await gql(editor.token, COMPLETE, { s: s.id, m: md5hex(big) });
+  ok(code(early) === 'MISSING_PARTS', 'completing with a part missing MISSING_PARTS', JSON.stringify(early.errors?.[0]?.extensions ?? ''));
+  const state = await gql(editor.token, `{ uploadSession(id:"${s.id}") { status confirmedParts partCount } }`);
+  ok(JSON.stringify(state.data?.uploadSession?.confirmedParts) === '[1]' && state.data.uploadSession.status === 'IN_PROGRESS', 'resume lists confirmed parts', JSON.stringify(state.data));
+  ok((await putPart(editor.token, s.id, 2, big.subarray(s.partSize))).status === 200, 'only the missing part is sent');
+  const fin = await gql(editor.token, COMPLETE, { s: s.id, m: md5hex(big) });
+  ok(fin.data?.completeUpload?.md5Checksum === md5hex(big), 'resumed upload completes with the right MD5', JSON.stringify(fin.errors ?? ''));
+  const again = await gql(editor.token, COMPLETE, { s: s.id, m: md5hex(big) });
+  ok(again.data?.completeUpload?.id === s.fileId, 'completing twice answers the same file');
+  r = await fetch(`${B}/media/d/${s.fileId}`, { headers: { cookie: editor.cookie, range: `bytes=${s.partSize - 5}-${s.partSize + 4}` } });
+  const across = Buffer.from(await r.arrayBuffer());
+  ok(r.status === 206 && across.equals(big.subarray(s.partSize - 5, s.partSize + 5)), 'Range across the part boundary', r.status);
+}
+
+// whole-file checksum mismatch: bytes and row removed
+{
+  const buf = randomBytes(2048);
+  const i = await gql(editor.token, INIT, { i: { filename: `bad-${RUN}.bin`, totalSize: buf.length, projectId: project.id, folderId: folder.id } });
+  const s = i.data.initiateUpload;
+  await putPart(editor.token, s.id, 1, buf);
+  const res = await gql(editor.token, COMPLETE, { s: s.id, m: md5hex(randomBytes(4)) });
+  ok(code(res) === 'CHECKSUM_MISMATCH', 'wrong whole-file MD5 CHECKSUM_MISMATCH');
+  ok((await db43.query('SELECT 1 FROM media_files WHERE id = $1', [s.fileId])).rowCount === 0, 'the damaged upload leaves no row');
+}
+
+// dedup: advisory check by name and size, then by MD5; initiate refuses; upload anyway; race
+{
+  const same = FIXTURES['photo.jpg']();
+  const first = await upload(editor.token, 'photo.jpg', `dup-${RUN}.jpg`, folder.id, same);
+  ok(first.done.data?.completeUpload?.id, 'first copy uploaded');
+  const byName = await gql(editor.token, `query($p: ID!, $c: [DuplicateCandidateInput!]!){ checkDuplicates(projectId:$p, candidates:$c){ match existingFileId } }`, { p: project.id, c: [{ name: `dup-${RUN}.jpg`, size: same.length }, { name: 'other.jpg', size: 1 }] });
+  ok(byName.data?.checkDuplicates?.length === 1 && byName.data.checkDuplicates[0].match === 'name', 'duplicate check by name and size', JSON.stringify(byName));
+  const byMd5 = await gql(editor.token, `query($p: ID!, $c: [DuplicateCandidateInput!]!){ checkDuplicates(projectId:$p, candidates:$c){ match existingFileId } }`, { p: project.id, c: [{ name: 'renamed.jpg', size: same.length, md5: md5hex(same) }] });
+  ok(byMd5.data?.checkDuplicates?.[0]?.match === 'exact' && byMd5.data.checkDuplicates[0].existingFileId === first.done.data.completeUpload.id, 'duplicate check by MD5 finds the same bytes');
+  const refused = await gql(editor.token, INIT, { i: { filename: 'renamed.jpg', totalSize: same.length, projectId: project.id, folderId: folder.id, md5Checksum: md5hex(same) } });
+  ok(code(refused) === 'DUPLICATE_FILE' && refused.errors[0].extensions.existingFileId === first.done.data.completeUpload.id, 'initiate with a known MD5 DUPLICATE_FILE (skip is the default)');
+  const anyway = await gql(editor.token, INIT, { i: { filename: 'renamed.jpg', totalSize: same.length, projectId: project.id, folderId: folder.id, md5Checksum: md5hex(same), allowDuplicate: true } });
+  const sa2 = anyway.data?.initiateUpload;
+  await putPart(editor.token, sa2.id, 1, same);
+  const kept = await gql(editor.token, COMPLETE, { s: sa2.id, m: md5hex(same) });
+  ok(kept.data?.completeUpload?.duplicateOf === first.done.data.completeUpload.id, 'upload anyway: second file ready with duplicateOf');
+  // race: two uploads of new identical bytes, neither opted in
+  const twin = FIXTURES['photo.jpg']();
+  const a = (await gql(editor.token, INIT, { i: { filename: `twin-a-${RUN}.jpg`, totalSize: twin.length, projectId: project.id, folderId: folder.id } })).data.initiateUpload;
+  const b = (await gql(editor.token, INIT, { i: { filename: `twin-b-${RUN}.jpg`, totalSize: twin.length, projectId: project.id, folderId: folder.id } })).data.initiateUpload;
+  await putPart(editor.token, a.id, 1, twin);
+  await putPart(editor.token, b.id, 1, twin);
+  const [ra, rb] = await Promise.all([gql(editor.token, COMPLETE, { s: a.id, m: md5hex(twin) }), gql(editor.token, COMPLETE, { s: b.id, m: md5hex(twin) })]);
+  const winner = ra.data?.completeUpload ? ra : rb;
+  const loser = ra.data?.completeUpload ? rb : ra;
+  ok(winner.data?.completeUpload?.id && code(loser) === 'DUPLICATE_FILE' && loser.errors[0].extensions.existingFileId === winner.data.completeUpload.id, 'race: second identical upload DUPLICATE_FILE with the existing id', `${code(ra)} ${code(rb)}`);
+  const loserFile = ra.data?.completeUpload ? b.fileId : a.fileId;
+  ok((await db43.query('SELECT 1 FROM media_files WHERE id = $1', [loserFile])).rowCount === 0, 'race: the loser row and bytes are removed');
+}
+
+// restore, purge, move and completion retries keep one original per project
+{
+  const fileRow = async (id) => (await db43.query('SELECT status, duplicate_of, "trashedAt" FROM media_files WHERE id = $1', [id])).rows[0];
+  // restore a trashed file whose twin was uploaded meanwhile
+  const bytes = FIXTURES['photo.jpg']();
+  const t1 = (await upload(editor.token, 'photo.jpg', `restore-a-${RUN}.jpg`, folder.id, bytes)).done.data.completeUpload;
+  ok((await gql(editor.token, `mutation { moveToTrash(fileId:"${t1.id}") }`)).data?.moveToTrash === true, 'trash an original');
+  const t2 = (await upload(editor.token, 'photo.jpg', `restore-b-${RUN}.jpg`, folder.id, bytes)).done.data?.completeUpload;
+  ok(t2?.id && !t2.duplicateOf, 'the same bytes upload as a new original while the first is in the Trash');
+  const restored = await gql(editor.token, `mutation { restoreFile(fileId:"${t1.id}") { id duplicateOf } }`);
+  ok(restored.data?.restoreFile?.duplicateOf === t2.id, 'restoring the trashed twin succeeds and marks it as a duplicate', JSON.stringify(restored.errors ?? restored.data));
+
+  // purge an original that has an upload-anyway duplicate: the survivor becomes the original
+  const pb = FIXTURES['photo.jpg']();
+  const orig = (await upload(editor.token, 'photo.jpg', `purge-a-${RUN}.jpg`, folder.id, pb)).done.data.completeUpload;
+  const ai = (await gql(editor.token, INIT, { i: { filename: `purge-b-${RUN}.jpg`, totalSize: pb.length, projectId: project.id, folderId: folder.id, md5Checksum: md5hex(pb), allowDuplicate: true } })).data.initiateUpload;
+  await putPart(editor.token, ai.id, 1, pb);
+  const dupe = (await gql(editor.token, COMPLETE, { s: ai.id, m: md5hex(pb) })).data?.completeUpload;
+  ok(dupe?.duplicateOf === orig.id, 'upload anyway creates a duplicate of the original');
+  await gql(editor.token, `mutation { moveToTrash(fileId:"${orig.id}") }`);
+  const purged = await gql(admin.token, `mutation { permanentDelete(fileId:"${orig.id}") }`);
+  ok(purged.data?.permanentDelete === true, 'purging an original with a duplicate succeeds', JSON.stringify(purged.errors ?? ''));
+  ok((await fileRow(dupe.id))?.duplicate_of === null, 'the surviving duplicate is promoted to original');
+  const again = await gql(editor.token, INIT, { i: { filename: `purge-c-${RUN}.jpg`, totalSize: pb.length, projectId: project.id, folderId: folder.id, md5Checksum: md5hex(pb) } });
+  ok(code(again) === 'DUPLICATE_FILE' && again.errors[0].extensions.existingFileId === dupe.id, 'a new identical upload is flagged against the promoted file');
+
+  // move a file into a project that already holds its bytes
+  const other = (await gql(editor.token, 'mutation($i: CreateProjectInput!){ createProject(input:$i){ id } }', { i: { title: `Move target ${RUN}` } })).data.createProject.id;
+  const otherFolder = (await gql(editor.token, 'mutation($p: ID!, $n: String!){ createFolder(projectId:$p, name:$n){ id } }', { p: other, n: `Inbox ${RUN}` })).data.createFolder.id;
+  const mb = FIXTURES['photo.jpg']();
+  const inOther = (await gql(editor.token, INIT, { i: { filename: `move-a-${RUN}.jpg`, totalSize: mb.length, projectId: other, folderId: otherFolder } })).data.initiateUpload;
+  await putPart(editor.token, inOther.id, 1, mb);
+  const otherFile = (await gql(editor.token, COMPLETE, { s: inOther.id, m: md5hex(mb) })).data.completeUpload;
+  const here = (await upload(editor.token, 'photo.jpg', `move-b-${RUN}.jpg`, folder.id, mb)).done.data.completeUpload;
+  const moved = await gql(editor.token, `mutation { moveFile(fileId:"${here.id}", targetFolderId:"${otherFolder}") { id duplicateOf } }`);
+  ok(moved.data?.moveFile?.duplicateOf === otherFile.id, 'moving a file into a project with identical bytes succeeds (marked duplicate)', JSON.stringify(moved.errors ?? moved.data));
+  await gql(admin.token, `mutation { deleteProject(id:"${other}") }`);
+
+  // a stale completion claim is taken over by a retry
+  const sb = randomBytes(4096);
+  const st = (await gql(editor.token, INIT, { i: { filename: `stale-${RUN}.bin`, totalSize: sb.length, projectId: project.id, folderId: folder.id } })).data.initiateUpload;
+  await putPart(editor.token, st.id, 1, sb);
+  await db43.query(`UPDATE upload_sessions SET status = 'COMPLETING', completing_at = TIMESTAMP '2000-01-01 00:00:00' WHERE id = $1`, [st.id]);
+  const took = await gql(editor.token, COMPLETE, { s: st.id, m: md5hex(sb) });
+  ok(took.data?.completeUpload?.md5Checksum === md5hex(sb), 'a completion claim older than 15 min is taken over', JSON.stringify(took.errors ?? ''));
+  const fresh = (await gql(editor.token, INIT, { i: { filename: `busy-${RUN}.bin`, totalSize: sb.length, projectId: project.id, folderId: folder.id } })).data.initiateUpload;
+  await putPart(editor.token, fresh.id, 1, sb);
+  await db43.query(`UPDATE upload_sessions SET status = 'COMPLETING', completing_at = now() WHERE id = $1`, [fresh.id]);
+  ok(code(await gql(editor.token, COMPLETE, { s: fresh.id, m: md5hex(sb) })) === 'UPLOAD_SESSION_CLOSED', 'a fresh completion claim is not taken over');
+  await db43.query(`UPDATE upload_sessions SET status = 'IN_PROGRESS', completing_at = NULL WHERE id = $1`, [fresh.id]);
+  await gql(editor.token, `mutation { cancelUpload(sessionId:"${fresh.id}") }`);
+
+  // completion resumes after a failure right after assembly (development servers only)
+  const rb = randomBytes(8192);
+  const rs = (await gql(editor.token, INIT, { i: { filename: `__fail_after_assembly__${RUN}.bin`, totalSize: rb.length, projectId: project.id, folderId: folder.id } })).data.initiateUpload;
+  await putPart(editor.token, rs.id, 1, rb);
+  const first = await gql(editor.token, COMPLETE, { s: rs.id, m: md5hex(rb) });
+  if (code(first) === 'STORAGE_UNAVAILABLE') {
+    const st2 = await db43.query('SELECT status, backend_upload_id FROM upload_sessions WHERE id = $1', [rs.id]);
+    ok(st2.rows[0]?.status === 'IN_PROGRESS' && st2.rows[0]?.backend_upload_id === null, 'after a post-assembly failure the session is open and already assembled', JSON.stringify(st2.rows[0]));
+    const second = await gql(editor.token, COMPLETE, { s: rs.id, m: md5hex(rb) });
+    ok(second.data?.completeUpload?.md5Checksum === md5hex(rb), 'the retry skips assembly and completes', JSON.stringify(second.errors ?? ''));
+    r = await fetch(`${B}/media/d/${rs.fileId}`, { headers: { cookie: editor.cookie } });
+    ok(r.status === 200 && Buffer.from(await r.arrayBuffer()).equals(rb), 'the resumed completion serves the right bytes');
+  } else {
+    ok(first.data?.completeUpload?.id, 'completion (failure hook inactive on a production server)');
+    console.log('SKIP completion retry after assembly (the failure hook runs on development servers only)');
+  }
+}
+
+// expiry: a session past 24 h is refused and the sweeper removes it
+{
+  const buf = randomBytes(64);
+  const s = (await gql(editor.token, INIT, { i: { filename: `old-${RUN}.bin`, totalSize: buf.length, projectId: project.id, folderId: folder.id } })).data.initiateUpload;
+  await db43.query(`UPDATE upload_sessions SET "expiresAt" = TIMESTAMP '2000-01-01 00:00:00' WHERE id = $1`, [s.id]);
+  r = await putPart(editor.token, s.id, 1, buf);
+  ok(r.status === 410 && (await r.json()).code === 'UPLOAD_SESSION_EXPIRED', 'part into an expired session 410', r.status);
+  const sweep = spawnSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['tsx', 'scripts/sweep-uploads.ts'], { encoding: 'utf8', shell: process.platform === 'win32' });
+  ok(sweep.status === 0 && /"expired":\s*[1-9]/.test(sweep.stdout), 'sweeper expires old sessions', (sweep.stdout || sweep.stderr).trim().slice(-200));
+  const after = await db43.query('SELECT status FROM upload_sessions WHERE id = $1', [s.id]);
+  ok(after.rows[0]?.status === 'EXPIRED', 'session marked EXPIRED', after.rows[0]?.status);
+  ok((await db43.query('SELECT 1 FROM media_files WHERE id = $1', [s.fileId])).rowCount === 0, 'the uploading row is removed');
+}
 
 // ---- media
 r = await fetch(`${B}/media/t/${pic.id}`);
@@ -140,7 +338,7 @@ ok(r.status === 206 && r.headers.get('content-range')?.startsWith('bytes 0-99/')
 r = await fetch(`${B}/media/d/${vid.id}`, { headers: { cookie: editor.cookie, range: 'bytes=999999999-' } });
 ok(r.status === 416 && /^bytes \*\/\d+$/.test(r.headers.get('content-range') || ''), 'bad range 416', r.headers.get('content-range'));
 r = await fetch(`${B}/media/d/${vid.id}`, { method: 'HEAD', headers: { cookie: editor.cookie } });
-ok(r.status === 200 && r.headers.get('content-length') === String(FIXTURES['clip.mp4'].length), 'HEAD size', r.headers.get('content-length'));
+ok(r.status === 200 && r.headers.get('content-length') === String(up1.buf.length), 'HEAD size', r.headers.get('content-length'));
 r = await fetch(`${B}/media/z?projectId=${project.id}&folderId=${folder.id}`, { headers: { cookie: editor.cookie } });
 ok(r.status === 200 && r.headers.get('content-type') === 'application/zip', 'dashboard zip', r.status);
 for (const old of [`/api/thumbnail/${pic.id}`, `/api/download?projectId=${project.id}&fileIds=${pic.id}&token=${editor.token}`, `/api/cover/x`]) {
@@ -167,7 +365,7 @@ r = await fetch(`${B}/api/v1/status`, { headers: { authorization: `Bearer ${sa.t
 const statusBody = await r.json().catch(() => ({}));
 ok(
   r.status === 200 && typeof statusBody.version === 'string' && typeof statusBody.storage?.reachable === 'boolean' &&
-    statusBody.storage?.backend === 'local' && typeof statusBody.database === 'boolean' && typeof statusBody.cache === 'boolean',
+    statusBody.storage?.backend === (process.env.STORAGE_BACKEND || 'local') && typeof statusBody.database === 'boolean' && typeof statusBody.cache === 'boolean',
   'super admin /api/v1/status 200 with version, storage, database, cache',
   `${r.status} ${JSON.stringify(statusBody)}`,
 );

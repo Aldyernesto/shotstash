@@ -233,6 +233,33 @@ test('cross-field: EMAIL_TRANSPORT=resend needs RESEND_API_KEY', () => {
   assert.deepEqual(cfg.loadConfig({ ...GOOD, EMAIL_TRANSPORT: 'resend', RESEND_API_KEY: 're_x' }).problems, []);
 });
 
+test('storage: local by default; s3 names every missing variable (Story 4.2)', () => {
+  const local = cfg.loadConfig(GOOD);
+  assert.equal(local.config.STORAGE_BACKEND, 'local');
+  assert.equal(local.config.S3_REGION, 'us-east-1');
+  assert.equal(local.config.S3_FORCE_PATH_STYLE, false);
+  const bare = cfg.loadConfig({ ...GOOD, STORAGE_BACKEND: 's3' });
+  for (const name of ['S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY']) {
+    assert.ok(bare.problems.includes(`${name}: required when STORAGE_BACKEND=s3`), bare.problems.join('; '));
+  }
+  const full = cfg.loadConfig({
+    ...GOOD,
+    STORAGE_BACKEND: 's3',
+    S3_ENDPOINT: 'http://127.0.0.1:9000',
+    S3_BUCKET: 'media',
+    S3_ACCESS_KEY_ID: 'key',
+    S3_SECRET_ACCESS_KEY: 'secret',
+    S3_FORCE_PATH_STYLE: 'true',
+  });
+  assert.deepEqual(full.problems, []);
+  assert.equal(full.config.S3_FORCE_PATH_STYLE, true);
+  const bad = cfg.loadConfig({ ...GOOD, STORAGE_BACKEND: 'nas', S3_ENDPOINT: 'ftp://x' });
+  assert.ok(bad.problems.some((p) => p.startsWith('STORAGE_BACKEND:')), bad.problems.join('; '));
+  assert.ok(bad.problems.some((p) => p.startsWith('S3_ENDPOINT:')), bad.problems.join('; '));
+  // The secret key never reaches the browser.
+  assert.equal(cfg.VARIABLES.S3_SECRET_ACCESS_KEY.secret, true);
+});
+
 test('trash retention: 1 to 36500 days', () => {
   for (const bad of ['0', '-1', '36501', '1e9', '2.5']) {
     const { problems } = cfg.loadConfig({ ...GOOD, SHOTSTASH_TRASH_RETENTION_DAYS: bad });

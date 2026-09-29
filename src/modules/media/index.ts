@@ -1,10 +1,10 @@
-// Public surface of the media module: the only way bytes leave the app.
+// Public surface of the media module: the only way bytes leave the app,
+// plus thumbnails, covers and HEIC conversion through the storage backend.
 export {
-  COVER_EXTENSIONS,
   COVER_KINDS,
+  coverIdFromUrl,
   coverResponse,
   coverUrl,
-  coversDir,
   mediaGuard,
   projectZipResponse,
   serveFile,
@@ -22,4 +22,6 @@ export {
 export { parseRange } from './range';
 export type { RangeResult } from './range';
 export { CACHE_COOKIE, CACHE_SIGNED, contentDisposition, notFoundResponse } from './stream';
-
+export { generateThumbnail, needsThumbnail } from './thumbnail';
+export { convertHeicToJpeg, isHeicMime } from './heic';
+export { MAX_COVER_BYTES, deleteCover, saveCover } from './covers';

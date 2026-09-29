@@ -52,7 +52,7 @@ test('a resolver without an auth-map entry stops startup', () => {
 
 test('a map entry without a resolver answers NOT_IMPLEMENTED', () => {
   const r = applyAuthMap(stubs());
-  assert.equal(code(() => r.Mutation.uploadChunk(null, {}, { actor: actor() }, null)), 'NOT_IMPLEMENTED');
+  assert.equal(code(() => r.Mutation.initiateUpload(null, {}, { actor: actor() }, null)), 'NOT_IMPLEMENTED');
   assert.equal(code(() => r.Subscription.notificationReceived.subscribe(null, {}, { actor: actor() }, null)), 'NOT_IMPLEMENTED');
 });
 

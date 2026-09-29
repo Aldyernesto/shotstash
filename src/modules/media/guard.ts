@@ -8,10 +8,9 @@
  * Trashed or missing targets (including a trashed ancestor Section) answer 404.
  */
 
-import { promises as fs } from 'fs';
-import path from 'path';
 import prisma from '@/lib/prisma';
-import { storageRoot } from '@/lib/storageRoot';
+import { coverIdFromUrl, coverUrl } from './coverUrl.ts';
+import { COVER_KINDS, storageKeys, type CoverKind } from '@/modules/storage';
 import { folderChainTrashed, findLiveShare, shareFileInScope, shareZipPlan } from '@/lib/shareLink';
 import { zipFileName, zipPlanForFolders } from '@/lib/mediaTree';
 import { can, type Actor } from '@/modules/auth';
@@ -24,8 +23,8 @@ export type GuardedFile = {
   id: string;
   originalName: string;
   mimeType: string;
-  storagePath: string;
-  thumbnailPath: string | null;
+  storageKey: string;
+  thumbVersion: number;
   projectId: string;
   folderId: string;
 };
@@ -49,30 +48,32 @@ export async function mediaGuard(actor: Actor | null, fileId: string): Promise<G
       id: true,
       originalName: true,
       mimeType: true,
-      storagePath: true,
-      thumbnailPath: true,
+      storageKey: true,
+      thumbVersion: true,
       projectId: true,
       folderId: true,
       trashedAt: true,
+      status: true,
     },
   });
-  if (!file || file.trashedAt || (await folderChainTrashed(file.folderId))) {
+  if (!file || file.status !== 'ready' || file.trashedAt || (await folderChainTrashed(file.folderId))) {
     return { ok: false, response: notFoundResponse() };
   }
-  const { trashedAt: _t, ...rest } = file;
+  const { trashedAt: _t, status: _s, ...rest } = file;
   void _t;
+  void _s;
   return { ok: true, file: rest };
 }
 
 /** Serves one guarded file: thumbnail, inline original or attachment. */
 export async function serveFile(req: Request, file: GuardedFile, variant: 'thumbnail' | 'inline' | 'download', cache: 'cookie' | 'signed') {
   if (variant === 'thumbnail') {
-    if (!file.thumbnailPath) return notFoundResponse();
-    return fileResponse({ req, path: file.thumbnailPath, mimeType: 'image/jpeg', cache });
+    if (!file.thumbVersion) return notFoundResponse();
+    return fileResponse({ req, key: storageKeys.thumbnail(file.id, file.thumbVersion), mimeType: 'image/jpeg', cache });
   }
   return fileResponse({
     req,
-    path: file.storagePath,
+    key: file.storageKey,
     mimeType: file.mimeType,
     cache,
     disposition: { kind: variant === 'inline' ? 'inline' : 'attachment', filename: file.originalName },
@@ -130,10 +131,10 @@ export async function projectZipResponse(
   const ids = fileIds.filter((id) => ID_RE.test(id)).slice(0, 1000);
   if (!ids.length) return Response.json({ code: 'BAD_REQUEST', message: 'folderId or fileIds is required' }, { status: 400 });
   const files = await prisma.mediaFile.findMany({
-    where: { id: { in: ids }, projectId, trashedAt: null },
-    select: { originalName: true, storagePath: true, folderId: true },
+    where: { id: { in: ids }, projectId, trashedAt: null, status: 'ready' },
+    select: { originalName: true, storageKey: true, folderId: true },
   });
-  const live: { path: string; name: string }[] = [];
+  const live: { key: string; name: string }[] = [];
   const used = new Set<string>();
   for (const f of files) {
     if (await folderChainTrashed(f.folderId)) continue;
@@ -141,7 +142,7 @@ export async function projectZipResponse(
     let n = 2;
     while (used.has(name)) name = `${n++}_${f.originalName.replace(/[\\/]/g, '_')}`;
     used.add(name);
-    live.push({ path: f.storagePath, name });
+    live.push({ key: f.storageKey, name });
   }
   if (!live.length) return notFoundResponse();
   return zipResponse({ entries: live, zipName: zipFileName(project.title), cache: 'cookie' });
@@ -151,42 +152,17 @@ export async function projectZipResponse(
 /* Covers (project covers and user avatars)                            */
 /* ------------------------------------------------------------------ */
 
-export const COVER_KINDS = ['project', 'user'] as const;
-export type CoverKind = (typeof COVER_KINDS)[number];
-
-const COVER_EXT: Record<string, string> = {
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.png': 'image/png',
-  '.webp': 'image/webp',
-  '.gif': 'image/gif',
-};
-
-export const COVER_EXTENSIONS = Object.keys(COVER_EXT);
+export { COVER_KINDS };
+export type { CoverKind };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-export function coversDir(): string {
-  return path.join(storageRoot(), 'covers');
-}
+export { coverIdFromUrl, coverUrl };
 
-export function coverUrl(kind: CoverKind, id: string): string {
-  return `/media/c/${kind}/${id}`;
-}
-
-/** Cover bytes by exact file name (`<uuid><ext>`), never by prefix. */
+/** Cover bytes by key (`covers/<kind>/<uuid>.jpg`). */
 export async function coverResponse(req: Request, actor: Actor | null, kind: string, id: string): Promise<Response> {
   if (!actor) return Response.json({ code: 'UNAUTHENTICATED', message: 'Authentication required' }, { status: 401 });
   if (!can(actor, 'project.view')) return forbiddenResponse();
   if (!(COVER_KINDS as readonly string[]).includes(kind) || !UUID_RE.test(id)) return notFoundResponse();
-  for (const ext of COVER_EXTENSIONS) {
-    const p = path.join(coversDir(), `${id}${ext}`);
-    try {
-      await fs.access(p);
-    } catch {
-      continue;
-    }
-    return fileResponse({ req, path: p, mimeType: COVER_EXT[ext], cache: 'cookie' });
-  }
-  return notFoundResponse();
+  return fileResponse({ req, key: storageKeys.cover(kind as CoverKind, id), mimeType: 'image/jpeg', cache: 'cookie' });
 }

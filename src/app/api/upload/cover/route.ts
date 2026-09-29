@@ -1,15 +1,12 @@
 // Cover upload: project covers (`kind=project`, needs `section.create`) and
-// user avatars (`kind=user`, any writable account). Answers the relative
-// cookie-authorised URL `/media/c/<kind>/<id>`; nothing absolute is stored.
-import { promises as fs } from 'fs';
-import path from 'path';
+// user avatars (`kind=user`, any writable account). The image is re-encoded
+// to JPEG and stored through the storage backend; the answer is the
+// relative cookie-authorised URL `/media/c/<kind>/<id>?v=<n>`.
 import { randomUUID } from 'crypto';
 import { NextResponse } from 'next/server';
 import { defineRoute, jsonError } from '@/lib/defineRoute';
 import { can } from '@/modules/auth';
-import { COVER_EXTENSIONS, coverUrl, coversDir, type CoverKind } from '@/modules/media';
-
-const MAX_COVER_BYTES = 10 * 1024 * 1024;
+import { MAX_COVER_BYTES, coverUrl, saveCover, type CoverKind } from '@/modules/media';
 
 export const POST = defineRoute({
   auth: 'session',
@@ -29,12 +26,9 @@ export const POST = defineRoute({
     if (!(file instanceof File)) return jsonError(400, 'BAD_REQUEST', 'No file provided');
     if (file.size > MAX_COVER_BYTES) return jsonError(413, 'TOO_LARGE', 'Cover is too large');
 
-    const ext = path.extname(file.name).toLowerCase() || '.jpg';
-    if (!COVER_EXTENSIONS.includes(ext)) return jsonError(415, 'UNSUPPORTED_TYPE', 'Unsupported image type');
-
     const id = randomUUID();
-    await fs.mkdir(coversDir(), { recursive: true });
-    await fs.writeFile(path.join(coversDir(), `${id}${ext}`), Buffer.from(await file.arrayBuffer()));
+    const saved = await saveCover(kind, id, Buffer.from(await file.arrayBuffer()));
+    if (!saved.ok) return jsonError(415, 'UNSUPPORTED_TYPE', 'Unsupported image type');
 
     return NextResponse.json({ url: coverUrl(kind, id), id });
   },

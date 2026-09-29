@@ -99,6 +99,12 @@ async function main() {
     create: { id: 1, setupCompletedAt: now },
   });
 
+  // Like first-run setup: probe the storage backend, which marks a local
+  // root as the storage root (.shotstash-storage, see docs/storage.md).
+  const { storage } = await import('../src/modules/storage');
+  const probe = await storage().probe('write');
+  if (!probe.ok) console.warn(`[seed] storage probe failed: ${probe.reason}`);
+
   console.log('[seed] done');
   console.log(`[seed] password for every account: ${DEV_PASSWORD}`);
   for (const u of DEV_USERS) console.log(`  ${u.role.padEnd(11)} ${u.email}`);

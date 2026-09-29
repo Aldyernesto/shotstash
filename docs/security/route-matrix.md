@@ -14,7 +14,6 @@ Actions are the `can()` actions of `src/modules/auth/permissions.ts` (`self` = a
 | `/api/graphql` | POST | public | per field (src/graphql/auth-map.ts) |
 | `/api/health` | GET | public |  |
 | `/api/ping` | GET | public |  |
-| `/api/upload/chunk` | POST | session | upload |
 | `/api/upload/cover` | POST | session | section.create (project) / self (user) |
 | `/api/v1/auth/cookie` | POST | session |  |
 | `/api/v1/auth/login` | POST | public |  |
@@ -22,6 +21,7 @@ Actions are the `can()` actions of `src/modules/auth/permissions.ts` (`self` = a
 | `/api/v1/config` | GET | public |  |
 | `/api/v1/setup` | POST | public | first-run only |
 | `/api/v1/status` | GET | session | instance.configure |
+| `/api/v1/uploads/[sessionId]/parts/[partNumber]` | PUT | session | upload |
 | `/media/c/[kind]/[id]` | GET | cookie | project.view |
 | `/media/d/[fileId]` | GET | cookie | media.download |
 | `/media/d/[fileId]` | HEAD | cookie | media.download |
@@ -41,6 +41,7 @@ Actions are the `can()` actions of `src/modules/auth/permissions.ts` (`self` = a
 | --- | --- | --- |
 | `Query.allTrashedFiles` | session | trash.view |
 | `Query.allTrashedFolders` | session | trash.view |
+| `Query.checkDuplicates` | session | upload |
 | `Query.folder` | session | project.view |
 | `Query.me` | public |  |
 | `Query.notifications` | session | self |
@@ -54,6 +55,7 @@ Actions are the `can()` actions of `src/modules/auth/permissions.ts` (`self` = a
 | `Query.shareLinksForTarget` | session | share.manage |
 | `Query.storageStats` | session | instance.configure |
 | `Query.unreadNotificationCount` | session | self |
+| `Query.uploadSession` | session | upload |
 | `Query.users` | session | users.manage |
 | `Mutation.adminSetPassword` | session | users.manage |
 | `Mutation.approveUser` | session | users.manage |
@@ -91,7 +93,6 @@ Actions are the `can()` actions of `src/modules/auth/permissions.ts` (`self` = a
 | `Mutation.updateProfile` | session | self |
 | `Mutation.updateProject` | session | item.move |
 | `Mutation.updateUserRole` | session | users.manage |
-| `Mutation.uploadChunk` | session | upload |
 | `Mutation.verifyPasswordResetCode` | public |  |
 | `Subscription.chatMessages` | session | project.view |
 | `Subscription.notificationReceived` | session | self |

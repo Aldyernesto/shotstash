@@ -48,7 +48,14 @@ client id, enabled features, version, default language) from
 
 | Variable | Default | Required | Description |
 | --- | --- | --- | --- |
-| `STORAGE_LOCAL_ROOT` | `./data/media` |  | Root directory for originals, thumbnails and temporary uploads. The Docker image uses /data/media. |
+| `STORAGE_BACKEND` | `local` |  | local (a directory, STORAGE_LOCAL_ROOT) or s3 (any S3-compatible bucket: AWS S3, Cloudflare R2, MinIO, RustFS, SeaweedFS). One backend per installation; switching later is a copy procedure (docs/storage.md). |
+| `STORAGE_LOCAL_ROOT` | `./data/media` |  | local backend: directory for originals, thumbnails, covers and upload parts (any path, including a NAS mount). The Docker image uses /data/media. |
+| `S3_ENDPOINT` |  |  | s3 backend: endpoint URL, such as https://<account>.r2.cloudflarestorage.com or http://minio:9000. Empty for AWS S3. |
+| `S3_REGION` | `us-east-1` |  | s3 backend: region. R2 uses auto; MinIO and RustFS accept us-east-1. |
+| `S3_BUCKET` |  |  | s3 backend: bucket name (required with STORAGE_BACKEND=s3). Keep the bucket private. |
+| `S3_ACCESS_KEY_ID` |  |  | s3 backend: access key id (required with STORAGE_BACKEND=s3). |
+| `S3_SECRET_ACCESS_KEY` |  |  | s3 backend: secret access key (required with STORAGE_BACKEND=s3). Secret. |
+| `S3_FORCE_PATH_STYLE` | `false` |  | s3 backend: true for servers that need path-style URLs (MinIO, RustFS, SeaweedFS); false for AWS S3 and R2. |
 
 ## Cache
 
