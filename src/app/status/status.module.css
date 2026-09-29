@@ -1,0 +1,88 @@
+/* Story 6.1: status page, styled like the Admin Panel (section-panel +
+   stat-tile, src/app/dashboard/admin/page.module.css). */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  max-width: 1120px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 48px 24px;
+}
+
+.pageHead {
+  margin-bottom: 4px;
+}
+
+.pageTitle {
+  margin: 0;
+  color: var(--app-spine-text);
+}
+
+.pageSub {
+  margin: 12px 0 0;
+  color: var(--app-spine-muted);
+}
+
+.panel {
+  padding: 28px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-xl);
+  background: var(--app-spine-surface);
+}
+
+.panelTitle {
+  margin: 0 0 20px;
+  color: var(--app-spine-text);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.statTile {
+  margin: 0;
+  padding: 20px 22px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-surface-2);
+}
+
+.statLabel {
+  display: block;
+  color: var(--app-spine-muted);
+  text-transform: uppercase;
+}
+
+.statValue {
+  display: block;
+  margin-top: 12px;
+  color: var(--app-spine-text);
+  overflow-wrap: anywhere;
+}
+
+.statBad {
+  color: var(--app-danger);
+}
+
+.note {
+  margin: 20px 0 0;
+  color: var(--app-spine-muted);
+}
+
+@media (max-width: 899px) {
+  .page {
+    padding: 32px 16px;
+  }
+
+  .panel {
+    padding: 16px;
+  }
+
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

@@ -6,15 +6,16 @@
 
 import { resolveLocale } from "../i18n/config.ts";
 import type { ShareFileKind, ShareSection, ShareSort } from "./shareTypes.ts";
+import { config } from "./config.ts";
 
 /**
  * Locale of an anonymous share visitor: the `shotstash_locale` cookie when
- * it names a supported locale, then the instance `DEFAULT_LOCALE`, then
+ * it names a supported locale, then the instance `SHOTSTASH_DEFAULT_LOCALE`, then
  * English.
  */
 export function shareLocale(
   cookieValue: string | null | undefined,
-  instanceDefault: string | null | undefined = process.env.DEFAULT_LOCALE,
+  instanceDefault: string | null | undefined = config().SHOTSTASH_DEFAULT_LOCALE,
 ): string {
   return resolveLocale(cookieValue, instanceDefault);
 }

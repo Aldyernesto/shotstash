@@ -12,6 +12,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { makeTranslator } = await import('../src/modules/i18n/translator.ts');
 const { passwordResetCopy } = await import('../src/emails/passwordResetCopy.ts');
 const codes = await import('../src/lib/errorCodes.ts');
+const { resetConfig } = await import('../src/lib/config.ts');
 
 const en = JSON.parse(readFileSync(path.join(ROOT, 'messages', 'en.json'), 'utf8'));
 const t = makeTranslator({ en }, 'en');
@@ -102,11 +103,12 @@ test('code messages need no arguments the client cannot supply', () => {
 
 /* ---------------- password reset email ---------------- */
 
-test('reset email: null locale, DEFAULT_TIMEZONE=UTC -> English, lang="en", time with "UTC"', () => {
-  // Real resolution: no user locale, no DEFAULT_LOCALE, DEFAULT_TIMEZONE=UTC.
-  const env = { locale: process.env.DEFAULT_LOCALE, zone: process.env.DEFAULT_TIMEZONE };
-  delete process.env.DEFAULT_LOCALE;
-  process.env.DEFAULT_TIMEZONE = 'UTC';
+test('reset email: null locale, SHOTSTASH_DEFAULT_TIMEZONE=UTC -> English, lang="en", time with "UTC"', () => {
+  // Real resolution: no user locale, no default locale, SHOTSTASH_DEFAULT_TIMEZONE=UTC.
+  const env = { locale: process.env.SHOTSTASH_DEFAULT_LOCALE, zone: process.env.SHOTSTASH_DEFAULT_TIMEZONE };
+  delete process.env.SHOTSTASH_DEFAULT_LOCALE;
+  process.env.SHOTSTASH_DEFAULT_TIMEZONE = 'UTC';
+  resetConfig();
   let copy;
   try {
     copy = passwordResetCopy({
@@ -119,10 +121,11 @@ test('reset email: null locale, DEFAULT_TIMEZONE=UTC -> English, lang="en", time
     productName: 'Shotstash',
   });
   } finally {
-    if (env.locale === undefined) delete process.env.DEFAULT_LOCALE;
-    else process.env.DEFAULT_LOCALE = env.locale;
-    if (env.zone === undefined) delete process.env.DEFAULT_TIMEZONE;
-    else process.env.DEFAULT_TIMEZONE = env.zone;
+    if (env.locale === undefined) delete process.env.SHOTSTASH_DEFAULT_LOCALE;
+    else process.env.SHOTSTASH_DEFAULT_LOCALE = env.locale;
+    if (env.zone === undefined) delete process.env.SHOTSTASH_DEFAULT_TIMEZONE;
+    else process.env.SHOTSTASH_DEFAULT_TIMEZONE = env.zone;
+    resetConfig();
   }
   assert.equal(copy.lang, 'en');
   assert.equal(copy.subject, 'Your Shotstash password reset code');

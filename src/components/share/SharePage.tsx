@@ -240,7 +240,7 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
   const tCount = useTranslations("count");
   const tContent = useTranslations("content");
   const locale = useLocale();
-  // The provider's zone (DEFAULT_TIMEZONE): server and browser render the same text.
+  // The provider's zone (SHOTSTASH_DEFAULT_TIMEZONE): server and browser render the same text.
   const timeZone = useTimeZone();
   const [files, setFiles] = useState<ShareFile[]>(payload.files);
   const [sections, setSections] = useState<ShareSection[]>(payload.sections);

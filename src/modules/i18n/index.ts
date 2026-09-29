@@ -2,6 +2,7 @@
 import en from '../../../messages/en.json';
 import { resolveLocale, SUPPORTED_LOCALES } from '@/i18n/config';
 import { makeTranslator, type MessageTree } from './translator';
+import { config } from '@/lib/config';
 
 export {
   FALLBACK_LOCALE,
@@ -19,8 +20,8 @@ const MESSAGES: Record<string, MessageTree> = { en };
 /**
  * Translator for module code with an explicit locale (a recipient's
  * `users.locale`, or null for the instance default). Unknown locales fall
- * back to `DEFAULT_LOCALE`, then English.
+ * back to `SHOTSTASH_DEFAULT_LOCALE`, then English.
  */
 export function translatorFor(locale?: string | null) {
-  return makeTranslator(MESSAGES, resolveLocale(locale, process.env.DEFAULT_LOCALE));
+  return makeTranslator(MESSAGES, resolveLocale(locale, config().SHOTSTASH_DEFAULT_LOCALE));
 }

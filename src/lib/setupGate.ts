@@ -11,6 +11,7 @@ export const PRE_SETUP_EXACT: ReadonlySet<string> = new Set([
   '/setup',
   '/api/v1/setup',
   '/api/health',
+  '/api/v1/config',
   // Root files from public/ and the app metadata routes.
   '/favicon.ico',
   '/icon.svg',

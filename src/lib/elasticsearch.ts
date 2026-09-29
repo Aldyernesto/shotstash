@@ -2,33 +2,40 @@
 // Layer 4: Data Access
 
 import { Client } from '@elastic/elasticsearch';
+import { config } from './config';
+import { logger } from './logger';
+
+const log = logger('elasticsearch');
 
 const globalForElastic = globalThis as unknown as {
   esClient: Client | undefined;
 };
 
-export const esClient =
-  globalForElastic.esClient ??
-  new Client({
-    node: process.env.ELASTICSEARCH_NODE_URL || 'http://127.0.0.1:9200',
-    maxRetries: 1,
-    requestTimeout: 5000,
-  });
-
-if (process.env.NODE_ENV !== 'production') {
-  globalForElastic.esClient = esClient;
+/**
+ * The Elasticsearch client, created on first use, or null when
+ * `ELASTICSEARCH_NODE_URL` is not set (search then uses PostgreSQL only).
+ */
+export function esClient(): Client | null {
+  const node = config().ELASTICSEARCH_NODE_URL;
+  if (!node) return null;
+  if (!globalForElastic.esClient) {
+    globalForElastic.esClient = new Client({ node, maxRetries: 1, requestTimeout: 5000 });
+  }
+  return globalForElastic.esClient;
 }
 
 /**
  * Ensures the basic indices exist on startup.
  */
 export async function initializeElasticsearch() {
+  const client = esClient();
+  if (!client) return;
   try {
     const indexName = 'media_files';
-    const exists = await esClient.indices.exists({ index: indexName });
+    const exists = await client.indices.exists({ index: indexName });
 
     if (!exists) {
-      await esClient.indices.create({
+      await client.indices.create({
         index: indexName,
         mappings: {
           properties: {
@@ -49,12 +56,12 @@ export async function initializeElasticsearch() {
           },
         },
       });
-      console.log(`[Elasticsearch] Created index: ${indexName}`);
+      log.info('created index', { index: indexName });
     } else {
-      console.log(`[Elasticsearch] Index ${indexName} already exists`);
+      log.info('index already exists', { index: indexName });
     }
-  } catch (error) {
-    console.error('[Elasticsearch] Initialization failed:', error);
+  } catch (err) {
+    log.error('initialization failed', { err });
   }
 }
 

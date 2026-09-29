@@ -7,10 +7,14 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 
 import { storageRoot } from '../lib/storageRoot';
+import { errMessage, logger } from '../lib/logger';
+
+const log = logger('thumbnail');
 
 const execFileAsync = promisify(execFile);
 
-const THUMB_DIR = path.join(storageRoot(), 'thumbnails');
+/** Read on use: the storage root comes from configuration. */
+const thumbDir = () => path.join(storageRoot(), 'thumbnails');
 
 const THUMB_WIDTH = 480;
 const THUMB_HEIGHT = 360;
@@ -42,8 +46,8 @@ export function needsThumbnail(filename: string): boolean {
  */
 export async function generateThumbnail(filePath: string, fileId: string): Promise<string | null> {
   try {
-    await fs.mkdir(THUMB_DIR, { recursive: true });
-    const thumbPath = path.join(THUMB_DIR, `${fileId}.jpg`);
+    await fs.mkdir(thumbDir(), { recursive: true });
+    const thumbPath = path.join(thumbDir(), `${fileId}.jpg`);
     const ext = path.extname(filePath).toLowerCase();
 
     if (VIDEO_EXTS.includes(ext)) {
@@ -52,7 +56,7 @@ export async function generateThumbnail(filePath: string, fileId: string): Promi
       return await generateImageThumbnail(filePath, thumbPath);
     }
   } catch (err) {
-    console.warn(`[Thumbnail] Failed for ${filePath}:`, (err as Error).message);
+    log.warn('failed', { file: filePath, err: errMessage(err) });
     return null;
   }
 }
@@ -126,7 +130,7 @@ async function generateVideoThumbnail(filePath: string, thumbPath: string): Prom
       return stat.size > 0 ? thumbPath : null;
     } catch {
       await fs.unlink(tempFrame).catch(() => {});
-      console.warn(`[Thumbnail] Video frame extract failed for ${filePath}:`, (err as Error).message);
+      log.warn('video frame extract failed', { file: filePath, err: errMessage(err) });
       return null;
     }
   }

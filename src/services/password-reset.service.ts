@@ -12,6 +12,10 @@
 
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'crypto';
 import prisma from '@/lib/prisma';
+import { config } from '@/lib/config';
+import { errMessage, logger } from '@/lib/logger';
+
+const log = logger('password-reset');
 import { hashPassword, MIN_PASSWORD_LENGTH } from './auth.service';
 import { PASSWORD_TOO_LONG_MESSAGE, passwordProblem } from '@/lib/passwordRule';
 import { isEmailConfigured, maskEmail, sendEmail } from './email.service';
@@ -98,7 +102,7 @@ function assertAvailable() {
 
 // Pepper server untuk hash kode (kode hanya ~30 bit, jadi jangan simpan SHA polos).
 function codePepper() {
-  return process.env.SESSION_SECRET || 'shotstash:password-reset';
+  return config().SESSION_SECRET || 'shotstash:password-reset';
 }
 
 function hashCode(userId: string, code: string): string {
@@ -157,7 +161,7 @@ async function findUserByEmail(email: string) {
 }
 
 function appUrl() {
-  return (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3005').replace(/\/+$/, '');
+  return config().appUrl;
 }
 
 // Request throttle: the central sliding-window limiter (Story 2.7), 5 per hour
@@ -171,7 +175,7 @@ function enqueueForEmail(email: string, work: () => Promise<void>) {
   const key = email.toLowerCase();
   const previous = pendingWork.get(key) ?? Promise.resolve();
   const next = previous.then(work).catch((error) => {
-    console.error('[password-reset] request failed:', (error as Error)?.message);
+    log.error('request failed', { err: errMessage(error) });
   });
   pendingWork.set(key, next);
   void next.finally(() => {
@@ -221,15 +225,15 @@ async function processResetRequest(email: string, ip?: string) {
   });
   const recent = recentDay.filter((r) => r.createdAt.getTime() > now.getTime() - EMAIL_WINDOW_MS);
   if (recentDay.length >= MAX_REQUESTS_PER_EMAIL_PER_DAY) {
-    console.warn(`[password-reset] skipped: limit ${MAX_REQUESTS_PER_EMAIL_PER_DAY} per 24 h (to=${maskEmail(user.email)})`);
+    log.warn('skipped: daily limit reached', { limit: MAX_REQUESTS_PER_EMAIL_PER_DAY, to: maskEmail(user.email) });
     return;
   }
   if (recent.length >= MAX_REQUESTS_PER_EMAIL) {
-    console.warn(`[password-reset] skipped: limit ${MAX_REQUESTS_PER_EMAIL} per 15 min (to=${maskEmail(user.email)})`);
+    log.warn('skipped: 15 minute limit reached', { limit: MAX_REQUESTS_PER_EMAIL, to: maskEmail(user.email) });
     return;
   }
   if (recent[0] && now.getTime() - recent[0].createdAt.getTime() < RESEND_COOLDOWN_MS) {
-    console.warn(`[password-reset] skipped: resend cooldown (to=${maskEmail(user.email)})`);
+    log.warn('skipped: resend cooldown', { to: maskEmail(user.email) });
     return;
   }
 
@@ -246,7 +250,7 @@ async function processResetRequest(email: string, ip?: string) {
     googleOnly: !user.passwordHash,
     // Story 3.5: the recipient's language, else the instance default.
     locale: user.locale,
-    timeZone: process.env.DEFAULT_TIMEZONE,
+    timeZone: config().SHOTSTASH_DEFAULT_TIMEZONE,
     validMinutes: Math.round(CODE_TTL_MS / 60_000),
   });
   const created = await prisma.passwordResetRequest.create({
@@ -271,7 +275,7 @@ async function processResetRequest(email: string, ip?: string) {
     where: { userId: user.id, id: { not: created.id }, OR: [{ expiresAt: { gt: CANCELLED_AT } }, { resetTokenHash: { not: null } }] },
     data: { expiresAt: CANCELLED_AT, resetTokenHash: null, resetTokenExpiresAt: null },
   });
-  console.info(`[password-reset] code sent (to=${maskEmail(user.email)})`);
+  log.info('code sent', { to: maskEmail(user.email) });
 }
 
 // ============================================
@@ -404,6 +408,6 @@ export async function completeReset(resetToken: string, newPassword: string, con
     return sessions.count;
   });
 
-  console.info(`[password-reset] password changed (to=${maskEmail(request.user.email)}, sessions revoked=${sessionsRevoked})`);
+  log.info('password changed', { to: maskEmail(request.user.email), sessionsRevoked });
   return { userId, email: request.user.email, sessionsRevoked };
 }

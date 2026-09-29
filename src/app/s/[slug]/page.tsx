@@ -24,6 +24,7 @@ import { cookies } from "next/headers";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { brand } from "@/lib/brand";
+import { config } from "@/lib/config";
 import { findLiveShare, recordShareView, resolveShare } from "@/lib/shareLink";
 import { shareSigner, shareUnlocked } from "@/modules/share";
 import ShareRoot from "@/components/share/ShareRoot";
@@ -38,7 +39,7 @@ const OG_IMAGE = {
 
 function shareMetadata(title: string, description: string): Metadata {
   return {
-    metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3005"),
+    metadataBase: new URL(config().appUrl),
     title,
     description,
     openGraph: { title, description, images: [OG_IMAGE] },
@@ -46,7 +47,7 @@ function shareMetadata(title: string, description: string): Metadata {
   };
 }
 
-const GENERIC_METADATA = shareMetadata(brand.productName, `${brand.tagline}.`);
+const genericMetadata = () => shareMetadata(brand.productName, `${brand.tagline}.`);
 
 export async function generateMetadata({
   params,
@@ -54,14 +55,14 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  // Locale: the `shotstash_locale` cookie, then DEFAULT_LOCALE, then English (src/i18n/request.ts).
+  // Locale: the `shotstash_locale` cookie, then SHOTSTASH_DEFAULT_LOCALE, then English (src/i18n/request.ts).
   const locale = await getLocale();
   const res = await resolveShare(slug, { limit: 0, locale });
 
   // Expired, revoked, gone or PRIVATE: generic metadata. A PRIVATE link
   // never leaks names through chat previews, even for an unlocked visitor,
   // because metadata is resolved without the share cookie.
-  if (res.state !== "ok") return GENERIC_METADATA;
+  if (res.state !== "ok") return genericMetadata();
 
   const p = res.payload;
   const title = `${p.title} | ${brand.productName}`;

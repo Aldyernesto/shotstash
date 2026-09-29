@@ -89,7 +89,8 @@
     "googleFailed": "Google sign-in failed. Try again.",
     "googleNetwork": "Google sign-in failed. Check your connection and try again.",
     "googleNotVerified": "Google hasn't verified this email address yet.",
-    "server": "Something went wrong on the server. Try again."
+    "server": "Something went wrong on the server. Try again.",
+    "signupDisabled": "Sign-up is turned off on this {productName} instance. Ask an admin to create your account."
   },
   "authCard": {
     "title": "Studio Access",
@@ -695,6 +696,7 @@
       "CODE_LOCKED": "Too many wrong tries, so this code was cancelled. Request a new code.",
       "EMAIL_NOT_VERIFIED": "Google hasn't verified this email address yet.",
       "EMAIL_TAKEN": "This email is already registered.",
+      "FEATURE_DISABLED": "This feature is turned off on this instance.",
       "FILE_TYPE_NOT_ALLOWED": "This Section only takes {sectionType, select, video {videos} photo {photos} other {documents}}, so .{ext} files can't go here.",
       "GOOGLE_NOT_CONFIGURED": "Google sign-in isn't set up on this server.",
       "GOOGLE_ONLY_ACCOUNT": "This account signs in with Google. Use the \"Sign in with Google\" button.",
@@ -1343,5 +1345,28 @@
         "chats": "{count, plural, one {# chat message} other {# chat messages}}"
       }
     }
+  },
+  "status": {
+    "metaTitle": "Status · {productName}",
+    "title": "Status",
+    "subtitle": "Health of this instance. Only super admins can see this page.",
+    "panelTitle": "Instance",
+    "loading": "Loading status…",
+    "loadFailed": "Couldn't load the status. Reload the page to try again.",
+    "version": "Version",
+    "storageBackend": "Storage backend",
+    "backendLocal": "Local disk",
+    "storage": "Storage",
+    "database": "Database",
+    "cache": "Cache",
+    "search": "Search",
+    "searchOn": "Elasticsearch",
+    "searchOff": "Database only",
+    "reachable": "OK",
+    "unreachable": "Unreachable",
+    "workers": "Active workers",
+    "queuedJobs": "Queued jobs",
+    "notAvailable": "Not available yet",
+    "pipelineNote": "Workers and queued jobs appear here once the processing pipeline ships."
   }
 }

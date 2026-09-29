@@ -6,6 +6,7 @@ import prisma from '@/lib/prisma';
 import { defineRoute, jsonError } from '@/lib/defineRoute';
 import { errorCodeOf } from '@/lib/errorCodes';
 import { can } from '@/modules/auth';
+import { errMessage, logger } from '@/lib/logger';
 
 // Manual multipart parser — handles chunked transfer encoding from nginx
 // proxy_request_buffering off causes req.formData() to fail
@@ -79,7 +80,7 @@ export const POST = defineRoute({
         chunkData: parsed.chunkData,
       });
     } catch (error) {
-      console.error(`[chunk] failed after ${Date.now() - startMs}ms:`, (error as Error)?.message);
+      logger('upload-chunk').error('chunk failed', { ms: Date.now() - startMs, err: errMessage(error) });
       // A closed or vanished session keeps its own code; anything else is UPLOAD_FAILED.
       const code = errorCodeOf(error);
       if (code === 'UPLOAD_SESSION_CLOSED' || code === 'UPLOAD_SESSION_NOT_FOUND') {

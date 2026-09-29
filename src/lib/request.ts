@@ -9,12 +9,14 @@
  * the app is reachable only through a reverse proxy that sets them.
  */
 
+import { config } from './config.ts';
+
 type HeadersLike = { get(name: string): string | null | undefined };
 
 export const CLIENT_IP_HEADER = 'x-shotstash-client-ip';
 
 export function trustProxy(): boolean {
-  return process.env.TRUST_PROXY === 'true';
+  return config().TRUST_PROXY;
 }
 
 export function clientIp(headers: HeadersLike): string | undefined {
@@ -44,9 +46,9 @@ export function requestScheme(req: { url: string; headers: HeadersLike }): 'http
   }
 }
 
-/** Scheme of a configured public URL (`APP_URL`, else `NEXT_PUBLIC_APP_URL`), or null when unset or invalid. */
-export function configuredScheme(env: Record<string, string | undefined> = process.env): 'https' | 'http' | null {
-  const raw = env.APP_URL || env.NEXT_PUBLIC_APP_URL;
+/** Scheme of the configured public URL (`APP_URL`), or null when unset or invalid. */
+export function configuredScheme(settings: { APP_URL?: string } = { APP_URL: config().APP_URL }): 'https' | 'http' | null {
+  const raw = settings.APP_URL;
   if (!raw) return null;
   try {
     const p = new URL(raw).protocol;

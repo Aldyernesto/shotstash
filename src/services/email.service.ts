@@ -9,6 +9,10 @@
 // JANGAN pernah me-log isi pesan (subject/html/text bisa berisi kode reset).
 
 import { brand } from '@/lib/brand';
+import { config } from '@/lib/config';
+import { logger } from '@/lib/logger';
+
+const log = logger('email');
 
 export const DEFAULT_EMAIL_FROM = `${brand.productName} <${brand.emailFrom}>`;
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
@@ -24,12 +28,12 @@ export type EmailMessage = {
 export type SendEmailResult = { ok: true; id?: string } | { ok: false; error: string };
 
 function isLogTransport() {
-  return process.env.EMAIL_TRANSPORT === 'log';
+  return config().EMAIL_TRANSPORT === 'log';
 }
 
 /** true kalau email bisa dikirim (API key Resend ada) atau transport log aktif (dev/test). */
 export function isEmailConfigured(): boolean {
-  return isLogTransport() || !!process.env.RESEND_API_KEY?.trim();
+  return config().features.passwordResetEmail;
 }
 
 // Transport log: hanya pesan terakhir yang disimpan (untuk test E2E).
@@ -53,17 +57,17 @@ export function maskEmail(email: string): string {
 }
 
 export async function sendEmail(message: EmailMessage): Promise<SendEmailResult> {
-  const from = process.env.EMAIL_FROM?.trim() || DEFAULT_EMAIL_FROM;
+  const from = config().EMAIL_FROM || DEFAULT_EMAIL_FROM;
 
   if (isLogTransport()) {
     lastLoggedEmail = { ...message, from, at: new Date() };
-    console.info(`[email] transport=log: message kept, not sent (to=${maskEmail(message.to)})`);
+    log.info('transport=log: message kept, not sent', { to: maskEmail(message.to) });
     return { ok: true };
   }
 
-  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const apiKey = config().RESEND_API_KEY;
   if (!apiKey) {
-    console.error('[email] failed: RESEND_API_KEY is not set');
+    log.error('failed: RESEND_API_KEY is not set');
     return { ok: false, error: 'not_configured' };
   }
 
@@ -93,7 +97,7 @@ export async function sendEmail(message: EmailMessage): Promise<SendEmailResult>
       } catch {
         // body bukan JSON
       }
-      console.error(`[email] Resend send failed: status=${res.status}${errorName ? ` error=${errorName}` : ''} to=${maskEmail(message.to)}`);
+      log.error('Resend send failed', { status: res.status, error: errorName || undefined, to: maskEmail(message.to) });
       return { ok: false, error: errorName || `http_${res.status}` };
     }
 
@@ -101,7 +105,7 @@ export async function sendEmail(message: EmailMessage): Promise<SendEmailResult>
     return { ok: true, id: typeof data.id === 'string' ? data.id : undefined };
   } catch (error) {
     const name = (error as Error)?.name || 'Error';
-    console.error(`[email] Resend send failed: ${name} to=${maskEmail(message.to)}`);
+    log.error('Resend send failed', { error: name, to: maskEmail(message.to) });
     return { ok: false, error: name };
   }
 }

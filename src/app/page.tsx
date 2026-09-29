@@ -21,6 +21,7 @@ import { EMAIL_TAKEN, LOGIN_ERROR_CODES } from '@/lib/authMessages';
 import { errorCodeOf, errorKind } from '@/lib/errorCodes';
 import { brand } from '@/lib/brand';
 import { issueMediaCookie } from '@/lib/authClient';
+import { usePublicConfig } from '@/lib/usePublicConfig';
 // Story 1.31: email hasil reset dibawa lewat sessionStorage (bukan query param).
 import { LOGIN_PREFILL_KEY } from '@/app/forgot-password/shared';
 
@@ -39,6 +40,7 @@ type AuthAlert =
   | 'rejected'
   | 'emailTaken'
   | 'signupFailed'
+  | 'signupDisabled'
   | 'passwordTooShort'
   | 'passwordTooLong'
   | 'googleCancelled'
@@ -72,6 +74,7 @@ function registerAlert(code: string | null | undefined): AuthAlert {
   if (code === 'PASSWORD_TOO_SHORT') return 'passwordTooShort';
   if (code === 'PASSWORD_TOO_LONG') return 'passwordTooLong';
   if (code === EMAIL_TAKEN) return 'emailTaken';
+  if (code === 'FEATURE_DISABLED') return 'signupDisabled';
   return 'signupFailed';
 }
 
@@ -92,6 +95,8 @@ function googleAlert(error: { message?: string; extensions?: { code?: string } }
   if (error?.extensions?.code === 'EMAIL_NOT_VERIFIED') return 'googleNotVerified';
   if (error?.extensions?.code === 'RATE_LIMITED') return 'rateLimited';
   if (error?.extensions?.code === LOGIN_ERROR_CODES.deactivated) return 'deactivated';
+  // Sign-up is off and this Google account has no account here yet.
+  if (error?.extensions?.code === 'FEATURE_DISABLED') return 'signupDisabled';
   return 'googleFailed';
 }
 
@@ -167,14 +172,15 @@ function ClockIcon() {
   );
 }
 
-function GoogleLoginButton({ onSuccess, onError, highlight = false }: {
+function GoogleLoginButton({ clientId, onSuccess, onError, highlight = false }: {
+  /** Runtime Google client id from `/api/v1/config`; empty hides the button. */
+  clientId: string;
   onSuccess: (token: string) => void;
   onError: (alert: AuthAlert) => void;
   highlight?: boolean;
 }) {
   const t = useTranslations('login');
   const locale = useLocale();
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
   const wrapperRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLDivElement>(null);
   const handlersRef = useRef({ onSuccess, onError });
@@ -359,7 +365,7 @@ export default function LandingPage() {
   const tPw = useTranslations('password');
   const tc = useTranslations('common');
   const productName = brand.productName;
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [chosenMode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [signupName, setSignupName] = useState('');
@@ -378,6 +384,12 @@ export default function LandingPage() {
   const [pendingNotice, setPendingNotice] = useState(false);
 
   const { login: authLogin, isAuthenticated, isLoading } = useAuth();
+  // Story 6.3: runtime settings (Google client id, sign-up toggle), no rebuild needed.
+  const publicConfig = usePublicConfig();
+  const googleClientId = publicConfig?.googleClientId ?? '';
+  // Shown only once the settings confirm sign-up is on.
+  const signupEnabled = publicConfig?.features.signup === true;
+  const mode = signupEnabled ? chosenMode : 'login';
 
   // Auto-redirect to dashboard if already logged in
   useEffect(() => {
@@ -527,6 +539,8 @@ export default function LandingPage() {
         return tErr('deactivated', { productName });
       case 'rejected':
         return tErr('rejected', { productName });
+      case 'signupDisabled':
+        return tErr('signupDisabled', { productName });
       case 'passwordTooShort':
         return tPw('tooShort', { min: MIN_PASSWORD_LENGTH });
       case 'passwordTooLong':
@@ -548,7 +562,7 @@ export default function LandingPage() {
       <AuthCard
         title={mode === 'login' ? t('titleLogin') : t('titleSignup')}
         subtitle={mode === 'login' ? undefined : t('subtitleSignup')}
-        tabs={
+        tabs={signupEnabled ? (
           /* Story 1.21: AuthTabs mengisi slot-tabs (tablist + aria-selected +
              panah kiri/kanan). Ganti tab hanya menghapus PESAN form; email,
              password, dan nama dipertahankan (AC: email tidak terhapus). */
@@ -568,7 +582,7 @@ export default function LandingPage() {
               setPendingNotice(false);
             }}
           />
-        }
+        ) : undefined}
         form={(
           /* Satu <form> untuk kedua tab — Enter di field mana pun mengirim
              form tab yang sedang aktif (AC 1.21). Urutan Login: EMAIL →
@@ -671,7 +685,7 @@ export default function LandingPage() {
             </ButtonPrimary>
           </form>
         )}
-        alt={
+        alt={googleClientId ? (
           <>
             {/* Story 1.22: pemisah "OR" — typography.micro (.spine-micro).
                 Kata visual "OR" aria-hidden (hiasan); pembaca layar membaca
@@ -684,6 +698,7 @@ export default function LandingPage() {
             </div>
 
             <GoogleLoginButton
+              clientId={googleClientId}
               highlight={mode === 'login' && loginErrorCode === LOGIN_ERROR_CODES.googleOnly}
               onError={(alert) => { setLoginErrorCode(null); setLoginMessage(alert); }}
               onSuccess={async (token: string) => {
@@ -716,7 +731,7 @@ export default function LandingPage() {
               }}
             />
           </>
-        }
+        ) : undefined}
         help={
           /* Story 1.21: teks bantuan akses hanya di tab Login. Di Sign Up
              slot ini kosong dan AuthCard tidak merender wadahnya sama

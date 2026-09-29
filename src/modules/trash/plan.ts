@@ -66,12 +66,6 @@ export function retentionCutoff(retentionDays: number, now: number = Date.now())
   return new Date(now - days * 24 * 60 * 60 * 1000);
 }
 
-/** `TRASH_RETENTION_DAYS`, default 30; invalid values fall back to 30. */
-export function retentionDaysFromEnv(raw: string | undefined): number {
-  const n = Number(raw);
-  return Number.isInteger(n) && n > 0 ? n : 30;
-}
-
 export type TrashRow = { trashedAt: Date | string | null; trashRootId: string | null };
 
 /** Sweeper selection: trash roots (not cascaded rows) trashed before `cutoff`. */

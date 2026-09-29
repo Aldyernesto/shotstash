@@ -25,6 +25,7 @@ import { getFolderPhysicalPath } from '@/services/folder.service';
 import { getProjectPhysicalPath } from '@/services/project.service';
 import { COVER_EXTENSIONS, coversDir } from '@/modules/media';
 import { batches, expiredRootWhere, planFolderTrash, retentionCutoff, subtreeFolderIds } from './plan';
+import { errMessage, logger } from '@/lib/logger';
 
 export type TrashErrorCode = 'NOT_FOUND' | 'NOT_IN_TRASH' | 'ALREADY_TRASHED' | 'ANCESTOR_TRASHED';
 
@@ -164,12 +165,14 @@ async function removeBytes(files: (string | null | undefined)[], dirs: (string |
 
 /** Best effort: drop purged files from the search index when Elasticsearch is configured. */
 async function removeFromSearch(fileIds: string[]) {
-  if (!fileIds.length || !process.env.ELASTICSEARCH_NODE_URL) return;
+  if (!fileIds.length) return;
   try {
     const { esClient } = await import('@/lib/elasticsearch');
-    await esClient.deleteByQuery({ index: 'media_files', query: { ids: { values: fileIds } }, conflicts: 'proceed' });
+    const es = esClient();
+    if (!es) return;
+    await es.deleteByQuery({ index: 'media_files', query: { ids: { values: fileIds } }, conflicts: 'proceed' });
   } catch (err) {
-    console.warn('[trash] search index cleanup failed:', (err as Error)?.message);
+    logger('trash').warn('search index cleanup failed', { err: errMessage(err) });
   }
 }
 

@@ -59,6 +59,18 @@ jobs:
       - name: Route auth matrix is up to date
         run: npm run security:matrix -- --check
 
+      # Story 6.2: .env.example and docs/configuration.md come from src/lib/config.ts.
+      - name: Env example is up to date
+        run: npm run env:example:check
+
+      # Story 6.3: settings reach the browser through GET /api/v1/config, never the build.
+      - name: No build-time public variables
+        run: |
+          if git grep -n "NEXT_PUBLIC_" -- ':!.github/workflows/pr.yml'; then
+            echo "Build-time public variables are not allowed: read the value from /api/v1/config instead."
+            exit 1
+          fi
+
       - name: Tests
         run: npm test
 
@@ -82,3 +94,105 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Stories 6.1-6.3: the image builds, the compose quick start boots on a
+  # fresh machine, migrations run, the app runs as non-root and survives a
+  # restart, and first-run setup works against the container. CI generates
+  # its own throwaway secrets; nothing here is a real secret.
+  docker:
+    name: Docker image and compose quick start
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VERSION: ci-${{ github.sha }}
+      BASE: http://localhost:3005
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Write .env from .env.example with generated secrets
+        run: |
+          cp .env.example .env
+          sed -i "s/^SESSION_SECRET=.*/SESSION_SECRET=$(openssl rand -hex 32)/" .env
+          sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 32)/" .env
+          sed -i "s/^SETUP_TOKEN=.*/SETUP_TOKEN=$(openssl rand -hex 32)/" .env
+
+      - name: Preflight
+        run: sh docker/preflight.sh
+
+      - name: Build the app image
+        run: docker compose build --build-arg VERSION="$VERSION" app
+
+      - name: Start the stack
+        run: docker compose up -d --wait --wait-timeout 300
+
+      - name: Fresh boot answers health, setup redirect and runtime config
+        run: |
+          curl -fsS "$BASE/api/health" | tee /tmp/health.json; echo
+          jq -e --arg v "$VERSION" '.ok == true and .setupRequired == true and .version == $v' /tmp/health.json
+          headers=$(curl -s -o /dev/null -D - "$BASE/" | tr -d '\r')
+          echo "$headers" | head -n 1 | grep -q ' 302'
+          echo "$headers" | grep -qi '^location: /setup$'
+          curl -fsS -D /tmp/config.headers "$BASE/api/v1/config" | tee /tmp/config.json; echo
+          grep -qi '^content-type: application/json' /tmp/config.headers
+          jq -e --arg v "$VERSION" '.version == $v and .features.signup == true and .googleClientId == null and (.appUrl | type == "string")' /tmp/config.json
+
+      - name: Every migration is applied
+        run: |
+          expected=$(find prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l)
+          applied=$(docker compose exec -T db psql -U shotstash -d shotstash -tAc "select count(*) from _prisma_migrations where finished_at is not null")
+          echo "applied=$applied expected=$expected"
+          test "$applied" -eq "$expected"
+
+      - name: The app process is not root
+        run: |
+          uid=$(docker compose exec -T app awk '/^Uid:/ {print $2}' /proc/1/status)
+          echo "app uid: $uid"
+          test -n "$uid" && test "$uid" != "0"
+
+      - name: Restart keeps working (migrations are a no-op)
+        run: |
+          docker compose restart app
+          for i in $(seq 1 60); do
+            if curl -fsS "$BASE/api/health" >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          curl -fsS "$BASE/api/health" | jq -e '.ok == true'
+          docker compose logs app | grep -q "No pending migrations"
+
+      - name: A bad configuration refuses to start and names the variable
+        run: |
+          set +e
+          out=$(docker compose run --rm -e SHOTSTASH_TRASH_RETENTION_DAYS=abc app 2>&1)
+          status=$?
+          set -e
+          echo "$out" | tail -n 20
+          test "$status" -ne 0
+          echo "$out" | grep -q "config: SHOTSTASH_TRASH_RETENTION_DAYS"
+
+      - name: Install dependencies for the e2e script
+        run: npm ci
+
+      # Runs in the app container's network namespace so health reports its
+      # detailed body (loopback client). DATABASE_URL only satisfies the
+      # script's localhost guard; e2e:setup never connects to it.
+      - name: e2e:setup against the container
+        run: |
+          docker run --rm --network "container:$(docker compose ps -q app)" \
+            -v "$PWD:/w" -w /w \
+            -e E2E_BASE_URL=http://127.0.0.1:3005 \
+            -e E2E_SETUP_TOKEN="$(sed -n 's/^SETUP_TOKEN=//p' .env)" \
+            -e DATABASE_URL=postgresql://guard@127.0.0.1:5432/none \
+            node:24-bookworm-slim node scripts/e2e-setup.mjs
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

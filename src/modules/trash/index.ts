@@ -19,6 +19,5 @@ export {
   isExpiredRoot,
   planFolderTrash,
   retentionCutoff,
-  retentionDaysFromEnv,
   subtreeFolderIds,
 } from './plan';

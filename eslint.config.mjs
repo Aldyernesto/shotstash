@@ -25,6 +25,43 @@ const noDeepModuleImports = {
   message: "Import a module through its public surface '@/modules/<name>' only.",
 };
 
+// Story 6.3: src/lib/config.ts is the only reader of the environment.
+// `process.env.NODE_ENV` stays allowed (a build-time constant, also in client code).
+const localPlugin = {
+  rules: {
+    "no-process-env": {
+      meta: {
+        type: "problem",
+        messages: {
+          env: "Read configuration through config() from '@/lib/config', not process.env (only process.env.NODE_ENV is allowed).",
+        },
+        schema: [],
+      },
+      create(context) {
+        return {
+          MemberExpression(node) {
+            const isProcessEnv =
+              !node.computed &&
+              node.object.type === "Identifier" &&
+              node.object.name === "process" &&
+              node.property.type === "Identifier" &&
+              node.property.name === "env";
+            if (!isProcessEnv) return;
+            const parent = node.parent;
+            const nodeEnv =
+              parent?.type === "MemberExpression" &&
+              parent.object === node &&
+              !parent.computed &&
+              parent.property.type === "Identifier" &&
+              parent.property.name === "NODE_ENV";
+            if (!nodeEnv) context.report({ node, messageId: "env" });
+          },
+        };
+      },
+    },
+  },
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -83,6 +120,12 @@ const eslintConfig = defineConfig([
     },
   },
   {
+    files: ["src/**", "server.ts"],
+    ignores: ["src/lib/config.ts"],
+    plugins: { local: localPlugin },
+    rules: { "local/no-process-env": "error" },
+  },
+  {
     // Unit tests run the module internals directly with node --test (type
     // stripping needs explicit file paths, which the public index cannot give).
     files: ["scripts/**/*.test.mjs"],
@@ -100,6 +143,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Generated Prisma client.
     "src/generated/**",
+    // Compiled custom server (npm run build:server).
+    "dist/**",
   ]),
 ]);
 

@@ -61,7 +61,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   // Story 3.1: the page language follows the resolved locale (cookie from
-  // users.locale, then DEFAULT_LOCALE, then English).
+  // users.locale, then SHOTSTASH_DEFAULT_LOCALE, then English).
   const locale = await getLocale();
   return (
     <html

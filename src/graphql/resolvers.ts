@@ -13,6 +13,8 @@ import * as ProjectService from '../services/project.service';
 import * as PasswordReset from '../services/password-reset.service';
 import prisma from '../lib/prisma';
 import { esClient } from '../lib/elasticsearch';
+import { config } from '../lib/config';
+import { publicSignupRefusal } from '../lib/signupGuard';
 import { pubsub } from '../lib/pubsub';
 import { isRenderableImageUrl, mediaUrl } from '../lib/mediaUrls';
 import { storageRoot } from '../lib/storageRoot';
@@ -35,6 +37,9 @@ import { isSupportedLocale } from '@/modules/i18n';
 import { LOGIN_INTERNAL_ERROR } from '../lib/authMessages';
 import { GraphQLError } from 'graphql';
 import { codedError } from '@/modules/errors';
+import { errMessage, logger } from '../lib/logger';
+
+const log = logger('graphql');
 
 function rateLimited(retryAfter: number) {
   return new GraphQLError('Too many attempts', { extensions: { code: 'RATE_LIMITED', retryAfter } });
@@ -142,13 +147,13 @@ function adminActionFailure(action: string, error: unknown) {
   if (error instanceof AuthService.AdminActionError) {
     return { success: false, message: error.message, password: null, errorCode: error.code, ...error.details };
   }
-  // Jangan log argumen mutasi (bisa berisi password) — cukup pesan error.
-  console.error(`[${action}] failed:`, (error as Error)?.message);
+  // Never log mutation arguments (they may hold a password): the error message only.
+  log.error('admin action failed', { action, err: errMessage(error) });
   return { success: false, message: 'Internal error', password: null, errorCode: 'INTERNAL' };
 }
-// Jejak audit aksi admin berisiko. JANGAN pernah sertakan password.
+// Audit trail of risky admin actions. Never include a password.
 function auditAdminAction(action: string, actor: { id: string; email: string } | null, targetEmail: string) {
-  console.warn(`[audit] action=${action} actorId=${actor?.id} actorEmail=${actor?.email} target=${targetEmail} at=${new Date().toISOString()}`);
+  logger('audit').warn('admin action', { action, actorId: actor?.id, actorEmail: actor?.email, target: targetEmail });
 }
 // Hasil mutasi reset password. Error tak terduga → pesan generik; hanya error.message yang di-log
 // (JANGAN log argumen mutasi: berisi kode/token/password).
@@ -162,7 +167,7 @@ function passwordResetFailure(action: string, error: unknown) {
       attemptsLeft: error.attemptsLeft,
     };
   }
-  console.error(`[${action}] failed:`, (error as Error)?.message);
+  log.error('password reset failed', { action, err: errMessage(error) });
   return { success: false, message: 'Internal error', resetToken: null, errorCode: 'INTERNAL', attemptsLeft: null };
 }
 function parseSignupAnswers(value: unknown) {
@@ -371,7 +376,6 @@ async function folderRepFiles(folder: { id: string; trashedAt?: Date | null }, l
 // Share link: turunan targetType / targetName / url — SATU sumber untuk
 // `shareLinks` (halaman Shared) dan `shareLinksForTarget` (Story 4.4).
 // ============================================
-const SHARE_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3005';
 
 function decorateShareLink<
   T extends {
@@ -399,7 +403,7 @@ function decorateShareLink<
     project: link.projectRef,
     targetType,
     targetName,
-    url: `${SHARE_BASE_URL}/s/${link.slug}`,
+    url: `${config().appUrl}/s/${link.slug}`,
   };
 }
 
@@ -484,19 +488,22 @@ const rawResolvers = {
       assertCan(context.actor, 'project.view');
       // Try ES first, fall back to DB if ES fails or returns empty
       let hits: any[] = [];
-      try {
-        const result = await esClient.search({
-          index: 'media_files',
-          query: {
-            bool: {
-              must: [{ multi_match: { query, fields: ['originalName^3', 'category'], fuzziness: 'AUTO' } }],
-              ...(projectId ? { filter: [{ term: { projectId } }] } : {})
+      const es = esClient();
+      if (es) {
+        try {
+          const result = await es.search({
+            index: 'media_files',
+            query: {
+              bool: {
+                must: [{ multi_match: { query, fields: ['originalName^3', 'category'], fuzziness: 'AUTO' } }],
+                ...(projectId ? { filter: [{ term: { projectId } }] } : {})
+              }
             }
-          }
-        });
-        hits = result.hits.hits;
-      } catch (err) {
-        console.warn('[searchFiles] ES error, using DB:', (err as Error).message);
+          });
+          hits = result.hits.hits;
+        } catch (err) {
+          log.warn('search: Elasticsearch failed, using the database', { err: errMessage(err) });
+        }
       }
       if (hits.length === 0) {
         // Fallback to DB (ES index may be empty or out of sync)
@@ -645,7 +652,7 @@ const rawResolvers = {
         if (error instanceof AuthService.LoginError) {
           return { success: false, message: error.message, errorCode: error.code };
         }
-        console.error('[login] unexpected failure', error);
+        log.error('login: unexpected failure', { err: error });
         return { success: false, message: 'Internal error', errorCode: LOGIN_INTERNAL_ERROR };
       }
     },
@@ -707,6 +714,11 @@ const rawResolvers = {
         }
       }
 
+      // Story 6.3: public sign-up can be switched off (SHOTSTASH_FEATURE_SIGNUP=false);
+      // admins still create accounts.
+      const refusal = publicSignupRefusal(adminCreate, config().features.signup);
+      if (refusal) return refusal;
+
       // Public sign-up (mobile app) or admin-created — both allowed
       try {
         const user = await AuthService.registerUser({
@@ -727,7 +739,7 @@ const rawResolvers = {
         if (error instanceof AuthService.PasswordRuleError || error instanceof AuthService.EmailTakenError) {
           return { success: false, message: error.message, errorCode: error.code };
         }
-        console.error('[register] unexpected failure:', error?.message);
+        log.error('register: unexpected failure', { err: errMessage(error) });
         return { success: false, message: 'Internal error', errorCode: 'INTERNAL' };
       }
     },
@@ -789,7 +801,7 @@ const rawResolvers = {
         clientChunkSize: input.clientChunkSize,
         countryCode,
       });
-      console.log(`[initiateUpload] file=${input.filename} country=${countryCode || '-'} latency=${input.clientLatencyMs || '-'}ms mode=${result.uploadMode}`);
+      log.info('upload initiated', { file: input.filename, country: countryCode || undefined, latencyMs: input.clientLatencyMs || undefined, mode: result.uploadMode });
 
       return {
         id: result.session.id,
@@ -1216,7 +1228,7 @@ const rawResolvers = {
         await fs.mkdir(pathLib.dirname(newPath), { recursive: true });
         await fs.rename(oldPath, newPath);
       } catch (err) {
-        console.warn(`[moveFolder] NAS rename failed ${oldPath} → ${newPath}:`, (err as Error).message);
+        log.warn('moveFolder: rename on disk failed', { from: oldPath, to: newPath, err: errMessage(err) });
       }
 
       // 4) Rewrite storagePath for every file in the moved subtree
@@ -1255,6 +1267,8 @@ const rawResolvers = {
     signupAnswers: (parent: any) => parent.signupAnswers ? JSON.stringify(parent.signupAnswers) : null,
     hasPassword: (parent: { passwordHash?: string | null }) => !!parent.passwordHash,
     readOnly: (parent: { readOnly?: boolean | null }) => !!parent.readOnly,
+    // Story 6.3: instance feature toggles; the schema is the same whatever they are.
+    features: () => config().features,
   },
 
   Project: {

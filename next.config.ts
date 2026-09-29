@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 
 // Story 3.1: next-intl without locale routing; request config in
-// src/i18n/request.ts (locale from cookie, DEFAULT_LOCALE, then en).
+// src/i18n/request.ts (locale from cookie, SHOTSTASH_DEFAULT_LOCALE, then en).
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {

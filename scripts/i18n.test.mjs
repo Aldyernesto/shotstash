@@ -114,7 +114,7 @@ test('built-in English relative words equal the messages', () => {
   assert.equal(fmt.formatRelative(ago(2 * 3600), { now }), t('format.hoursAgo', { count: 2 }));
 });
 
-test('server dates use DEFAULT_TIMEZONE (UTC when unset), not the machine zone', () => {
+test('server dates use SHOTSTASH_DEFAULT_TIMEZONE (UTC when unset), not the machine zone', () => {
   const nearMidnightUtc = new Date('2026-09-28T23:30:00Z');
   assert.equal(fmt.formatServerDate(nearMidnightUtc, undefined), '28 Sep 2026');
   assert.equal(fmt.formatServerDate(nearMidnightUtc, 'UTC'), '28 Sep 2026');

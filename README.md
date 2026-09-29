@@ -11,7 +11,7 @@
 
 Shotstash turns the PC, NAS, or spare drive you already own into a media cloud built for work: projects and sections instead of a flat photo stream, a viewer that respects portrait video, resumable chunked uploads straight from the browser, share links you can hand to a client, and roles for the people you work with. All of it behind a dark, deliberately premium UI.
 
-> **Status: pre-release.** The core has been extracted from a production media library (thousands of files, in daily use since 2026) into this repository with a clean history. The security pass, Docker setup and docs land over the next days. Watch or star the repo to follow the first public release.
+> **Status: pre-release.** The core has been extracted from a production media library (thousands of files, in daily use since 2026) into this repository with a clean history. It runs with one command (see Quick start); docs and the first published images land over the next days. Watch or star the repo to follow the first public release.
 
 ## Why not Immich / PhotoPrism / a DAM?
 
@@ -40,9 +40,72 @@ Next.js 16 · React 19 · TypeScript · Apollo GraphQL + graphql-ws · Prisma 7 
 
 1. Clean extraction of the core from the production codebase (new history, generic branding, env-driven config). Done.
 2. Security review of every public route before the code is readable by the world.
-3. Docker Compose, `.env.example`, and a 10-minute quick start.
+3. Docker Compose, `.env.example`, and a 10-minute quick start. Done (images are published with the first release).
 4. Docs site: install, storage and networking, API reference, bring-your-own-AI guide, user guide.
 5. Public demo instance and launch.
+
+## Quick start (Docker Compose)
+
+You need a Linux x64 machine (or WSL2, or macOS with Docker Desktop) with Docker Engine and the Docker Compose plugin, git, and about 2 GB of free memory. The first start builds the app image, which takes a few minutes; official images arrive with the first release.
+
+```bash
+git clone https://github.com/Aldyernesto/shotstash.git
+cd shotstash
+cp .env.example .env
+```
+
+Open `.env` and fill in the two secrets, each with its own random value:
+
+```bash
+openssl rand -hex 32   # paste as SESSION_SECRET
+openssl rand -hex 32   # paste as POSTGRES_PASSWORD
+```
+
+`POSTGRES_PASSWORD` is fixed when the database is first created: changing it in `.env` later does not change the database, and the app can no longer connect (keep the first value, or start over with `docker compose down -v`).
+
+Set `APP_URL` in `.env` to the address people open, because emails and share links use it: `http://192.168.1.20:3005` for a server on your LAN, or `https://media.example.com` behind a domain. Left empty, it is `http://localhost:3005`, which only works on the server itself.
+
+Then check the machine and start:
+
+```bash
+sh docker/preflight.sh   # Docker present, secrets set, port free
+docker compose up -d
+```
+
+Open `http://localhost:3005` (or `http://<server-ip>:3005`). You land on `/setup`, which creates the owner account; whoever submits it first becomes the super admin, so finish it before the instance is reachable by others, or set `SETUP_TOKEN` in `.env` first. `docker compose ps` shows the services; the app is ready when it reports `healthy`.
+
+What runs: `app` (Shotstash with ffmpeg), `db` (PostgreSQL 17) and `cache` (Dragonfly). Only the app is published on the host; the database and cache are reachable only inside the compose network. Media files live in `./data/media` next to the compose file; the database lives in the `db-data` volume. Database migrations run automatically every time the app starts.
+
+**Configuration.** Every setting is an environment variable in `.env`, read when the app starts: change it and run `docker compose up -d` again, no rebuild. The full list, with defaults: [docs/configuration.md](docs/configuration.md). The app refuses to start when a value is wrong and names each bad variable in `docker compose logs app`.
+
+**Media folder permissions.** The app runs as uid 1000 and fixes the owner of `./data/media` at start. On NFS with `root_squash` or on a CIFS/SMB share it cannot, and the app stops with a message: on the host, make the folder writable by uid 1000 (`sudo chown -R 1000:1000 ./data/media`, or mount the share with `uid=1000,gid=1000`).
+
+**Port already taken.** `docker/preflight.sh` tells you. Set `SHOTSTASH_PORT=8080` (any free port) in `.env`, set `APP_URL=http://localhost:8080` to match, and start again.
+
+**Search (optional).** `docker compose --profile search up -d` adds Elasticsearch (about 1 GB of memory); then set `ELASTICSEARCH_NODE_URL=http://elasticsearch:9200` in `.env` and run `docker compose up -d`. Without it, search runs in PostgreSQL.
+
+**Behind a reverse proxy or tunnel.** Set `APP_URL` to the public `https://` address and `TRUST_PROXY=true`, and only when the app is reachable through the proxy alone.
+
+**WSL2 (Windows).** Run everything inside the Linux distribution and keep the checkout in the Linux file system (for example `~/shotstash`), not under `/mnt/c`: files on the Windows drive are slow and their permissions do not map, so uploads and the database suffer. Docker Desktop with the WSL2 backend, or Docker Engine installed in the distribution, both work. Open the app at `http://localhost:3005` from Windows.
+
+**macOS (Docker Desktop).** Keep the checkout inside a folder Docker Desktop shares (your home folder is shared by default; see Settings, Resources, File sharing). Give Docker at least 4 GB of memory in Settings, Resources when you build the image or use search.
+
+### Logs, upgrades and backups
+
+- **Logs:** `docker compose logs -f app`. The app writes one JSON line per event.
+- **Status:** a super admin can open `/status` for the version, storage, database and cache. `GET /api/health` answers `{ ok, setupRequired, version }` for monitoring.
+- **Upgrade:** `git pull && docker compose up -d --build`. Once images are published, upgrading becomes `docker compose pull && docker compose up -d`.
+- **Rollback:** check out the previous release tag and run `docker compose up -d --build` (with published images: pin the previous image tag). Every migration stays compatible with the previous release, so the older version still runs on the upgraded database. Before v1.0.0 databases are throwaway: a pre-release upgrade may ask you to start with an empty database.
+- **Backup:** stop the app first so files and database match (`docker compose stop app`), dump the database with `docker compose exec -T db pg_dump -U shotstash shotstash > shotstash.sql`, copy `./data/media`, then `docker compose start app`.
+- **Restore:** into an empty database, before the app runs (the app creates its tables at start, and a dump restored on top of them fails with "relation already exists"). Put the files back in `./data/media`, keep the `POSTGRES_PASSWORD` you want in `.env`, then:
+
+  ```bash
+  docker compose down -v                 # removes the old database volume
+  docker compose up -d db                # empty database only, no app yet
+  docker compose exec -T db psql -U shotstash shotstash < shotstash.sql
+  docker compose up -d                   # the app starts; its migrations see an up-to-date database
+  ```
+- **Stop:** `docker compose down` keeps your data; `docker compose down -v` also deletes the database volume.
 
 ## Development
 
@@ -50,7 +113,7 @@ Requires Node.js 24.
 
 ```bash
 npm install
-cp .env.example .env   # set SESSION_SECRET and MEDIA_SIGNING_SECRET (openssl rand -hex 32)
+cp .env.example .env   # set SESSION_SECRET (openssl rand -hex 32); see docs/configuration.md
 npx prisma generate
 npm run dev:db      # embedded PostgreSQL (PGlite) on port 55433; keep it running
 npx prisma migrate deploy   # in a second terminal: apply the migrations
@@ -58,9 +121,9 @@ npm run dev:seed    # then create the development accounts (refuses NODE_ENV=pro
 npm run dev         # app on http://localhost:3005
 ```
 
-A fresh install without the seed starts at `/setup`: until the first super admin exists, every page redirects there and `/api/*` and `/media/*` answer `503 SETUP_REQUIRED`. The wizard checks that the storage folder (`STORAGE_LOCAL_ROOT`) is writable and creates the owner account. Whoever submits it first becomes the super admin: set `SETUP_TOKEN` (the form then asks for it) or finish setup before exposing the instance. `GET /api/health` answers `{ ok, setupRequired }`; from the server itself (loopback) or with a super admin session it also reports version, database, cache, storage and `schemeMismatch`.
+A fresh install without the seed starts at `/setup`: until the first super admin exists, every page redirects there and `/api/*` and `/media/*` answer `503 SETUP_REQUIRED`. The wizard checks that the storage folder (`STORAGE_LOCAL_ROOT`) is writable and creates the owner account. Whoever submits it first becomes the super admin: set `SETUP_TOKEN` (the form then asks for it) or finish setup before exposing the instance. `GET /api/health` answers `{ ok, setupRequired, version }`; from the server itself (loopback) or with a super admin session it also reports version, database, cache, storage and `schemeMismatch`.
 
-Demo instances: after setup, `SHOTSTASH_DEMO_MODE=true DEMO_ADMIN_PASSWORD=... npm run demo:seed` adds read-only demo accounts and a sample project. Trashed items are deleted for good after `TRASH_RETENTION_DAYS` (default 30) by an hourly sweeper.
+Demo instances: after setup, `SHOTSTASH_DEMO_MODE=true DEMO_ADMIN_PASSWORD=... npm run demo:seed` adds read-only demo accounts and a sample project. Trashed items are deleted for good after `SHOTSTASH_TRASH_RETENTION_DAYS` (default 30) by an hourly sweeper.
 
 Before you push, run the same checks CI runs:
 
@@ -71,10 +134,13 @@ npm run typecheck
 npm run check:tokens && npm run check:legacy && npm run brand:css -- --check
 npm run security:matrix -- --check    # docs/security/route-matrix.md matches the code
 npm run i18n:check                   # no Indonesian leftovers anywhere in src or messages
+npm run env:example:check            # .env.example and docs/configuration.md match src/lib/config.ts
 npm test
 node scripts/privacy-scan.mjs --all   # uses gitleaks when installed
-npm run build
+npm run build                         # next build plus the compiled server (dist/server.js)
 ```
+
+Configuration lives in one place, `src/lib/config.ts`: add a variable to its table, run `npm run env:example`, and read it with `config()`. Lint rejects `process.env` anywhere else in `src/` and `server.ts` (`process.env.NODE_ENV` excepted). `npm start` runs the compiled server after `npm run build`.
 
 Local end-to-end checks (not in CI). First-run setup on an empty database: `npm run dev:db:reset`, `npm run dev:db`, `npx prisma migrate deploy`, `npm run dev`, then `npm run e2e:setup` (gate redirect and 503, setup, concurrent 409, redirect after setup). Security: with `npm run dev:db`, `npx prisma migrate deploy`, `npx tsx prisma/seed.ts` and `npm run dev` running, `npm run e2e:security` exercises login, cookie media, signed shares, access codes, role checks, rate limits, security headers, health and the trash lifecycle (start the server with `EMAIL_TRANSPORT=log` to include the reset-limit rows; login limits mean a second run needs 15 minutes or a server restart) against `http://localhost:3005` (override with `E2E_BASE_URL`). Both refuse to run unless the base URL and `DATABASE_URL` point at localhost, and they write test data into that database.
 

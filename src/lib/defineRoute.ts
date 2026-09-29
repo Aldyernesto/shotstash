@@ -29,6 +29,9 @@ import {
   type ValidSession,
 } from '@/lib/sessionStore';
 import { isSetupComplete } from '@/lib/setupState';
+import { errMessage, logger } from '@/lib/logger';
+
+const log = logger('route');
 
 export type AuthMode = 'public' | 'session' | 'cookie' | 'signed' | 'share';
 
@@ -78,7 +81,7 @@ export function defineRoute<P extends RouteParams = Record<string, never>>(def: 
 
       if (def.auth === 'cookie' && !req.nextUrl.pathname.startsWith('/media/')) {
         // The media cookie is scoped to /media; anywhere else it would be a CSRF vector.
-        console.error(`[defineRoute] cookie auth declared outside /media: ${req.nextUrl.pathname}`);
+        log.error('cookie auth declared outside /media', { path: req.nextUrl.pathname });
         return jsonError(500, 'INTERNAL', 'Internal error');
       }
 
@@ -91,7 +94,7 @@ export function defineRoute<P extends RouteParams = Record<string, never>>(def: 
       const params = ((await context?.params) ?? {}) as P;
       return await def.handler({ req, params, actor: session?.actor ?? null, session });
     } catch (err) {
-      console.error(`[route] ${req.method} ${req.nextUrl.pathname} failed:`, (err as Error)?.message);
+      log.error('route failed', { method: req.method, path: req.nextUrl.pathname, err: errMessage(err) });
       return jsonError(500, 'INTERNAL', 'Internal error');
     }
   };

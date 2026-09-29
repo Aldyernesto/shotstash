@@ -21,10 +21,11 @@
     "dev:seed": "node -e \"if(process.env.NODE_ENV==='production'){console.error('Refusing to seed: NODE_ENV=production');process.exit(2)}\" && prisma migrate deploy && tsx prisma/seed.ts",
     "demo:seed": "tsx prisma/demo-seed.ts",
     "dev:db:reset": "node -e \"require('fs').rmSync('.devdb/pgdata',{recursive:true,force:true})\"",
-    "build": "node scripts/check-folder-shell.mjs && next build",
+    "build": "node scripts/check-folder-shell.mjs && next build && npm run build:server",
+    "build:server": "node scripts/build-server.mjs",
     "build:folder-shell": "node scripts/build-folder-shell-geometry.mjs",
     "check:folder-shell": "node scripts/check-folder-shell.mjs",
-    "start": "NODE_ENV=production tsx server.ts",
+    "start": "NODE_ENV=production node dist/server.js",
     "lint": "eslint --max-warnings 287",
     "check:tokens": "node scripts/check-design-tokens.mjs",
     "check:legacy": "node scripts/check-legacy-allowlist.mjs",
@@ -37,6 +38,8 @@
     "e2e:setup": "node scripts/e2e-setup.mjs",
     "typecheck": "tsc --noEmit",
     "i18n:check": "node scripts/i18n-check.mjs",
+    "env:example": "node scripts/gen-env-example.mjs",
+    "env:example:check": "node scripts/gen-env-example.mjs --check",
     "test": "node --test \"scripts/**/*.test.mjs\""
   },
   "dependencies": {
@@ -66,12 +69,15 @@
     "next": "16.2.4",
     "next-intl": "4.14.7",
     "pg": "^8.20.0",
+    "pino": "^10.3.1",
+    "prisma": "^7.8.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "rxjs": "^7.8.2",
     "sharp": "^0.34.5",
     "uuid": "^14.0.0",
-    "ws": "^8.20.0"
+    "ws": "^8.20.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.4.1",
@@ -85,10 +91,10 @@
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.18.1",
     "draco3d": "^1.5.7",
+    "esbuild": "0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "eslint-plugin-i18next": "6.1.5",
-    "prisma": "^7.8.0",
     "tsx": "^4.21.0",
     "typescript": "^5"
   }

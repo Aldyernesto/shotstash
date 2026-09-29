@@ -63,7 +63,7 @@ model User {
   approvedAt    DateTime?
   avatarUrl     String?
   signupAnswers Json?
-  // UI locale (Story 3.1). Null = instance default (DEFAULT_LOCALE, then en).
+  // UI locale (Story 3.1). Null = instance default (SHOTSTASH_DEFAULT_LOCALE, then en).
   locale        String?
   // Denies every write (demo and audit accounts). Reads still work.
   readOnly      Boolean         @default(false) @map("read_only")

@@ -1,4 +1,6 @@
-// Shotstash — Custom Next.js Server with GraphQL WebSocket
+// Shotstash: custom Next.js server with GraphQL over WebSocket.
+// Compiled by esbuild to dist/server.js for production (scripts/build-server.mjs);
+// `npm run dev` runs this file directly with tsx.
 import 'dotenv/config';
 import { createServer, type IncomingMessage } from 'http';
 import type { Duplex } from 'stream';
@@ -15,9 +17,16 @@ import { CLIENT_IP_HEADER, requestScheme } from './src/lib/request';
 import { signingSecret } from './src/lib/signingSecret';
 import { isSetupComplete } from './src/lib/setupState';
 import { allowedBeforeSetup, isApiPath } from './src/lib/setupGate';
-import { withLock } from './src/lib/dragonfly';
-import { purgeExpired, retentionDaysFromEnv } from './src/modules/trash';
-import type { ServerResponse } from 'http';
+import { closeDragonfly, dfClient, withLock } from './src/lib/dragonfly';
+import { disconnectPrisma } from './src/lib/prisma';
+import { purgeExpired } from './src/modules/trash';
+import { ConfigError, assertConfig, config } from './src/lib/config';
+import { errMessage, logger } from './src/lib/logger';
+import type { Server, ServerResponse } from 'http';
+
+const log = logger('server');
+const sweepLog = logger('trash-sweeper');
+const wsLog = logger('websocket');
 
 /* ------------------------------------------------------------------ */
 /* Security headers (Story 2.7): set here on every response, never in  */
@@ -72,7 +81,7 @@ async function setupGate(res: ServerResponse, pathname: string): Promise<boolean
     complete = await isSetupComplete();
   } catch (err) {
     // Database down: say so instead of a generic 500 (and never a JSON page).
-    console.error('[setup-gate] check failed:', (err as Error)?.message);
+    logger('setup-gate').error('check failed', { err: errMessage(err) });
     if (isApiPath(pathname)) {
       sendJson(res, 503, { code: 'SERVICE_UNAVAILABLE', message: 'Service unavailable' });
     } else {
@@ -108,7 +117,7 @@ const SWEEP_BUDGET_MS = 10 * 60 * 1000;
 
 async function sweepTrash() {
   const run = () =>
-    purgeExpired(retentionDaysFromEnv(process.env.TRASH_RETENTION_DAYS), Date.now(), {
+    purgeExpired(config().SHOTSTASH_TRASH_RETENTION_DAYS, Date.now(), {
       deadline: Date.now() + SWEEP_BUDGET_MS,
     });
   try {
@@ -117,35 +126,71 @@ async function sweepTrash() {
     if (locked.ran) {
       result = locked.value;
     } else if (locked.reason === 'unavailable') {
-      console.warn('[trash-sweeper] no lock store (Dragonfly unavailable): running as a single instance');
+      sweepLog.warn('no lock store (Dragonfly unavailable): running as a single instance');
       result = await run();
     } else {
-      console.log('[trash-sweeper] skipped: another instance holds the lock');
+      sweepLog.info('skipped: another instance holds the lock');
       return;
     }
     if (result.files || result.folders || result.stoppedEarly) {
-      console.log(
-        `[trash-sweeper] purged ${result.files} files, ${result.folders} sections${result.stoppedEarly ? ' (time budget reached, continues next hour)' : ''}`,
-      );
+      sweepLog.info('purged', { files: result.files, sections: result.folders, stoppedEarly: result.stoppedEarly });
     }
   } catch (err) {
-    console.error('[trash-sweeper] failed:', (err as Error)?.message);
+    sweepLog.error('failed', { err: errMessage(err) });
   }
 }
 
-// Fail closed before serving anything: signed share URLs need a real secret.
+// Fail fast before serving anything: every bad variable is listed by name,
+// and signed share URLs need a real secret.
 try {
+  assertConfig();
   signingSecret();
 } catch (err) {
-  console.error(`[startup] ${(err as Error).message}`);
+  const problems = err instanceof ConfigError ? err.problems : [errMessage(err)];
+  log.fatal('invalid configuration, see .env.example and docs/configuration.md', { problems });
+  // Also as plain lines, so a person reading `docker compose logs` sees them at once.
+  for (const p of problems) process.stderr.write(`config: ${p}\n`);
   process.exit(1);
 }
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
-const port = parseInt(process.env.PORT || '3005', 10);
+const port = config().PORT;
+// Connect to Dragonfly now, so the first health check finds it ready.
+dfClient();
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
+
+/* ------------------------------------------------------------------ */
+/* Graceful shutdown (Story 6.1): `docker stop` sends SIGTERM and kills */
+/* after the grace period (20 s in docker-compose.yml, 10 s by default). */
+/* Handlers are installed before app.prepare(), so a stop during boot   */
+/* exits at once. Open WebSockets are terminated, idle keep-alive       */
+/* sockets closed, busy ones cut after a short grace, then Prisma and   */
+/* Dragonfly disconnect. A fallback timer exits well inside 10 s.       */
+/* ------------------------------------------------------------------ */
+const SHUTDOWN_GRACE_MS = 3_000;
+const SHUTDOWN_DEADLINE_MS = 8_000;
+let httpServer: Server | null = null;
+let wsClients: WebSocketServer | null = null;
+let stopping = false;
+
+function shutdown(signal: string) {
+  if (stopping) return;
+  stopping = true;
+  log.info('shutting down', { signal });
+  setTimeout(() => process.exit(0), SHUTDOWN_DEADLINE_MS).unref();
+  const done = () => {
+    void Promise.allSettled([disconnectPrisma(), closeDragonfly()]).finally(() => process.exit(0));
+  };
+  if (!httpServer) return done();
+  for (const ws of wsClients?.clients ?? []) ws.terminate();
+  httpServer.close(done);
+  httpServer.closeIdleConnections();
+  setTimeout(() => httpServer?.closeAllConnections(), SHUTDOWN_GRACE_MS).unref();
+}
+process.once('SIGTERM', () => shutdown('SIGTERM'));
+process.once('SIGINT', () => shutdown('SIGINT'));
 
 app.prepare().then(() => {
   // Harus setelah prepare(): Next melempar kalau diminta lebih awal.
@@ -161,7 +206,7 @@ app.prepare().then(() => {
       if (await setupGate(res, parsedUrl.pathname ?? '/')) return;
       await handle(req, res, parsedUrl);
     } catch (err) {
-      console.error('Error handling', req.url, (err as Error)?.message);
+      log.error('request failed', { url: req.url, err: errMessage(err) });
       // Part of a response already went out: nothing sensible can follow.
       if (res.headersSent) {
         res.destroy();
@@ -176,6 +221,7 @@ app.prepare().then(() => {
 
   // WebSocket Server for GraphQL subscriptions
   const wsServer = new WebSocketServer({ noServer: true });
+  wsClients = wsServer;
   const serverCleanup = useServer(
     {
       schema,
@@ -216,7 +262,7 @@ app.prepare().then(() => {
     wsServer
   );
 
-  console.log('[WebSocket] GraphQL-WS server ready');
+  wsLog.info('GraphQL-WS server ready');
 
   // Story 4.3: Next 16 (`next/dist/server/next.js` → setupWebSocketHandler)
   // memasang listener 'upgrade' miliknya SENDIRI ke server ini lewat
@@ -237,10 +283,10 @@ app.prepare().then(() => {
 
   const handleUpgrade: UpgradeListener = (request, socket, head) => {
     const { pathname } = parse(request.url!);
-    console.log('[WS-UPGRADE]', pathname);
+    wsLog.debug('upgrade', { path: pathname });
     if (pathname === '/api/graphql') {
       wsServer.handleUpgrade(request, socket, head, (ws) => {
-        console.log('[WS-UPGRADE] connection upgraded');
+        wsLog.debug('connection upgraded');
         wsServer.emit('connection', ws, request);
       });
     } else if (nextUpgrade) {
@@ -261,16 +307,17 @@ app.prepare().then(() => {
   server.on('upgrade', handleUpgrade);
 
   server.once('error', (err) => {
-    console.error(err);
+    log.fatal('server error', { err });
     process.exit(1);
   });
 
   process.on('unhandledRejection', (reason) => {
-    console.error('[unhandledRejection]', reason);
+    log.error('unhandled rejection', { err: reason instanceof Error ? reason : errMessage(reason) });
   });
 
+  httpServer = server;
   server.listen(port, () => {
-    console.log(`> Ready on http://${hostname}:${port}`);
+    log.info('ready', { url: `http://${hostname}:${port}`, version: config().version, dev });
     setTimeout(() => {
       void sweepTrash();
       setInterval(() => void sweepTrash(), SWEEP_EVERY_MS).unref();

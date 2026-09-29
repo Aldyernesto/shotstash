@@ -6,9 +6,17 @@ import { createSession } from './auth.service';
 import { googleEmailDecision } from '@/lib/googleEmail';
 import { LOGIN_ERROR_CODES } from '@/lib/authMessages';
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
-const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
-const ALLOWED_AUDIENCES = [GOOGLE_CLIENT_ID].filter(Boolean);
+import { config } from '@/lib/config';
+import { publicSignupRefusal } from '@/lib/signupGuard';
+
+// Created on first use from GOOGLE_CLIENT_ID; null while it is not set.
+let googleClient: { id: string; client: OAuth2Client } | null = null;
+function google(): { id: string; client: OAuth2Client } | null {
+  const id = config().GOOGLE_CLIENT_ID;
+  if (!id) return null;
+  if (googleClient?.id !== id) googleClient = { id, client: new OAuth2Client(id) };
+  return googleClient;
+}
 
 function invalidToken() {
   return new GraphQLError('Invalid Google token', { extensions: { code: 'INVALID_TOKEN' } });
@@ -30,13 +38,14 @@ function isFetchFailure(err: unknown): boolean {
 }
 
 export async function googleAuth(idToken: string) {
-  if (!googleClient) {
+  const g = google();
+  if (!g) {
     throw new GraphQLError('Google Sign-In not configured', { extensions: { code: 'GOOGLE_NOT_CONFIGURED' } });
   }
 
   let ticket;
   try {
-    ticket = await googleClient.verifyIdToken({ idToken, audience: ALLOWED_AUDIENCES });
+    ticket = await g.client.verifyIdToken({ idToken, audience: [g.id] });
   } catch (err) {
     // A network or certificate failure is a server error, not a bad token.
     if (isFetchFailure(err)) throw err;
@@ -57,6 +66,9 @@ export async function googleAuth(idToken: string) {
   let user = await prisma.user.findUnique({ where: { email: payload.email } });
 
   if (!user) {
+    // Story 6.3: a new Google account is a sign-up; refused while sign-up is off.
+    const refusal = publicSignupRefusal(false, config().features.signup);
+    if (refusal) throw new GraphQLError(refusal.message, { extensions: { code: refusal.errorCode } });
     // Auto-register: Google user = CREW by default
     user = await prisma.user.create({
       data: {

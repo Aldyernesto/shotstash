@@ -32,6 +32,7 @@ import { fileKindOf, sortFiles, sortSections } from "@/lib/shareSort";
 import { parseSectionName } from "@/lib/sectionNumber";
 import { liveSubtree, zipFileName, zipPlanForFolders, type ZipPlan } from "@/lib/mediaTree";
 import { linkInactiveReason } from "@/lib/shareState";
+import { config } from "@/lib/config";
 
 export { linkInactiveReason };
 import {
@@ -103,9 +104,9 @@ function breakdownOf(files: { mimeType: string }[]): SharePayload["breakdown"] {
   return photos || videos || documents ? { photos, videos, documents } : null;
 }
 
-/** Short date in the visitor's locale and the instance zone (DEFAULT_TIMEZONE, UTC by default). */
+/** Short date in the visitor's locale and the instance zone (SHOTSTASH_DEFAULT_TIMEZONE, UTC by default). */
 function serverDate(d: Date, locale: string): string {
-  return formatDate(d, { locale, timeZone: resolveServerTimeZone(process.env.DEFAULT_TIMEZONE) });
+  return formatDate(d, { locale, timeZone: resolveServerTimeZone(config().SHOTSTASH_DEFAULT_TIMEZONE) });
 }
 
 function newestDate(rows: { createdAt: Date }[], fallback: Date, locale: string): string {

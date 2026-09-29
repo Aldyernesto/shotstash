@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 const rl = await import('../src/lib/rateLimit.ts');
+const { resetConfig } = await import('../src/lib/config.ts');
 const req = await import('../src/lib/request.ts');
 const { validateSetupInput } = await import('../src/modules/setup/validate.ts');
 const { MIN_PASSWORD_LENGTH, MAX_PASSWORD_BYTES, passwordProblem } = await import('../src/lib/passwordRule.ts');
@@ -92,21 +93,24 @@ test('clientIp and requestScheme ignore forwarded headers unless TRUST_PROXY=tru
   const prev = process.env.TRUST_PROXY;
   try {
     delete process.env.TRUST_PROXY;
+    resetConfig();
     assert.equal(req.clientIp(h), '10.1.1.1');
     assert.equal(req.requestScheme({ url: 'http://localhost/x', headers: h }), 'http');
     process.env.TRUST_PROXY = 'true';
+    resetConfig();
     assert.equal(req.clientIp(h), '5.5.5.5');
     assert.equal(req.clientIp(headers({ 'x-forwarded-for': '6.6.6.6, 7.7.7.7' })), '6.6.6.6');
     assert.equal(req.requestScheme({ url: 'http://localhost/x', headers: h }), 'https');
   } finally {
     if (prev === undefined) delete process.env.TRUST_PROXY;
     else process.env.TRUST_PROXY = prev;
+    resetConfig();
   }
 });
 
-test('configuredScheme prefers APP_URL', () => {
-  assert.equal(req.configuredScheme({ APP_URL: 'https://a.example', NEXT_PUBLIC_APP_URL: 'http://b' }), 'https');
-  assert.equal(req.configuredScheme({ NEXT_PUBLIC_APP_URL: 'http://b.example' }), 'http');
+test('configuredScheme reads APP_URL', () => {
+  assert.equal(req.configuredScheme({ APP_URL: 'https://a.example' }), 'https');
+  assert.equal(req.configuredScheme({ APP_URL: 'http://b.example' }), 'http');
   assert.equal(req.configuredScheme({}), null);
   assert.equal(req.configuredScheme({ APP_URL: 'not a url' }), null);
 });
@@ -178,10 +182,6 @@ test('planFolderTrash cascades to live descendants only', () => {
 });
 
 test('retention helpers', () => {
-  assert.equal(plan.retentionDaysFromEnv(undefined), 30);
-  assert.equal(plan.retentionDaysFromEnv('7'), 7);
-  assert.equal(plan.retentionDaysFromEnv('-1'), 30);
-  assert.equal(plan.retentionDaysFromEnv('abc'), 30);
   const now = Date.parse('2026-02-01T00:00:00Z');
   assert.equal(plan.retentionCutoff(30, now).toISOString(), '2026-01-02T00:00:00.000Z');
 });

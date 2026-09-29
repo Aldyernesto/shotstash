@@ -1,0 +1,14 @@
+# Never in the image build context: dependencies are installed inside,
+# build output is produced inside, and no .env ever reaches an image.
+node_modules
+.next
+dist
+.git
+.github
+.devdb
+data
+.env*
+*.tsbuildinfo
+next-env.d.ts
+npm-debug.log*
+coverage

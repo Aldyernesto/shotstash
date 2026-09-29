@@ -44,7 +44,7 @@ export const typeDefs = `#graphql
     onboardedAt: DateTime
     avatarUrl: String
     signupAnswers: String
-    # UI locale; null = instance default (DEFAULT_LOCALE, then en).
+    # UI locale; null = instance default (SHOTSTASH_DEFAULT_LOCALE, then en).
     locale: String
     # false = akun Google-only (belum punya password)
     hasPassword: Boolean!
@@ -52,7 +52,22 @@ export const typeDefs = `#graphql
     readOnly: Boolean!
     # Story 2.4: actions this user may perform (can()); the UI reads only this.
     permissions: [String!]!
+    # Story 6.3: instance feature toggles (the same for every user).
+    features: Features!
     createdAt: DateTime!
+  }
+
+  # Story 6.3: features an operator can switch on or off at runtime. A disabled
+  # feature answers FEATURE_DISABLED; the schema never changes with toggles.
+  type Features {
+    # Public sign-up (SHOTSTASH_FEATURE_SIGNUP).
+    signup: Boolean!
+    # Google sign-in (GOOGLE_CLIENT_ID set).
+    google: Boolean!
+    # Elasticsearch search (ELASTICSEARCH_NODE_URL set).
+    search: Boolean!
+    # Password reset by email (an email transport that can send).
+    passwordResetEmail: Boolean!
   }
 
   type Project {

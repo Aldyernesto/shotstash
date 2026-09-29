@@ -3,31 +3,34 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 const share = await import('../src/lib/shareSort.ts');
+const { resetConfig } = await import('../src/lib/config.ts');
 
 test('shareLocale: a supported cookie wins', () => {
   assert.equal(share.shareLocale('en', 'xx'), 'en');
 });
 
-test('shareLocale: an unknown cookie falls back to DEFAULT_LOCALE', () => {
+test('shareLocale: an unknown cookie falls back to SHOTSTASH_DEFAULT_LOCALE', () => {
   // Only English ships, so the instance default is the next candidate.
   assert.equal(share.shareLocale('fr', 'en'), 'en');
   assert.equal(share.shareLocale('', 'EN'), 'en');
 });
 
-test('shareLocale: neither cookie nor DEFAULT_LOCALE resolves to English', () => {
+test('shareLocale: neither cookie nor SHOTSTASH_DEFAULT_LOCALE resolves to English', () => {
   assert.equal(share.shareLocale(undefined, undefined), 'en');
   assert.equal(share.shareLocale(null, 'xx'), 'en');
   assert.equal(share.shareLocale('fr', null), 'en');
 });
 
-test('shareLocale: reads DEFAULT_LOCALE from the environment by default', () => {
-  const before = process.env.DEFAULT_LOCALE;
-  process.env.DEFAULT_LOCALE = 'zz';
+test('shareLocale: reads SHOTSTASH_DEFAULT_LOCALE from the configuration by default', () => {
+  const before = process.env.SHOTSTASH_DEFAULT_LOCALE;
+  process.env.SHOTSTASH_DEFAULT_LOCALE = 'zz';
+  resetConfig();
   try {
     assert.equal(share.shareLocale(undefined), 'en');
   } finally {
-    if (before === undefined) delete process.env.DEFAULT_LOCALE;
-    else process.env.DEFAULT_LOCALE = before;
+    if (before === undefined) delete process.env.SHOTSTASH_DEFAULT_LOCALE;
+    else process.env.SHOTSTASH_DEFAULT_LOCALE = before;
+    resetConfig();
   }
 });
 

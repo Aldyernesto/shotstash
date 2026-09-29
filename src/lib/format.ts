@@ -1,7 +1,7 @@
 // Stories 1.9 / 3.1: one place for number, size, date and time formatting.
 // Every helper takes the active locale (default English) and, for times,
 // an optional IANA time zone. In the browser the zone defaults to the
-// viewer's own; server-rendered text passes DEFAULT_TIMEZONE (UTC by
+// viewer's own; server-rendered text passes SHOTSTASH_DEFAULT_TIMEZONE (UTC by
 // default). Absolute times always carry a short zone label ("17:00 GMT+7").
 // Camera time (EXIF) has its own path and is never converted.
 // Words (relative time, orientation, "camera time") come from the caller's
@@ -69,13 +69,12 @@ export function formatDate(d: DateLike, opts: FormatOptions = {}): string {
 }
 
 /**
- * Short date for server-rendered text: the instance zone (DEFAULT_TIMEZONE,
- * UTC when unset or invalid), never the server machine's own zone.
+ * Short date for server-rendered text: the instance zone (the caller passes
+ * `config().SHOTSTASH_DEFAULT_TIMEZONE`; UTC when unset or invalid), never the
+ * server machine's own zone. This file is shared with client code, so it
+ * never reads configuration itself.
  */
-export function formatServerDate(
-  d: DateLike,
-  timeZoneSetting: string | null | undefined = process.env.DEFAULT_TIMEZONE,
-): string {
+export function formatServerDate(d: DateLike, timeZoneSetting: string | null | undefined): string {
   return formatDate(d, { timeZone: resolveServerTimeZone(timeZoneSetting) });
 }
 

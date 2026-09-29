@@ -19,7 +19,7 @@ export const GET = defineRoute<{ slug: string }>({
     const limit = Math.min(60, Math.max(1, Number(url.searchParams.get('limit') ?? SHARE_PAGE_SIZE) || SHARE_PAGE_SIZE));
     const sectionId = url.searchParams.get('section');
     const sort = url.searchParams.get('sort');
-    // Anonymous visitor: cookie, then DEFAULT_LOCALE, then English (names sort in it).
+    // Anonymous visitor: cookie, then SHOTSTASH_DEFAULT_LOCALE, then English (names sort in it).
     const locale = shareLocale(req.cookies.get(LOCALE_COOKIE)?.value);
 
     const link = await findLiveShare({ slug: params.slug });

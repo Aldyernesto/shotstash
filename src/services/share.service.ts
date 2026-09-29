@@ -3,6 +3,7 @@
 import { customAlphabet } from 'nanoid';
 import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
+import { config } from '@/lib/config';
 import { createNotification } from './notification.service';
 import { generateAccessCode, hashAccessCode } from '@/modules/share';
 import { codedError } from '@/modules/errors';
@@ -15,7 +16,6 @@ const generateSlug = customAlphabet(
   12
 );
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3005';
 
 // ============================================
 // Create Share Link
@@ -55,7 +55,7 @@ export async function createShareLink(data: {
     include: { file: true, folder: true, projectRef: { include: { folders: { where: { parentId: null, trashedAt: null } } } } },
   });
 
-  const url = `${BASE_URL}/s/${slug}`;
+  const url = `${config().appUrl}/s/${slug}`;
 
   // Only the creator is notified: other users may not be allowed to see the target.
   const targetKind = data.fileId ? 'file' : data.folderId ? 'section' : 'project';

@@ -1,7 +1,7 @@
 // Password reset email template (React Email), rendered on the server to HTML + plain text.
 // Story 3.5: every word comes from `email.passwordReset.*` in the recipient's locale
-// (users.locale, then DEFAULT_LOCALE, then English); the expiry time is shown in
-// DEFAULT_TIMEZONE with its zone label. The subject stays plain (no spam triggers).
+// (users.locale, then SHOTSTASH_DEFAULT_LOCALE, then English); the expiry time is shown in
+// SHOTSTASH_DEFAULT_TIMEZONE with its zone label. The subject stays plain (no spam triggers).
 
 import {
   Body,
@@ -32,7 +32,7 @@ export type PasswordResetEmailProps = {
   googleOnly?: boolean;
   /** Recipient's `users.locale`; null means the instance default. */
   locale?: string | null;
-  /** Zone for the expiry time (DEFAULT_TIMEZONE); invalid or missing means UTC. */
+  /** Zone for the expiry time (SHOTSTASH_DEFAULT_TIMEZONE); invalid or missing means UTC. */
   timeZone?: string | null;
   /** How long the code is valid, in minutes. */
   validMinutes?: number;

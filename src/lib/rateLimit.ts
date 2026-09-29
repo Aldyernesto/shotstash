@@ -124,7 +124,7 @@ type Loader = () => Promise<LimitStore | null>;
 
 const defaultLoader: Loader = async () => {
   const { dfClient } = await import('@/lib/dragonfly');
-  return dfClient as unknown as LimitStore;
+  return dfClient() as unknown as LimitStore;
 };
 
 let loader: Loader | null = defaultLoader;

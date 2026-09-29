@@ -4,6 +4,11 @@
  */
 import { createHash, timingSafeEqual } from 'crypto';
 import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_LONG_MESSAGE, passwordProblem } from '../../lib/passwordRule.ts';
+import { config } from '../../lib/config.ts';
+
+type SetupSettings = { SETUP_TOKEN?: string };
+
+const configured = (): SetupSettings => ({ SETUP_TOKEN: config().SETUP_TOKEN });
 
 export type SetupInput = { name: string; email: string; password: string };
 
@@ -51,16 +56,17 @@ export function validateSetupInput(body: unknown): SetupValidation {
 }
 
 /** True when `SETUP_TOKEN` is set: the setup form then asks for it. */
-export function setupTokenRequired(env: Record<string, string | undefined> = process.env): boolean {
+export function setupTokenRequired(env: SetupSettings = configured()): boolean {
   return Boolean(env.SETUP_TOKEN);
 }
 
 /** Constant-time check of the submitted setup token (true when no token is configured). */
-export function setupTokenMatches(given: unknown, env: Record<string, string | undefined> = process.env): boolean {
+export function setupTokenMatches(given: unknown, env: SetupSettings = configured()): boolean {
   const expected = env.SETUP_TOKEN;
   if (!expected) return true;
-  if (typeof given !== 'string' || !given) return false;
-  const a = createHash('sha256').update(given).digest();
+  const submitted = typeof given === 'string' ? given.trim() : '';
+  if (!submitted) return false;
+  const a = createHash('sha256').update(submitted).digest();
   const b = createHash('sha256').update(expected).digest();
   return timingSafeEqual(a, b);
 }

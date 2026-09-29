@@ -9,6 +9,7 @@ const { signShareToken, signShareUrl, verifyShareToken, SIGNED_FILE_TTL_SECONDS,
 const { parseRange } = await import('../src/modules/media/range.ts');
 const access = await import('../src/modules/share/access.ts');
 const { signingSecret, SECRET_PLACEHOLDER } = await import('../src/lib/signingSecret.ts');
+const { resetConfig } = await import('../src/lib/config.ts');
 
 test('the signing secret fails closed: missing, placeholder or short', () => {
   assert.throws(() => signingSecret({}), /not set/);
@@ -22,10 +23,12 @@ test('the signing secret fails closed: missing, placeholder or short', () => {
 test('signing refuses to run with a placeholder secret', () => {
   const saved = process.env.MEDIA_SIGNING_SECRET;
   process.env.MEDIA_SIGNING_SECRET = SECRET_PLACEHOLDER;
+  resetConfig();
   try {
     assert.throws(() => signShareToken('s', 'f', 60), /placeholder/);
   } finally {
     process.env.MEDIA_SIGNING_SECRET = saved;
+    resetConfig();
   }
 });
 
@@ -74,10 +77,12 @@ test('a token minted for another share is rejected when a share is expected', ()
 test('a token signed with another secret is rejected', () => {
   const t = signShareToken('share-1', 'file-1', 60, NOW);
   process.env.MEDIA_SIGNING_SECRET = 'another-secret-another-secret-0123456789';
+  resetConfig();
   try {
     assert.equal(verifyShareToken(t, { nowMs: NOW }), null);
   } finally {
     process.env.MEDIA_SIGNING_SECRET = 'test-only-signing-secret-0123456789abcdef';
+    resetConfig();
   }
 });
 

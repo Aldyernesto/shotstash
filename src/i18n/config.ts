@@ -5,7 +5,7 @@
  *
  * Resolution order: the signed-in user's `users.locale` (the client copies
  * it into the `shotstash_locale` cookie), then the cookie (read by server
- * components), then the instance `DEFAULT_LOCALE` env, then English.
+ * components), then the instance `SHOTSTASH_DEFAULT_LOCALE` env, then English.
  */
 
 /** Locales that ship a `messages/<locale>.json` file. */
@@ -59,7 +59,7 @@ export function isValidTimeZone(timeZone: unknown): timeZone is string {
 
 /**
  * Time zone for server-rendered text (emails, notifications): the
- * `DEFAULT_TIMEZONE` env when valid, else UTC. The browser shows times in
+ * `SHOTSTASH_DEFAULT_TIMEZONE` env when valid, else UTC. The browser shows times in
  * the viewer's own zone instead.
  */
 export function resolveServerTimeZone(value?: string | null): string {

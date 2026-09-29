@@ -4,9 +4,10 @@
  * path once per call. Every writer and reader of media bytes uses this.
  */
 import path from 'path';
+import { config } from './config.ts';
 
 export function storageRoot(): string {
-  return path.resolve(process.env.STORAGE_LOCAL_ROOT || './data/media');
+  return path.resolve(config().STORAGE_LOCAL_ROOT);
 }
 
 /** True when `target` is the storage root or lies inside it (guards recursive deletes). */

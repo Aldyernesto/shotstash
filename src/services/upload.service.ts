@@ -7,7 +7,6 @@ import { promises as fs, createWriteStream, createReadStream } from 'fs';
 import path from 'path';
 import prisma from '@/lib/prisma';
 import { pubsub } from '../lib/pubsub';
-import { dfPublisher } from '../lib/dragonfly';
 import { bigIntToNumber } from '../lib/bigint';
 import { getProjectPhysicalPath } from './project.service';
 import { getFolderPhysicalPath } from './folder.service';
@@ -16,18 +15,27 @@ import { createNotification } from './notification.service';
 import { maybeConvertHeicToJpg } from './heic-convert.service';
 import { storageRoot } from '@/lib/storageRoot';
 import { codedError } from '@/modules/errors';
+import { errMessage, logger } from '@/lib/logger';
+
+const log = logger('upload');
 
 // ============================================
 // Configuration
 // ============================================
 
-const STORAGE_LOCAL_ROOT = storageRoot();
 const DEFAULT_CHUNK_SIZE = 50 * 1024 * 1024; // 50MB per chunk (web default)
 
+// Getters: the storage root comes from configuration, read on use, never at import.
 export const STORAGE_PATHS = {
-  projects: path.join(STORAGE_LOCAL_ROOT, 'projects'),
-  tempUploads: path.join(STORAGE_LOCAL_ROOT, 'uploads', 'temp'),
-  thumbnails: path.join(STORAGE_LOCAL_ROOT, 'thumbnails'),
+  get projects() {
+    return path.join(storageRoot(), 'projects');
+  },
+  get tempUploads() {
+    return path.join(storageRoot(), 'uploads', 'temp');
+  },
+  get thumbnails() {
+    return path.join(storageRoot(), 'thumbnails');
+  },
 };
 
 // ============================================
@@ -191,7 +199,7 @@ export async function completeUpload(sessionId: string, _r2Key?: string | null, 
         session.filename,
         detectMimeType(session.filename),
       ).catch((err) => {
-        console.warn('[upload] HEIC conversion failed, keeping original:', err?.message);
+        log.warn('HEIC conversion failed, keeping original', { err: errMessage(err) });
         return null;
       })
     : null;
@@ -271,7 +279,7 @@ export async function completeUpload(sessionId: string, _r2Key?: string | null, 
         data: { projectId: session.projectId, fileId: mediaFile.id, fileName: session.filename, projectTitle },
       });
     } catch (err: any) {
-      console.error('[notif] error:', err.message, err.stack);
+      log.error('notification failed', { err });
     }
   }
 

@@ -19,7 +19,9 @@ Actions are the `can()` actions of `src/modules/auth/permissions.ts` (`self` = a
 | `/api/v1/auth/cookie` | POST | session |  |
 | `/api/v1/auth/login` | POST | public |  |
 | `/api/v1/auth/logout` | POST | session |  |
+| `/api/v1/config` | GET | public |  |
 | `/api/v1/setup` | POST | public | first-run only |
+| `/api/v1/status` | GET | session | instance.configure |
 | `/media/c/[kind]/[id]` | GET | cookie | project.view |
 | `/media/d/[fileId]` | GET | cookie | media.download |
 | `/media/d/[fileId]` | HEAD | cookie | media.download |

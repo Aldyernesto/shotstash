@@ -1,0 +1,114 @@
+# Shotstash quick start (Story 6.2). See README.md, "Quick start".
+#
+#   cp .env.example .env        # then set SESSION_SECRET and POSTGRES_PASSWORD
+#   sh docker/preflight.sh
+#   docker compose up -d
+#
+# Only the app is published on the host (SHOTSTASH_PORT, default 3005);
+# PostgreSQL and Dragonfly stay on the compose network. Official images
+# arrive with the first release; until then the app image is built here.
+
+name: shotstash
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: shotstash:local
+    restart: unless-stopped
+    # tini as PID 1 forwards SIGTERM to node; node closes sockets well inside the grace period.
+    init: true
+    stop_grace_period: 20s
+    env_file: .env
+    # These win over .env: they describe the containers, not your choices.
+    environment:
+      NODE_ENV: production
+      PORT: "3005"
+      DATABASE_URL: postgresql://shotstash:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (openssl rand -hex 32)}@db:5432/shotstash?sslmode=disable
+      DRAGONFLY_HOST: cache
+      DRAGONFLY_PORT: "6379"
+      # The bundled cache has no password (it is reachable only on the compose
+      # network), so a DRAGONFLY_PASSWORD left in .env must not reach the app.
+      DRAGONFLY_PASSWORD: ""
+      # Links in emails and share pages: set APP_URL in .env to the address
+      # people open (LAN IP or domain); by default it follows SHOTSTASH_PORT.
+      APP_URL: ${APP_URL:-http://localhost:${SHOTSTASH_PORT:-3005}}
+      STORAGE_LOCAL_ROOT: /data/media
+    ports:
+      - "${SHOTSTASH_PORT:-3005}:3005"
+    volumes:
+      - ./data/media:/data/media
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3005/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 6
+
+  db:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shotstash
+      POSTGRES_DB: shotstash
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (openssl rand -hex 32)}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shotstash -d shotstash"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  cache:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v2.0.0
+    restart: unless-stopped
+    # Sized for small hosts: one thread, 256 MB. Raise both on bigger machines.
+    command: ["--proactor_threads=1", "--maxmemory=256mb"]
+    ulimits:
+      memlock: -1
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Optional search accelerator: `docker compose --profile search up -d`, then
+  # set ELASTICSEARCH_NODE_URL=http://elasticsearch:9200 in .env and restart.
+  elasticsearch:
+    image: elasticsearch:9.5.3
+    profiles: [search]
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://127.0.0.1:9200/_cluster/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  # Reference worker (proxy videos with ffmpeg). It ships with the processing
+  # pipeline (Epic 5) as its own image; until then this block stays commented.
+  # worker:
+  #   image: shotstash-worker:local
+  #   restart: unless-stopped
+  #   environment:
+  #     SHOTSTASH_URL: http://app:3005
+  #     WORKER_BOOTSTRAP_TOKEN: ${WORKER_BOOTSTRAP_TOKEN:?Set WORKER_BOOTSTRAP_TOKEN in .env}
+  #   depends_on:
+  #     app:
+  #       condition: service_healthy
+
+volumes:
+  db-data:
+  es-data:

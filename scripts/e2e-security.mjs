@@ -159,6 +159,18 @@ const viewerDenied = [
 ];
 for (const [n, q] of viewerDenied) ok(code(await gql(viewer.token, q)) === 'FORBIDDEN', `viewer ${n} FORBIDDEN`);
 ok(code(await gql(editor.token, `mutation { permanentDelete(fileId:"${pic.id}") }`)) === 'FORBIDDEN', 'editor permanentDelete FORBIDDEN');
+
+// ---- instance status (Story 6.1): super admin only, 404 for everyone else
+r = await fetch(`${B}/api/v1/status`, { headers: { authorization: `Bearer ${viewer.token}` } });
+ok(r.status === 404, 'viewer /api/v1/status 404', r.status);
+r = await fetch(`${B}/api/v1/status`, { headers: { authorization: `Bearer ${sa.token}` } });
+const statusBody = await r.json().catch(() => ({}));
+ok(
+  r.status === 200 && typeof statusBody.version === 'string' && typeof statusBody.storage?.reachable === 'boolean' &&
+    statusBody.storage?.backend === 'local' && typeof statusBody.database === 'boolean' && typeof statusBody.cache === 'boolean',
+  'super admin /api/v1/status 200 with version, storage, database, cache',
+  `${r.status} ${JSON.stringify(statusBody)}`,
+);
 const saId = sa.user.id;
 ok(code(await gql(admin.token, `mutation { updateUserRole(userId:"${saId}", role:EDITOR) { id } }`)) === 'FORBIDDEN', 'admin updateUserRole on SA FORBIDDEN');
 ok(code(await gql(admin.token, `mutation { deactivateUser(id:"${saId}") { id } }`)) === 'FORBIDDEN', 'admin deactivateUser on SA FORBIDDEN');
