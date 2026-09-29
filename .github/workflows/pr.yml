@@ -354,16 +354,18 @@ jobs:
           done
           curl -fsS http://127.0.0.1:3005/api/health
 
-      - name: e2e:security (uploads, dedup, cancel, expiry, shares, trash)
-        env:
-          E2E_BASE_URL: http://127.0.0.1:3005
-        run: npm run e2e:security
-
+      # The harness logs in once; it runs before e2e:security, which uses up
+      # the login rate limit (10 per 15 minutes) for the seeded accounts.
       - name: Interrupted upload resumes (256 MiB)
         env:
           E2E_BASE_URL: http://127.0.0.1:3005
           E2E_UPLOAD_MB: "256"
         run: npm run e2e:upload
+
+      - name: e2e:security (uploads, dedup, cancel, expiry, shares, trash)
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3005
+        run: npm run e2e:security
 
       - name: App log on failure
         if: failure()
