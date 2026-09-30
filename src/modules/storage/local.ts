@@ -325,7 +325,7 @@ export class LocalDiskBackend implements StorageBackend {
       }
       if (await this.hasMarker()) return { ok: true };
       const legacy = await fs
-        .stat(path.join(this.root, 'files'))
+        .stat(this.pathOf('files'))
         .then((s) => s.isDirectory())
         .catch(() => false);
       if (legacy) {
