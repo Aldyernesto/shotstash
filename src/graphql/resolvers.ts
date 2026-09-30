@@ -376,10 +376,47 @@ async function sectionFiles(folderId: string) {
   return files.map((f) => ({ ...f, processedVersions: versionsOf.get(f.id) ?? [], uploadedBy: userById.get(f.uploadedById) ?? null }));
 }
 
-/** Processed versions of a file row, newest first (included by `folder(id)`). */
-async function processedVersionsOf(parent: { id: string; processedVersions?: unknown }) {
+type VersionRow = Awaited<ReturnType<typeof prisma.processedVersion.findMany>>[number];
+
+/**
+ * Per-request loader of processed versions: every file resolved in one
+ * GraphQL request (search results, chat mentions, ...) is answered by one
+ * query, and a file asked twice (processedVersions and previewUrl) once.
+ */
+type VersionLoader = { cache: Map<string, Promise<VersionRow[]>>; queue: Map<string, (rows: VersionRow[]) => void> };
+const versionLoaders = new WeakMap<object, VersionLoader>();
+
+function loadVersions(context: object | undefined, fileId: string): Promise<VersionRow[]> {
+  const key = context ?? {};
+  let loader = versionLoaders.get(key);
+  if (!loader) {
+    loader = { cache: new Map(), queue: new Map() };
+    versionLoaders.set(key, loader);
+  }
+  const l = loader;
+  const hit = l.cache.get(fileId);
+  if (hit) return hit;
+  const p = new Promise<VersionRow[]>((resolve) => {
+    if (!l.queue.size) {
+      setImmediate(async () => {
+        const batch = new Map(l.queue);
+        l.queue.clear();
+        const rows = await prisma.processedVersion
+          .findMany({ where: { mediaFileId: { in: [...batch.keys()] } }, orderBy: { createdAt: 'desc' } })
+          .catch(() => [] as VersionRow[]);
+        for (const [id, done] of batch) done(rows.filter((r) => r.mediaFileId === id));
+      });
+    }
+    l.queue.set(fileId, resolve);
+  });
+  l.cache.set(fileId, p);
+  return p;
+}
+
+/** Processed versions of a file row, newest first (included by `folder(id)`, else loaded per request in one batch). */
+async function processedVersionsOf(parent: { id: string; processedVersions?: unknown }, context?: object) {
   if (Array.isArray(parent.processedVersions)) return parent.processedVersions as { id: string; kind: string; mimeType: string }[];
-  return prisma.processedVersion.findMany({ where: { mediaFileId: parent.id }, orderBy: { createdAt: 'desc' } });
+  return loadVersions(context, parent.id);
 }
 
 // Story 4.7: `includeTrashed` hanya untuk Section yang SUDAH di Trash
@@ -1162,10 +1199,24 @@ const rawResolvers = {
         }
       }
 
+      // Story 4.4: processed versions travel with the copy (bytes and rows).
+      const versions = await prisma.processedVersion.findMany({ where: { mediaFileId: file.id } });
+      const copiedVersions: { id: string; kind: string; jobId: string | null; attempt: number; storageKey: string; mimeType: string; size: bigint; createdAt: Date }[] = [];
+      for (const v of versions) {
+        const versionId = uuidv7();
+        const vKey = storageKeys.processed(newId, versionId, v.storageKey.split('.').pop() || 'bin');
+        try {
+          await store.copy(v.storageKey, vKey);
+          copiedVersions.push({ id: versionId, kind: v.kind, jobId: v.jobId, attempt: v.attempt, storageKey: vKey, mimeType: v.mimeType, size: v.size, createdAt: v.createdAt });
+        } catch (err) {
+          log.warn('copyFile: processed version copy failed', { err: errMessage(err) });
+        }
+      }
+
       try {
         const copy = await prisma.$transaction(async (tx) => {
           const original = await Upload.findOriginal(tx, targetFolder.projectId, file.md5Checksum);
-          return tx.mediaFile.create({
+          const row = await tx.mediaFile.create({
             data: {
               id: newId,
               filename: `${newId}.${ext}`,
@@ -1183,12 +1234,17 @@ const rawResolvers = {
             },
             include: { folder: true, project: true, uploadedBy: true },
           });
+          if (copiedVersions.length) {
+            await tx.processedVersion.createMany({ data: copiedVersions.map((v) => ({ ...v, mediaFileId: newId })) });
+          }
+          return row;
         });
         Library.syncSearchLater([copy.id]);
         return copy;
       } catch (err) {
         await store.delete(key).catch(() => {});
         if (thumbVersion) await store.delete(storageKeys.thumbnail(newId, 1)).catch(() => {});
+        for (const v of copiedVersions) await store.delete(v.storageKey).catch(() => {});
         throw err;
       }
     },
@@ -1248,7 +1304,9 @@ const rawResolvers = {
       }
 
       // Database only: storage keys do not depend on where a file sits.
-      const movedFiles = await prisma.$transaction(async (tx) => {
+      // Story 4.5: every file of the moved subtree is resynced, whether or not the Project changed.
+      const movedFiles = (await prisma.mediaFile.findMany({ where: { folderId: { in: subtreeFolderIds } }, select: { id: true } })).map((f) => f.id);
+      await prisma.$transaction(async (tx) => {
         await tx.folder.update({
           where: { id: folderId },
           data: { parentId: targetFolderId ?? null, projectId: destProjectId },
@@ -1261,9 +1319,7 @@ const rawResolvers = {
           await tx.mediaFile.updateMany({ where: { folderId: { in: subtreeFolderIds } }, data: { projectId: destProjectId } });
           await Upload.resettle(tx, parked);
           await tx.uploadSession.updateMany({ where: { folderId: { in: subtreeFolderIds } }, data: { projectId: destProjectId } });
-          return moving.map((f) => f.id);
         }
-        return [] as string[];
       });
       Library.syncSearchLater(movedFiles);
 
@@ -1374,10 +1430,10 @@ const rawResolvers = {
     duplicateOf: (parent: any) => (parent.duplicateOfId && parent.duplicateOfId !== parent.id ? parent.duplicateOfId : null),
     downloadUrl: (parent: any) => mediaUrl.download(parent.id),
     // Story 4.4: included by `folder(id)` (one query for every file of the
-    // Section); loaded per file elsewhere.
-    processedVersions: async (parent: any) => processedVersionsOf(parent),
-    previewUrl: async (parent: any) => {
-      const preview = previewOf(await processedVersionsOf(parent));
+    // Section); elsewhere one batched query per request.
+    processedVersions: async (parent: any, _: unknown, context: GraphQLContext) => processedVersionsOf(parent, context),
+    previewUrl: async (parent: any, _: unknown, context: GraphQLContext) => {
+      const preview = previewOf(await processedVersionsOf(parent, context));
       return preview ? mediaUrl.processed(preview.id) : null;
     },
     uploadedBy: async (parent: any) => {

@@ -444,7 +444,13 @@ export const typeDefs = `#graphql
     # Upload (Story 4.3): parts travel over REST, see UploadSession.
     initiateUpload(input: InitiateUploadInput!): UploadSession!
     # md5Checksum: MD5 of the whole file, when not sent at initiate.
-    completeUpload(sessionId: ID!, md5Checksum: String): MediaFile!
+    # convertHeic is ignored since Story 4.4 (originals stay as uploaded; HEIC
+    # gets a preview version). Kept for one release so older clients work.
+    completeUpload(
+      sessionId: ID!
+      md5Checksum: String
+      convertHeic: Boolean @deprecated(reason: "Ignored: HEIC originals are kept and get a preview version.")
+    ): MediaFile!
     cancelUpload(sessionId: ID!): Boolean!
 
     # Share

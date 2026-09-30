@@ -24,11 +24,15 @@ test('search: LIKE wildcards are escaped for the database path', () => {
   assert.equal(q.escapeLike('plain name.jpg'), 'plain name.jpg');
 });
 
-test('search: Elasticsearch wildcard is lowercase, escaped and unanchored', () => {
-  assert.equal(q.wildcardPattern('IMG_0'), '*img_0*');
+test('search: Elasticsearch wildcard is escaped and unanchored (PostgreSQL lowers the query)', () => {
+  assert.equal(q.wildcardPattern('img_0'), '*img_0*');
+  assert.equal(q.likePattern('50%'), `%50${BS}%%`);
+  assert.equal(q.mappingIsCurrent({ mappings: { properties: { name_lower: { type: 'keyword' } } } }), true);
+  assert.equal(q.mappingIsCurrent({ mappings: { properties: { name_lower: { type: 'text' } } } }), false);
+  assert.equal(q.mappingIsCurrent({}), false);
   assert.equal(q.wildcardPattern('x*y?'), `*x${BS}*y${BS}?*`);
   assert.equal(q.wildcardPattern(`a${BS}b`), `*a${BS}${BS}b*`);
-  assert.deepEqual(q.searchDocument({ originalName: 'Clip A.MOV', projectId: 'p', folderId: 'f' }), {
+  assert.deepEqual(q.searchDocument({ nameLower: 'clip a.mov', projectId: 'p', folderId: 'f' }), {
     name_lower: 'clip a.mov',
     projectId: 'p',
     folderId: 'f',

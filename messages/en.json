@@ -779,6 +779,10 @@
     "revoked": {
       "title": "This link was turned off",
       "text": "The person who shared it turned this link off. Ask the {productName} team for a new one."
+    },
+    "gone": {
+      "title": "No longer available",
+      "text": "What this link pointed to was deleted. Ask the {productName} team for a new link."
     }
   },
   "email": {
@@ -904,7 +908,8 @@
     "showingSections": "Showing {shown, number} of {total, plural, one {# Section} other {# Sections}}.",
     "showMoreFiles": "Show {count, plural, one {# more file} other {# more files}}",
     "showMoreSections": "Show {count, plural, one {# more Section} other {# more Sections}}",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "sortBy": "Sort order: {order}. Change"
   },
   "shareModal": {
     "title": {

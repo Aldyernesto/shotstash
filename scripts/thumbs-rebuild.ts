@@ -3,7 +3,8 @@
  * edge, source aspect ratio, orientation applied. Each file gets a new
  * thumbnail version (the old key is deleted after the row points at the new
  * one), so browsers holding the old URL fetch the new image. HEIC files are
- * rendered from their preview version.
+ * rendered from their preview version; a HEIC without one gets its preview
+ * made first (within the same size cap as uploads).
  *
  * An operator task: it runs with the server's own configuration (database
  * and storage) from a checkout or inside the app container, never from a
@@ -14,7 +15,7 @@
  */
 import 'dotenv/config';
 import prisma, { disconnectPrisma } from '../src/lib/prisma';
-import { generateThumbnail, isHeicMime, needsThumbnail, previewOf } from '../src/modules/media';
+import { createHeicPreview, generateThumbnail, isHeicMime, needsThumbnail, previewOf } from '../src/modules/media';
 import { storage, storageKeys } from '../src/modules/storage';
 
 async function readAll(key: string): Promise<Buffer> {
@@ -28,13 +29,13 @@ async function main() {
   let cursor: string | undefined;
   let done = 0;
   let failed = 0;
+  let previews = 0;
   for (;;) {
     const rows = await prisma.mediaFile.findMany({
-      where: { status: 'ready', ...(onlyMissing ? { thumbVersion: 0 } : {}) },
-      select: { id: true, storageKey: true, mimeType: true, thumbVersion: true, processedVersions: true },
+      where: { status: 'ready', ...(onlyMissing ? { thumbVersion: 0 } : {}), ...(cursor ? { id: { gt: cursor } } : {}) },
+      select: { id: true, storageKey: true, mimeType: true, size: true, thumbVersion: true, processedVersions: true },
       orderBy: { id: 'asc' },
       take: 200,
-      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     });
     if (!rows.length) break;
     cursor = rows[rows.length - 1].id;
@@ -43,9 +44,18 @@ async function main() {
       let from: Buffer | undefined;
       if (isHeicMime(f.mimeType)) {
         const preview = previewOf(f.processedVersions);
-        if (!preview) continue;
-        from = await readAll(preview.storageKey).catch(() => undefined);
-        if (!from) continue;
+        if (preview) from = await readAll(preview.storageKey).catch(() => undefined);
+        if (!from) {
+          // No preview yet (or it cannot be read): make one; too large or undecodable counts as a failure.
+          try {
+            from = (await createHeicPreview({ id: f.id, storageKey: f.storageKey, size: Number(f.size) })).jpeg;
+            previews++;
+          } catch (err) {
+            console.warn(`HEIC preview failed for ${f.id}: ${err instanceof Error ? err.message : err}`);
+            failed++;
+            continue;
+          }
+        }
       }
       const version = await generateThumbnail(f, { from });
       if (!version) {
@@ -58,7 +68,7 @@ async function main() {
       if (done % 100 === 0) console.log(`${done} thumbnails rebuilt`);
     }
   }
-  console.log(JSON.stringify({ rebuilt: done, failed }));
+  console.log(JSON.stringify({ rebuilt: done, previews, failed }));
   await disconnectPrisma();
   process.exit(0);
 }

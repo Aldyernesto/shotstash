@@ -332,8 +332,10 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Install ffmpeg (video thumbnails)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      # ffmpeg for video thumbnails; heif-enc (libheif-examples) makes the
+      # synthetic HEIC of the e2e HEIC row at test time.
+      - name: Install ffmpeg and heif-enc
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg libheif-examples
 
       - name: Install dependencies
         run: npm ci
@@ -367,10 +369,14 @@ jobs:
         if: matrix.backend == 'local'
         run: |
           for i in $(seq 1 90); do
-            if curl -fsS http://127.0.0.1:9200/_cluster/health >/dev/null 2>&1; then break; fi
+            if curl -fsS 'http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=2s' >/dev/null 2>&1; then
+              curl -fsS http://127.0.0.1:9200/_cluster/health; echo
+              exit 0
+            fi
             sleep 2
           done
-          curl -fsS http://127.0.0.1:9200/_cluster/health
+          echo "Elasticsearch did not reach yellow in time"
+          exit 1
 
       - name: Search parity (with Elasticsearch on the local leg, database only on s3)
         run: npm run e2e:search

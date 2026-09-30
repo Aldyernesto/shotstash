@@ -20,6 +20,7 @@ import { allowedBeforeSetup, isApiPath } from './src/lib/setupGate';
 import { closeDragonfly, dfClient, withLock } from './src/lib/dragonfly';
 import { disconnectPrisma } from './src/lib/prisma';
 import { purgeExpired } from './src/modules/trash';
+import { checkSearchIndex } from './src/modules/library';
 import { expireSessions } from './src/modules/upload';
 import { ConfigError, assertConfig, config } from './src/lib/config';
 import { errMessage, logger } from './src/lib/logger';
@@ -118,10 +119,15 @@ const SWEEP_LOCK_TTL_MS = 15 * 60 * 1000;
 const SWEEP_BUDGET_MS = 10 * 60 * 1000;
 
 async function sweepTrash() {
-  const run = () =>
-    purgeExpired(config().SHOTSTASH_TRASH_RETENTION_DAYS, Date.now(), {
+  const run = async () => {
+    const purged = await purgeExpired(config().SHOTSTASH_TRASH_RETENTION_DAYS, Date.now(), {
       deadline: Date.now() + SWEEP_BUDGET_MS,
     });
+    // Story 4.5: an index that drifted from the database is rebuilt (no-op without Elasticsearch).
+    const index = await checkSearchIndex();
+    if (index.reindexed !== undefined) sweepLog.info('search index rebuilt', index);
+    return purged;
+  };
   try {
     const locked = await withLock(SWEEP_LOCK, SWEEP_LOCK_TTL_MS, run);
     let result;

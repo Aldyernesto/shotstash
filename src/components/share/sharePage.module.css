@@ -326,6 +326,20 @@
   width: 100%;
 }
 
+/* key-share-page: download mark before "Download ZIP". */
+.zipIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+}
+
+.zipIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
 .expiry {
   display: flex;
   align-items: flex-start;
@@ -383,7 +397,7 @@
 }
 
 .sortPills {
-  display: flex;
+  display: none;
   gap: 2px;
   padding: 4px;
   border: 1px solid var(--app-spine-line);
@@ -906,4 +920,61 @@
 
 .unlockForm > button {
   align-self: flex-start;
+}
+
+/* Phone: the active sort as a compact label ("DATE ▼") with a small menu;
+   900 px and up: the pill row (key-share-desktop). */
+@media (min-width: 900px) {
+  .sortPills {
+    display: flex;
+  }
+
+  .sortCompact {
+    display: none;
+  }
+}
+
+.sortCompact {
+  position: relative;
+  margin-left: auto;
+}
+
+.sortCompactButton {
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--app-spine-text);
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sortMenu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 5;
+  display: grid;
+  min-width: 168px;
+  padding: 6px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-surface);
+  box-shadow: var(--spine-elevation-sheet);
+}
+
+.sortMenuItem {
+  min-height: 48px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--spine-radius-full);
+  background: transparent;
+  color: var(--app-spine-text-soft);
+  text-align: left;
+  cursor: pointer;
+}
+
+.sortMenuItemOn {
+  background: var(--app-spine-text);
+  color: var(--app-spine-bg);
 }

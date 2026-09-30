@@ -35,14 +35,29 @@ export function escapeWildcard(value: string): string {
   return value.replace(/[\\*?]/g, (c) => `\\${c}`);
 }
 
-/** The Elasticsearch wildcard pattern for a query (the field stores lowercased names). */
-export function wildcardPattern(query: string): string {
-  return `*${escapeWildcard(query.toLowerCase())}*`;
+/**
+ * The Elasticsearch wildcard pattern for a query that PostgreSQL already
+ * lowered (`lower()`): the index stores names lowered by PostgreSQL too, so
+ * both paths fold case identically.
+ */
+export function wildcardPattern(loweredQuery: string): string {
+  return `*${escapeWildcard(loweredQuery)}*`;
 }
 
-/** The document stored for one file. */
-export function searchDocument(file: { originalName: string; projectId: string; folderId: string }) {
-  return { name_lower: file.originalName.toLowerCase(), projectId: file.projectId, folderId: file.folderId };
+/** LIKE pattern (escaped, unanchored) for the database path; PostgreSQL lowers it. */
+export function likePattern(query: string): string {
+  return `%${escapeLike(query)}%`;
+}
+
+/** The document stored for one file; `nameLower` comes from PostgreSQL `lower()`. */
+export function searchDocument(file: { nameLower: string; projectId: string; folderId: string }) {
+  return { name_lower: file.nameLower, projectId: file.projectId, folderId: file.folderId };
+}
+
+/** True when an index mapping has `name_lower` as a keyword (what the wildcard needs). */
+export function mappingIsCurrent(mapping: unknown): boolean {
+  const props = (mapping as { mappings?: { properties?: Record<string, { type?: string }> } })?.mappings?.properties;
+  return props?.name_lower?.type === 'keyword';
 }
 
 /** Index mapping: a lowercase keyword for the wildcard, keywords for filters. */

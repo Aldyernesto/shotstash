@@ -16,7 +16,13 @@ export function inactiveKindOf(res: ShareResolution): ShareInvalidKind | null {
     case "expired":
       return "expired";
     case "gone":
-      return res.target === "project" ? "project-gone" : res.target === "file" ? "file-gone" : "section-gone";
+      return res.target === "project"
+        ? "project-gone"
+        : res.target === "file"
+          ? "file-gone"
+          : res.target === "section"
+            ? "section-gone"
+            : "gone";
     default:
       return null;
   }

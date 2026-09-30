@@ -13,7 +13,7 @@ const handler = defineRoute<{ fileId: string }>({
     const g = await thumbnailGuard(actor, params.fileId);
     if (!g.ok) return g.response;
     const v = new URL(req.url).searchParams.get('v');
-    return serveFile(req, g.file, 'thumbnail', thumbnailCache(g.file, v));
+    return serveFile(req, g.file, 'thumbnail', thumbnailCache(g.file, v, g.trashed));
   },
 });
 

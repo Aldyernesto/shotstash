@@ -89,15 +89,18 @@ function ListHead({
   sortBy,
   sortAsc,
   onSort,
+  rowIndex,
 }: {
   level: ListLevel;
   sortBy: SortField;
   sortAsc: boolean;
   onSort: (field: SortField) => void;
+  /** Set when the rows are virtualised (the table then carries aria-rowcount). */
+  rowIndex?: number;
 }) {
   const t = useTranslations("list.column");
   return (
-    <div className={`${styles.head} ${styles[level]}`} role="row">
+    <div className={`${styles.head} ${styles[level]}`} role="row" aria-rowindex={rowIndex}>
       {COLUMNS[level].map((col) => {
         if (col.field === null) {
           // Kolom aksi & kolom centang: BUKAN tombol dan TANPA aria-sort.
@@ -416,7 +419,13 @@ export default function ListView(props: ListViewProps) {
       aria-label={label}
       aria-rowcount={level === "files" && files.length > VIRTUALIZE_ABOVE ? files.length + 1 : undefined}
     >
-      <ListHead level={level} sortBy={sortBy} sortAsc={sortAsc} onSort={onSort} />
+      <ListHead
+        level={level}
+        sortBy={sortBy}
+        sortAsc={sortAsc}
+        onSort={onSort}
+        rowIndex={level === "files" && files.length > VIRTUALIZE_ABOVE ? 1 : undefined}
+      />
 
       {level === "projects" &&
         projects.map((p: any) => {

@@ -205,8 +205,14 @@ export async function resolveShare(
 
   if (!link) return { state: "not-found" };
   const inactive = linkInactiveReason(link);
-  // Story 4.6: a revoked link says so (HTTP 404, no content, no names).
-  if (inactive === "revoked") return { state: "revoked" };
+  // Story 4.6: a revoked link says so (HTTP 404, no content, no names). A
+  // link revoked because its target was purged reads as "gone"; the purge
+  // cleared the target column, so the kind is known only while it is set.
+  if (inactive === "revoked") {
+    if (link.revokedReason !== "target_deleted") return { state: "revoked" };
+    const target = link.fileId ? "file" : link.folderId ? "section" : link.projectId2 ? "project" : "unknown";
+    return { state: "gone", target };
+  }
   if (inactive === "expired") return { state: "expired" };
 
   // PRIVATE: nothing is assembled before the access code was proven.

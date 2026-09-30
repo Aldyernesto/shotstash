@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 
-const { planZipEntries, buildZipStream, zipStream, MISSING_FILES_NAME } = await import('../src/modules/media/zip.ts');
+const { zipStream, MISSING_FILES_NAME } = await import('../src/modules/media/zip.ts');
 
 function memorySource(objects) {
   return {
@@ -53,7 +53,7 @@ test('zip: entries are stored uncompressed with their declared sizes', async () 
   const a = Buffer.alloc(5000, 7);
   const b = Buffer.from('hello world');
   const src = memorySource(new Map([['k/a', a], ['k/b', b]]));
-  const buf = await collect(await zipStream([{ key: 'k/a', name: 'Shoot/a.bin' }, { key: 'k/b', name: 'Shoot/b.txt' }], src, { emptyDirs: ['Shoot/Empty'] }));
+  const buf = await collect(zipStream([{ key: 'k/a', name: 'Shoot/a.bin' }, { key: 'k/b', name: 'Shoot/b.txt' }], src, { emptyDirs: ['Shoot/Empty'] }));
   const entries = readCentralDirectory(buf);
   const files = entries.filter((e) => !e.name.endsWith('/'));
   assert.deepEqual(files.map((e) => e.name), ['Shoot/a.bin', 'Shoot/b.txt']);
@@ -68,33 +68,41 @@ test('zip: entries are stored uncompressed with their declared sizes', async () 
   assert.equal(entries.some((e) => e.name === MISSING_FILES_NAME), false);
 });
 
-test('zip: objects that cannot be read are listed in _MISSING_FILES.txt', async () => {
-  const src = memorySource(new Map([['k/a', Buffer.from('x')]]));
-  const plan = await planZipEntries([{ key: 'k/a', name: 'a.txt' }, { key: 'k/gone', name: 'gone.mov' }], src);
-  assert.deepEqual(plan.present.map((e) => e.name), ['a.txt']);
-  assert.deepEqual(plan.missing, ['gone.mov']);
-  const buf = await collect(buildZipStream({ ...plan, source: src }));
+test('zip: objects that cannot be read are listed in _MISSING_FILES.txt at the end', async () => {
+  const src = memorySource(new Map([['k/a', Buffer.from('x')], ['k/c', Buffer.from('y')]]));
+  const buf = await collect(zipStream([{ key: 'k/a', name: 'a.txt' }, { key: 'k/gone', name: 'gone.mov' }, { key: 'k/c', name: 'c.txt' }], src));
   const names = readCentralDirectory(buf).map((e) => e.name);
-  assert.deepEqual(names, ['a.txt', MISSING_FILES_NAME]);
+  assert.deepEqual(names, ['a.txt', 'c.txt', MISSING_FILES_NAME]);
   assert.ok(buf.includes(Buffer.from('  - gone.mov')));
 });
 
-test('zip: planning keeps the input order with bounded concurrency', async () => {
-  let inFlight = 0;
-  let peak = 0;
-  const entries = Array.from({ length: 30 }, (_, i) => ({ key: `k/${i}`, name: `${i}.bin` }));
+test('zip: the response starts before later entries are checked; each stat comes just before its entry', async () => {
+  const order = [];
+  const objects = new Map([['k/1', Buffer.alloc(10, 1)], ['k/2', Buffer.alloc(10, 2)], ['k/3', Buffer.alloc(10, 3)]]);
   const src = {
     async stat(key) {
-      inFlight++;
-      peak = Math.max(peak, inFlight);
-      await new Promise((r) => setTimeout(r, 2));
-      inFlight--;
-      return { size: Number(key.split('/')[1]) };
+      order.push(`stat ${key}`);
+      return { size: objects.get(key).length };
+    },
+    async getStream(key) {
+      order.push(`read ${key}`);
+      return Readable.from([objects.get(key)]);
     },
   };
-  const plan = await planZipEntries(entries, src, 4);
-  assert.ok(peak <= 4, `peak ${peak}`);
-  assert.deepEqual(plan.present.map((e) => e.size), entries.map((_, i) => i));
+  const stream = zipStream([{ key: 'k/1', name: '1' }, { key: 'k/2', name: '2' }, { key: 'k/3', name: '3' }], src);
+  await collect(stream);
+  // Never all stats up front: the stat of entry n+1 follows the start of entry n.
+  assert.deepEqual(order, ['stat k/1', 'read k/1', 'stat k/2', 'read k/2', 'stat k/3', 'read k/3']);
+});
+
+test('zip: entries carry the given mtime', async () => {
+  const src = memorySource(new Map([['k', Buffer.from('x')]]));
+  const when = new Date(Date.UTC(2024, 0, 2, 3, 4, 6));
+  const buf = await collect(zipStream([{ key: 'k', name: 'x.txt', mtime: when }], src));
+  // Info-ZIP universal timestamp (0x5455): flags byte, then mtime seconds.
+  const ut = buf.indexOf(Buffer.from([0x55, 0x54]));
+  assert.ok(ut > 0);
+  assert.equal(buf.readUInt32LE(ut + 5), Math.floor(when.getTime() / 1000));
 });
 
 test('zip: a stream that fails mid-entry destroys the archive (no end record)', async () => {
@@ -115,7 +123,7 @@ test('zip: a stream that fails mid-entry destroys the archive (no end record)', 
     },
   };
   let reported = null;
-  const stream = buildZipStream({ present: [{ key: 'k', name: 'big.mov', size: 1000 }], missing: [], source: src, onError: (e) => (reported = e) });
+  const stream = zipStream([{ key: 'k', name: 'big.mov' }], src, { onError: (e) => (reported = e) });
   const chunks = [];
   await assert.rejects(async () => {
     for await (const c of stream) chunks.push(c);
@@ -126,7 +134,7 @@ test('zip: a stream that fails mid-entry destroys the archive (no end record)', 
 });
 
 test('zip: a size that differs from the declared one fails the archive', async () => {
-  const src = memorySource(new Map([['k', Buffer.from('short')]]));
-  const stream = buildZipStream({ present: [{ key: 'k', name: 'x.bin', size: 50 }], missing: [], source: src });
+  const src = { stat: async () => ({ size: 50 }), getStream: async () => Readable.from([Buffer.from('short')]) };
+  const stream = zipStream([{ key: 'k', name: 'x.bin' }], src);
   await assert.rejects(collect(stream), /unexpected number of bytes/);
 });

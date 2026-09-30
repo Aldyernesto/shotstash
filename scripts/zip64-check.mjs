@@ -12,10 +12,15 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { execFileSync } from 'node:child_process';
 
-const { buildZipStream } = await import('../src/modules/media/zip.ts');
+const { zipStream } = await import('../src/modules/media/zip.ts');
 
 const MIB = 1024 * 1024;
-const size = process.env.ZIP64_CHECK_MB ? Number(process.env.ZIP64_CHECK_MB) * MIB : Math.round(4.1 * 1024) * MIB;
+const raw = process.env.ZIP64_CHECK_MB;
+if (raw !== undefined && !/^[1-9]\d{0,6}$/.test(raw.trim())) {
+  console.error(`ZIP64_CHECK_MB must be a positive whole number of MiB (got ${JSON.stringify(raw)})`);
+  process.exit(2);
+}
+const size = raw !== undefined ? Number(raw.trim()) * MIB : Math.round(4.1 * 1024) * MIB;
 const CHUNK = Buffer.alloc(4 * MIB, 0x5a);
 
 function synthetic(total) {
@@ -34,18 +39,22 @@ const dir = mkdtempSync(path.join(tmpdir(), 'shotstash-zip64-'));
 const file = path.join(dir, 'big.zip');
 try {
   const started = Date.now();
-  const stream = buildZipStream({
-    present: [
-      { key: 'big', name: 'Shoot/big.mov', size },
-      { key: 'small', name: 'Shoot/small.txt', size: 5 },
+  const stream = zipStream(
+    [
+      { key: 'big', name: 'Shoot/big.mov' },
+      { key: 'small', name: 'Shoot/small.txt' },
+      { key: 'gone', name: 'Shoot/gone.jpg' },
     ],
-    missing: ['Shoot/gone.jpg'],
-    source: {
+    {
+      async stat(key) {
+        if (key === 'gone') throw new Error('missing');
+        return { size: key === 'big' ? size : 5 };
+      },
       async getStream(key) {
         return key === 'big' ? synthetic(size) : Readable.from([Buffer.from('hello')]);
       },
     },
-  });
+  );
   await pipeline(stream, createWriteStream(file));
   console.log(`zip written: ${statSync(file).size} bytes in ${Math.round((Date.now() - started) / 1000)} s`);
 

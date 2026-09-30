@@ -234,6 +234,72 @@ const SECTION_SORT_KEYS = [
   { value: "count", key: "fileCount" },
 ] as const;
 
+/** Phone sort control: "DATE ▼" opens a small menu of the other orders. */
+function SortMenu({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly (typeof FILE_SORT_KEYS[number] | typeof SECTION_SORT_KEYS[number])[];
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const t = useTranslations("share");
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+  const active = options.find((o) => o.value === value) ?? options[0];
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  return (
+    <div ref={wrapRef} className={styles.sortCompact}>
+      <button
+        type="button"
+        className={`spine-label spine-focus-ring spine-hit-area ${styles.sortCompactButton}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={menuId}
+        aria-label={t("sortBy", { order: t(`sort.${active.key}`) })}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {t(`sort.${active.key}`)}
+      </button>
+      {open ? (
+        <div id={menuId} role="menu" className={styles.sortMenu}>
+          {options.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={o.value === value}
+              className={`spine-focus-ring--inset ${styles.sortMenuItem} ${o.value === value ? styles.sortMenuItemOn : ""}`}
+              onClick={() => {
+                setOpen(false);
+                if (o.value !== value) onChange(o.value);
+              }}
+            >
+              {t(`sort.${o.key}`)}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function SharePage({ payload }: { payload: SharePayload }) {
   const t = useTranslations("share");
   const tc = useTranslations("common");
@@ -353,7 +419,9 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
     if (body.state === "not-found") return "not-found";
     if (body.state === "private") return "private";
     if (body.state === "gone") {
-      return body.target === "project" ? "project-gone" : body.target === "file" ? "file-gone" : "section-gone";
+      if (body.target === "project") return "project-gone";
+      if (body.target === "file") return "file-gone";
+      return body.target === "section" ? "section-gone" : "gone";
     }
     return null;
   };
@@ -582,6 +650,8 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
             busyLabel={t("preparing")}
             onClick={() => downloadZip(null, "main")}
           >
+            {/* key-share-page: the download mark before the label. */}
+            <span className={styles.zipIcon}>{ICON_DOWNLOAD}</span>
             {payload.kind === "file" ? t("download") : t("downloadZip")}
           </ButtonPrimary>
           {zipError ? (
@@ -670,6 +740,13 @@ export default function SharePage({ payload }: { payload: SharePayload }) {
                 ? t.rich("projectContents", { count: total, b: (chunks) => <b>{chunks}</b> })
                 : t.rich("sectionContents", { count: total, b: (chunks) => <b>{chunks}</b> })}
             </p>
+            {/* key-share-page (phone): the active sort as a compact label with
+                the other options in a small menu; key-share-desktop: pills. */}
+            <SortMenu
+              options={pagesSections ? SECTION_SORT_KEYS : FILE_SORT_KEYS}
+              value={sort}
+              onChange={changeSort}
+            />
             <div className={styles.sortPills} role="group" aria-label={t("sortGroup")}>
               {(pagesSections ? SECTION_SORT_KEYS : FILE_SORT_KEYS).map((p) => (
                 <button

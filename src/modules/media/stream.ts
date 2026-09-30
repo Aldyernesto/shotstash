@@ -110,10 +110,10 @@ export async function fileResponse(input: FileResponseInput): Promise<Response> 
 export type { ZipEntry } from './zip';
 
 /**
- * Streams a ZIP (STORE mode, ZIP64 where needed, see zip.ts). Objects are
- * checked while planning, so unreadable ones are listed in
- * `_MISSING_FILES.txt`; there is no `Content-Length` and no Range. A read
- * that fails mid-entry aborts the response.
+ * Streams a ZIP (STORE mode, ZIP64 where needed, see zip.ts). The response
+ * starts at once; each object is checked just before it is added, and
+ * missing ones are listed in `_MISSING_FILES.txt`. No `Content-Length`, no
+ * Range. A read that fails mid-entry aborts the response.
  */
 export async function zipResponse(input: {
   entries: ZipEntry[];
@@ -123,7 +123,7 @@ export async function zipResponse(input: {
 }): Promise<Response> {
   const store = storage();
   const source = { stat: (key: string) => store.stat(key), getStream: (key: string) => store.getStream(key) };
-  const stream = await zipStream(input.entries, source, {
+  const stream = zipStream(input.entries, source, {
     emptyDirs: input.emptyDirs,
     onError: (err) => log.warn('zip failed', { err: errMessage(err) }),
   });

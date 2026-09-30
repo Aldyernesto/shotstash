@@ -22,7 +22,9 @@ function kindOf(res: Exclude<ShareResolution, { state: "ok" }>): ShareInvalidKin
     ? "project-gone"
     : res.target === "file"
       ? "file-gone"
-      : "section-gone";
+      : res.target === "section"
+        ? "section-gone"
+        : "gone";
 }
 
 export default function ShareRoot({

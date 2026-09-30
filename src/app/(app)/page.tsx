@@ -23,7 +23,7 @@ import { brand } from '@/lib/brand';
 import { issueMediaCookie } from '@/lib/authClient';
 import { usePublicConfig } from '@/lib/usePublicConfig';
 // Story 1.31: email hasil reset dibawa lewat sessionStorage (bukan query param).
-import { LOGIN_PREFILL_KEY } from '@/app/forgot-password/shared';
+import { LOGIN_PREFILL_KEY } from '@/app/(app)/forgot-password/shared';
 
 /**
  * Every message the form alert can show: a key, never server text. The copy

@@ -83,7 +83,10 @@ export function useWindowRows({
       setScrollMargin((prev) => (Math.abs(prev - top) > 0.5 ? top : prev));
     };
     update();
+    // Content above the rows (header, banners, a toast) can change height
+    // without resizing the window: watch the whole document body.
     const ro = new ResizeObserver(update);
+    ro.observe(document.body);
     if (containerRef.current?.parentElement) ro.observe(containerRef.current.parentElement);
     window.addEventListener("resize", update);
     return () => {

@@ -12,7 +12,7 @@ import prisma from '@/lib/prisma';
 import { coverIdFromUrl, coverUrl } from './coverUrl.ts';
 import { COVER_KINDS, storageKeys, type CoverKind } from '@/modules/storage';
 import { folderChainTrashed, findLiveShare, shareFileInScope, shareZipPlan } from '@/lib/shareLink';
-import { zipFileName, zipPlanForFolders } from '@/lib/mediaTree';
+import { safeSegment, zipFileName, zipPlanForFolders } from '@/lib/mediaTree';
 import { can, type Actor } from '@/modules/auth';
 import { isZipTarget, verifyShareToken } from './signing';
 import { fileResponse, forbiddenResponse, notFoundResponse, zipResponse } from './stream';
@@ -72,22 +72,34 @@ export async function mediaGuard(actor: Actor | null, fileId: string): Promise<G
  * keeps its thumbnail for actors who see the Trash (`trash.view`), so Trash
  * rows show real thumbnails. Everything else about a trashed file stays 404.
  */
-export async function thumbnailGuard(actor: Actor | null, fileId: string): Promise<GuardResult> {
+export async function thumbnailGuard(
+  actor: Actor | null,
+  fileId: string,
+): Promise<{ ok: true; file: GuardedFile; trashed: boolean } | { ok: false; response: Response }> {
   const live = await mediaGuard(actor, fileId);
-  if (live.ok || live.response.status !== 404 || !can(actor, 'trash.view') || !ID_RE.test(fileId)) return live;
+  if (live.ok) return { ...live, trashed: false };
+  if (live.response.status !== 404 || !ID_RE.test(fileId)) return live;
   const file = await prisma.mediaFile.findUnique({
     where: { id: fileId },
-    select: { id: true, originalName: true, mimeType: true, storageKey: true, thumbVersion: true, projectId: true, folderId: true, status: true },
+    select: { id: true, originalName: true, mimeType: true, storageKey: true, thumbVersion: true, projectId: true, folderId: true, status: true, trashedAt: true },
   });
   if (!file || file.status !== 'ready') return live;
-  const { status: _s, ...rest } = file;
+  // Only a file that really is in the Trash (itself or an ancestor Section), and only for Trash viewers.
+  const trashed = !!file.trashedAt || (await folderChainTrashed(file.folderId));
+  if (!trashed || !can(actor, 'trash.view')) return live;
+  const { status: _s, trashedAt: _t, ...rest } = file;
   void _s;
-  return { ok: true, file: rest };
+  void _t;
+  return { ok: true, file: rest, trashed: true };
 }
 
-/** `/media/t/:fileId?v=<n>` cache policy (see thumbCache.ts). */
-export function thumbnailCache(file: GuardedFile, requested: string | null): 'immutable' | 'cookie' {
-  return thumbnailCacheFor(file.thumbVersion, requested);
+/**
+ * `/media/t/:fileId?v=<n>` cache policy (see thumbCache.ts). A trashed file's
+ * thumbnail always gets the short private policy: it must stop being served
+ * once the file is purged or the viewer loses Trash access.
+ */
+export function thumbnailCache(file: GuardedFile, requested: string | null, trashed = false): 'immutable' | 'cookie' {
+  return trashed ? 'cookie' : thumbnailCacheFor(file.thumbVersion, requested);
 }
 
 /** Serves one guarded file: thumbnail, inline original or attachment. */
@@ -162,17 +174,19 @@ export async function projectZipResponse(
   if (!ids.length) return Response.json({ code: 'BAD_REQUEST', message: 'folderId or fileIds is required' }, { status: 400 });
   const files = await prisma.mediaFile.findMany({
     where: { id: { in: ids }, projectId, trashedAt: null, status: 'ready' },
-    select: { originalName: true, storageKey: true, folderId: true },
+    select: { originalName: true, storageKey: true, folderId: true, createdAt: true },
   });
-  const live: { key: string; name: string }[] = [];
+  const live: { key: string; name: string; mtime: Date }[] = [];
   const used = new Set<string>();
   for (const f of files) {
     if (await folderChainTrashed(f.folderId)) continue;
-    let name = f.originalName.replace(/[\\/]/g, '_');
+    // The shared sanitiser: '..', empty names and drive letters never reach yazl.
+    const base = safeSegment(f.originalName);
+    let name = base;
     let n = 2;
-    while (used.has(name)) name = `${n++}_${f.originalName.replace(/[\\/]/g, '_')}`;
+    while (used.has(name)) name = `${n++}_${base}`;
     used.add(name);
-    live.push({ key: f.storageKey, name });
+    live.push({ key: f.storageKey, name, mtime: f.createdAt });
   }
   if (!live.length) return notFoundResponse();
   return zipResponse({ entries: live, zipName: zipFileName(project.title), cache: 'cookie' });

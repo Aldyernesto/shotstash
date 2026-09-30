@@ -14,6 +14,9 @@
 // email) mean a second run within 15 minutes needs a server restart.
 import 'dotenv/config';
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import pg from 'pg';
@@ -142,6 +145,16 @@ ok(!vme.data.me.permissions.includes('upload'), 'viewer permissions', JSON.strin
 const proj = await gql(editor.token, '{ projects { id title folders { id name } } }');
 const project = proj.data.projects.find((p) => p.title === 'Sample project');
 const folder = project.folders[0];
+/** Upload of given bytes into any Project and Section (initiate, parts, complete). */
+async function uploadTo(tok, name, buf, projectId, folderId) {
+  const init = await gql(tok, INIT, { i: { filename: name, totalSize: buf.length, projectId, folderId } });
+  if (init.errors) return { init, done: init };
+  const s = init.data.initiateUpload;
+  let pr;
+  for (let n = 1; n <= s.partCount; n++) pr = await putPart(tok, s.id, n, buf.subarray((n - 1) * s.partSize, n * s.partSize));
+  const done = await gql(tok, COMPLETE, { s: s.id, m: md5hex(buf) });
+  return { init, session: s, partStatus: pr?.status, done, buf };
+}
 async function upload(tok, path, name, folderId = folder.id, buf = FIXTURES[path]()) {
   const init = await gql(tok, INIT, { i: { filename: name, totalSize: buf.length, projectId: project.id, folderId } });
   if (init.errors) return { init };
@@ -514,6 +527,16 @@ r = await fetch(`${B}${signed[0]}`);
 ok(r.status === 404, 'signed URL 404 after revoke', r.status);
 r = await fetch(`${B}/s/${pubLink.slug}`);
 ok(r.status === 404 && inactiveKind(await r.text()) === 'revoked', 'revoked page 404 with its message', r.status);
+r = await fetch(`${B}/s/${pubLink.slug}/sign`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ zip: true }) });
+{
+  const b = await r.json().catch(() => ({}));
+  ok(r.status === 410 && b.state === 'revoked', 'sign on a revoked link 410 revoked', `${r.status} ${b.state}`);
+}
+r = await fetch(`${B}/s/${pubLink.slug}/items?offset=0`);
+{
+  const b = await r.json().catch(() => ({}));
+  ok(r.status === 410 && b.state === 'revoked', 'items on a revoked link 410 revoked', `${r.status} ${b.state}`);
+}
 {
   // Story 4.6: an expired link answers 404 with its own message.
   const exp = (await gql(editor.token, `mutation { createShareLink(input:{folderId:"${folder.id}", mode:PUBLIC, expiresInHours:24}) { id slug } }`)).data.createShareLink;
@@ -544,8 +567,9 @@ ok((await gql(editor.token, `mutation { moveToTrash(fileId:"${pic.id}") }`)).dat
 // thumbnail stays visible to Trash viewers only.
 r = await fetch(`${B}/media/p/${versionId}`, { headers: { cookie: editor.cookie } });
 ok(r.status === 404, 'processed version of a trashed file 404', r.status);
-r = await fetch(`${B}/media/t/${pic.id}`, { headers: { cookie: editor.cookie } });
+r = await fetch(`${B}${picRow.thumbnailUrl}`, { headers: { cookie: editor.cookie } });
 ok(r.status === 200 && r.headers.get('content-type') === 'image/jpeg', 'trashed file thumbnail for a Trash viewer (editor)', r.status);
+ok(r.headers.get('cache-control') === 'private, max-age=3600', 'a trashed file thumbnail is never cached as immutable', r.headers.get('cache-control'));
 r = await fetch(`${B}/media/t/${pic.id}`, { headers: { cookie: admin.cookie } });
 ok(r.status === 200, 'trashed file thumbnail for an admin', r.status);
 r = await fetch(`${B}/media/t/${pic.id}`, { headers: { cookie: viewer.cookie } });
@@ -559,7 +583,7 @@ ok(r.status === 404, 'trashed file original stays 404', r.status);
 const purge = await gql(admin.token, `mutation { permanentDelete(fileId:"${pic.id}") }`);
 ok(purge.data?.permanentDelete === true, 'admin permanentDelete allowed (link revoked first)', JSON.stringify(purge.errors ?? ''));
 r = await fetch(`${B}/s/${p2.slug}`);
-ok(r.status === 404, 'link to purged file 404', r.status);
+ok(r.status === 404 && inactiveKind(await r.text()) === 'gone', 'link to purged file 404 with the gone message', r.status);
 
 // deactivation deletes sessions: the old token stays dead after reactivation
 const ro = await gql(sa.token, `mutation { deactivateUser(id:"${crew.user.id}") { id active } }`);
@@ -738,7 +762,7 @@ ok(code(await gql(editor.token, `mutation { permanentDeleteFolder(folderId:"${se
 const pf = await gql(admin.token, `mutation { permanentDeleteFolder(folderId:"${secS}") }`);
 ok(pf.data?.permanentDeleteFolder === true, 'admin purges Section', JSON.stringify(pf.errors ?? ''));
 r = await fetch(`${B}/s/${link.slug}`);
-ok(r.status === 404, 'purged target share page 404', r.status);
+ok(r.status === 404 && inactiveKind(await r.text()) === 'gone', 'purged target share page 404 with the gone message', r.status);
 const listed = (await gql(admin.token, '{ shareLinks { id } }')).data.shareLinks.some((l) => l.id === link.id);
 ok(!listed, 'purged link no longer listed');
 {
@@ -751,6 +775,92 @@ ok(!listed, 'purged link no longer listed');
 ok((await gql(editor.token, `{ folder(id:"${secS2}") { id } }`)).data?.folder === null && (await gql(admin.token, '{ allTrashedFolders { id } }')).data.allTrashedFolders.every((f) => f.id !== secS2), 'nested trashed Section purged with its parent');
 r = await fetch(`${B}/media/i/${ownFile.id}`, { headers: { cookie: editor.cookie } });
 ok(r.status === 404, 'purged file media 404', r.status);
+
+// ---- Story 4.4: a HEIC upload keeps its original and gets a preview version
+{
+  const heifEnc = spawnSync('heif-enc', ['--version'], { encoding: 'utf8' });
+  if (heifEnc.error) {
+    console.log('SKIP HEIC upload rows: heif-enc not installed (apt install libheif-examples)');
+  } else {
+    const dir = mkdtempSync(path.join(tmpdir(), 'e2e-heic-'));
+    try {
+      // A synthetic photo (never a real one), unique per run.
+      const noise = await sharp(randomBytes(96 * 64 * 3), { raw: { width: 96, height: 64, channels: 3 } }).jpeg().toBuffer();
+      writeFileSync(path.join(dir, 'in.jpg'), noise);
+      const enc = spawnSync('heif-enc', ['-q', '60', '-o', path.join(dir, 'out.heic'), path.join(dir, 'in.jpg')], { encoding: 'utf8' });
+      ok(enc.status === 0, 'heif-enc made a synthetic HEIC', (enc.stderr || '').slice(-200));
+      const heic = readFileSync(path.join(dir, 'out.heic'));
+      const name = `IMG_${RUN}.HEIC`;
+      const up = await uploadTo(editor.token, name, heic, project.id, folder.id);
+      const f = up.done.data?.completeUpload;
+      ok(!!f?.id, 'HEIC upload completes', JSON.stringify(up.done.errors ?? ''));
+      const row = (await gql(editor.token, `{ folder(id:"${folder.id}") { files { id mimeType originalName md5Checksum thumbnailUrl previewUrl } } }`)).data.folder.files.find((x) => x.id === f.id);
+      const versions = (await gql(editor.token, `{ processedVersions(fileId:"${f.id}") { id kind mimeType } }`)).data.processedVersions;
+      const dbRow = (await db44.query('SELECT storage_key, thumb_version FROM media_files WHERE id = $1', [f.id])).rows[0];
+      ok(row?.mimeType === 'image/heic' && row.originalName === name, 'HEIC keeps its type and name', `${row?.mimeType} ${row?.originalName}`);
+      ok(dbRow?.storage_key === `files/${f.id}/original.heic`, 'HEIC original key unchanged', dbRow?.storage_key);
+      ok(row?.md5Checksum === md5hex(heic), 'md5Checksum is the MD5 of the uploaded bytes');
+      ok(versions.length === 1 && versions[0].kind === 'preview' && versions[0].mimeType === 'image/jpeg', 'exactly one preview version (JPEG)', JSON.stringify(versions));
+      ok(row?.previewUrl === `/media/p/${versions[0]?.id}`, 'previewUrl set', row?.previewUrl);
+      ok(dbRow?.thumb_version > 0 && row.thumbnailUrl === `/media/t/${f.id}?v=${dbRow.thumb_version}`, 'HEIC thumbnail made', row?.thumbnailUrl);
+      r = await fetch(`${B}${row.thumbnailUrl}`, { headers: { cookie: editor.cookie } });
+      ok(r.status === 200 && r.headers.get('content-type') === 'image/jpeg', 'HEIC thumbnail 200 image/jpeg', r.status);
+      r = await fetch(`${B}/media/d/${f.id}`, { headers: { cookie: editor.cookie } });
+      ok(md5hex(Buffer.from(await r.arrayBuffer())) === md5hex(heic), 'the stored original is byte for byte the upload');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+}
+
+// ---- Story 4.5: the search index follows every lifecycle change (with
+// Elasticsearch on the CI local leg; the database answers the same without it)
+{
+  const esOn = !!process.env.ELASTICSEARCH_NODE_URL;
+  console.log(`search index rows: ${esOn ? 'Elasticsearch' : 'database only'}`);
+  const findIn = async (query, projectId, id, want = true) => {
+    for (let i = 0; i < 40; i++) {
+      const res = await gql(editor.token, 'query($q: String!, $p: ID){ searchFiles(query:$q, projectId:$p) { id } }', { q: query, p: projectId });
+      const hit = (res.data?.searchFiles ?? []).some((x) => x.id === id);
+      if (hit === want) return true;
+      await new Promise((done) => setTimeout(done, 250));
+    }
+    return false;
+  };
+  const p2 = (await gql(editor.token, `mutation { createProject(input:{title:"Search ${RUN}"}) { id } }`)).data.createProject.id;
+  const p2Section = (await gql(editor.token, `mutation { createFolder(projectId:"${p2}", name:"Index") { id } }`)).data.createFolder.id;
+  const word = `Ärger${RUN}`;
+  const a = (await uploadTo(editor.token, `${word}.jpg`, FIXTURES['photo.jpg'](), project.id, folder.id)).done.data.completeUpload;
+  ok(await findIn(word.toLowerCase(), project.id, a.id), 'search finds a new upload (non-ASCII name, other case)');
+  await gql(editor.token, `mutation { moveFile(fileId:"${a.id}", targetFolderId:"${p2Section}") { id } }`);
+  ok(await findIn(word, p2, a.id), 'search finds a file moved to another Project there');
+  ok(await findIn(word, project.id, a.id, false), 'and no longer in the old Project');
+  const copy = (await gql(editor.token, `mutation { copyFile(fileId:"${a.id}", targetFolderId:"${folder.id}") { id } }`)).data?.copyFile;
+  ok(!!copy?.id && (await findIn(word, project.id, copy.id)), 'search finds a copy');
+  const sec = (await gql(editor.token, `mutation { createFolder(projectId:"${project.id}", name:"Moving ${RUN}") { id } }`)).data.createFolder.id;
+  const m = (await uploadTo(editor.token, `Möve${RUN}.jpg`, FIXTURES['photo.jpg'](), project.id, sec)).done.data.completeUpload;
+  await gql(editor.token, `mutation { moveFolder(folderId:"${sec}", targetProjectId:"${p2}") { id } }`);
+  ok(await findIn(`möve${RUN}`, p2, m.id), 'search finds a file of a Section moved to another Project');
+  ok((await gql(editor.token, `mutation { moveFolderToTrash(folderId:"${sec}") }`)).data?.moveFolderToTrash === true, 'trash the moved Section');
+  ok(await findIn(`möve${RUN}`, p2, m.id, false), 'a trashed Section leaves search');
+  ok((await gql(editor.token, `mutation { restoreFolder(folderId:"${sec}") { id } }`)).data?.restoreFolder?.id === sec, 'restore it');
+  ok(await findIn(`möve${RUN}`, p2, m.id), 'a restored Section is found again');
+}
+
+// ---- Story 4.5: a trashed Section's rep thumbnails come from its nested files only
+{
+  const top = (await gql(editor.token, `mutation { createFolder(projectId:"${project.id}", name:"Nest ${RUN}") { id } }`)).data.createFolder.id;
+  const inner = (await gql(editor.token, `mutation { createFolder(projectId:"${project.id}", name:"Inner", parentId:"${top}") { id } }`)).data.createFolder.id;
+  const early = (await gql(editor.token, `mutation { createFolder(projectId:"${project.id}", name:"Early", parentId:"${top}") { id } }`)).data.createFolder.id;
+  const nested = (await uploadTo(editor.token, 'nested.jpg', FIXTURES['photo.jpg'](), project.id, inner)).done.data.completeUpload;
+  const earlyFile = (await uploadTo(editor.token, 'early.jpg', FIXTURES['photo.jpg'](), project.id, early)).done.data.completeUpload;
+  await gql(editor.token, `mutation { moveFolderToTrash(folderId:"${early}") }`);
+  await gql(editor.token, `mutation { moveFolderToTrash(folderId:"${top}") }`);
+  const rows = (await gql(editor.token, '{ allTrashedFolders { id repFiles(limit: 3) { id thumbnailUrl } } }')).data.allTrashedFolders;
+  const reps = rows.find((x) => x.id === top)?.repFiles ?? [];
+  ok(reps.some((x) => x.id === nested.id && x.thumbnailUrl), 'trashed Section rep thumbnails come from its nested sub-Section', JSON.stringify(reps));
+  ok(!reps.some((x) => x.id === earlyFile.id), 'a sub-Section trashed on its own earlier contributes nothing');
+}
 
 // logout
 r = await fetch(`${B}/api/v1/auth/logout`, { method: 'POST', headers: { authorization: `Bearer ${flooder.token}` } });

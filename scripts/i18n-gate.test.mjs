@@ -15,7 +15,7 @@ test('scope is the whole src tree', () => {
   assert.deepEqual(scope.files, ['src/**']);
   const files = check.expandScope(scope.files);
   assert.ok(files.length > 150, `expected the whole tree, got ${files.length} files`);
-  assert.ok(files.includes('src/app/dashboard/admin/page.tsx'));
+  assert.ok(files.includes('src/app/(app)/dashboard/admin/page.tsx'));
   assert.ok(files.includes('src/graphql/resolvers.ts'));
   assert.ok(files.includes('src/emails/PasswordResetEmail.tsx'));
 });

@@ -2,9 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
-import { NextIntlClientProvider } from "next-intl";
-import { getLocale, getMessages } from "next-intl/server";
-import { headers } from "next/headers";
+import { getLocale } from "next-intl/server";
 import { brand } from "@/lib/brand";
 
 const inter = Inter({
@@ -29,8 +27,6 @@ const poppins = localFont({
   fallback: ["Arial Black", "Segoe UI Black", "Helvetica Neue", "Arial", "sans-serif"],
 });
 
-import { ApolloWrapper } from "@/components/ApolloWrapper";
-import { AuthProvider } from "@/components/AuthContext";
 
 // Product name and tagline come from the brand module (single source).
 export const metadata: Metadata = {
@@ -56,13 +52,6 @@ export const viewport: Viewport = {
 // Save-Data/deviceMemory dievaluasi saat muat (tidak punya event andal).
 const themeInit = `(function(){try{var t=localStorage.getItem('shotstash_theme');if(t!=='light'&&t!=='dark'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}try{var h=document.documentElement,m=window.matchMedia('(prefers-reduced-motion: reduce)'),s=false,d=false;try{s=!!(navigator.connection&&navigator.connection.saveData);}catch(e){}try{d=(navigator.deviceMemory||8)<=2;}catch(e){}var f=function(){h.setAttribute('data-motion',(m.matches||s||d)?'calm':'full');};f();if(m.addEventListener){m.addEventListener('change',f);}}catch(e){}})();`;
 
-/** Message namespaces the public share page (`/s/...`) renders. */
-const SHARE_PAGE_NAMESPACES = ["common", "count", "content", "format", "form", "theme", "viewer", "errors", "states", "share", "shareInvalid"];
-
-function pickMessages(all: Record<string, unknown>, keys: string[]) {
-  return Object.fromEntries(keys.filter((k) => k in all).map((k) => [k, all[k]])) as typeof all;
-}
-
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -71,12 +60,6 @@ export default async function RootLayout({
   // Story 3.1: the page language follows the resolved locale (cookie from
   // users.locale, then SHOTSTASH_DEFAULT_LOCALE, then English).
   const locale = await getLocale();
-  // Story 4.6 (share page budget): the public share page gets only the
-  // messages it renders and no Apollo or session providers, so neither the
-  // whole message bundle nor their JavaScript reaches a client's phone.
-  // The path comes from the custom server (`x-shotstash-path`).
-  const sharePage = /^\/s\//.test((await headers()).get("x-shotstash-path") ?? "");
-  const messages = sharePage ? pickMessages(await getMessages(), SHARE_PAGE_NAMESPACES) : undefined;
   return (
     <html
       // data-theme & data-motion diubah skrip anti-FOUC pra-hidrasi —
@@ -91,15 +74,11 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
       <body>
-        <NextIntlClientProvider {...(messages ? { messages } : {})}>
-          {sharePage ? (
-            children
-          ) : (
-            <ApolloWrapper>
-              <AuthProvider>{children}</AuthProvider>
-            </ApolloWrapper>
-          )}
-        </NextIntlClientProvider>
+        {/* Story 4.6: providers live in the route-group layouts, so the public
+            share page (`s/layout.tsx`) never ships Apollo, the session
+            context or the whole message bundle; the app (`(app)/layout.tsx`)
+            gets all of them. */}
+        {children}
       </body>
     </html>
   );

@@ -29,7 +29,7 @@
  * The original never changes.
  */
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import styles from "./viewerInfo.module.css";
 import { useFormat } from "@/i18n/useFormat";
@@ -125,9 +125,10 @@ function VersionsList({ versions }: { versions: ViewerVersion[] }) {
   const t = useTranslations("viewer.info.versions");
   const f = useFormat();
   const kindLabel = useKindLabel();
+  const titleId = useId();
   return (
-    <section aria-labelledby="viewer-versions-title" className={styles.versions}>
-      <p id="viewer-versions-title" className={`spine-label ${styles.versionsTitle}`}>
+    <section aria-labelledby={titleId} className={styles.versions}>
+      <p id={titleId} className={`spine-label ${styles.versionsTitle}`}>
         {t("title")}
       </p>
       <ul className={styles.versionList}>

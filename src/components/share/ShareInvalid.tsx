@@ -35,12 +35,13 @@ export type ShareInvalidKind =
   | "project-gone"
   | "section-gone"
   | "file-gone"
+  | "gone"
   | "private";
 
 /** Message keys (`shareInvalid.<key>.title|text`) per state. */
 const COPY_KEY: Record<
   ShareInvalidKind,
-  "expired" | "revoked" | "notFound" | "projectGone" | "sectionGone" | "fileGone" | "private"
+  "expired" | "revoked" | "notFound" | "projectGone" | "sectionGone" | "fileGone" | "gone" | "private"
 > = {
   expired: "expired",
   revoked: "revoked",
@@ -48,6 +49,7 @@ const COPY_KEY: Record<
   "project-gone": "projectGone",
   "section-gone": "sectionGone",
   "file-gone": "fileGone",
+  gone: "gone",
   private: "private",
 };
 

@@ -29,11 +29,12 @@ export async function liveSubtree(rootIds: string[]): Promise<TreeFolder[]> {
 }
 
 export type ZipPlan = {
-  entries: { key: string; name: string }[];
+  entries: { key: string; name: string; mtime: Date }[];
   emptyDirs: string[];
 };
 
-function safeSegment(name: string): string {
+/** One safe path segment of a ZIP entry (no separators, control characters, '.', '..' or empty). */
+export function safeSegment(name: string): string {
   const cleaned = name.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').trim();
   return cleaned === '.' || cleaned === '..' || !cleaned ? '_' : cleaned;
 }
@@ -57,7 +58,7 @@ export async function zipPlanForFolders(rootIds: string[]): Promise<ZipPlan> {
   const files = folders.length
     ? await prisma.mediaFile.findMany({
         where: { folderId: { in: folders.map((f) => f.id) }, trashedAt: null, status: 'ready' },
-        select: { folderId: true, originalName: true, storageKey: true },
+        select: { folderId: true, originalName: true, storageKey: true, createdAt: true },
         orderBy: { createdAt: 'asc' },
       })
     : [];
@@ -74,7 +75,7 @@ export async function zipPlanForFolders(rootIds: string[]): Promise<ZipPlan> {
       name = `${stem} (${n})${ext}`;
     }
     used.add(name);
-    return { key: f.storageKey, name };
+    return { key: f.storageKey, name, mtime: f.createdAt };
   });
 
   const nonEmpty = new Set<string>();
