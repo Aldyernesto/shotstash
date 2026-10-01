@@ -42,8 +42,7 @@ import {
   storage,
   storageKeys,
 } from '@/modules/storage';
-import { createNotification } from '@/services/notification.service';
-import { insertChat } from '@/services/chat.service';
+import { createNotification, insertChat } from '@/modules/activity';
 import { findOriginal, isDedupViolation } from './dedup';
 
 const log = logger('upload');

@@ -4,16 +4,20 @@
 # the build context is the repository root, filtered by
 # docker/worker.Dockerfile.dockerignore to the worker/ folder only.
 #
-#   docker build -f docker/worker.Dockerfile --build-arg VERSION=1.2.3 -t shotstash-worker .
+#   docker build -f docker/worker.Dockerfile --build-arg VERSION=1.2.3 \
+#     --build-arg SOURCE_URL=https://github.com/<owner>/shotstash -t shotstash-worker .
 
 ARG NODE_IMAGE=node:24-trixie-slim
 
 FROM ${NODE_IMAGE}
 ARG VERSION=dev
+# The repository URL, passed by the release workflow (server URL plus owner/repo),
+# so the label follows the repository wherever it lives. Empty for local builds.
+ARG SOURCE_URL=
 LABEL org.opencontainers.image.title="Shotstash worker" \
       org.opencontainers.image.description="Reference processing worker for Shotstash (720p proxies with ffmpeg)" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.source="https://github.com/Aldyernesto/shotstash" \
+      org.opencontainers.image.source="${SOURCE_URL}" \
       org.opencontainers.image.version="${VERSION}"
 
 RUN apt-get update \

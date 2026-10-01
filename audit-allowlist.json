@@ -1,0 +1,29 @@
+{
+  "$comment": "Story 6.4: high or critical advisories in production dependencies that cannot be fixed without a breaking upgrade. Each entry needs a reason and expires at most 90 days ahead; scripts/audit-check.mjs fails on an expired or unlisted one.",
+  "advisories": [
+    {
+      "id": "GHSA-f88m-g3jw-g9cj",
+      "package": "sharp",
+      "reason": "libvips CVEs fixed in sharp 0.35.5, a 0.x minor (breaking by semver); thumbnails only decode files the uploader already owns. Upgrade with a thumbnail regression run.",
+      "expires": "2026-12-30"
+    },
+    {
+      "id": "GHSA-rgj7-g3m4-5g8c",
+      "package": "sharp",
+      "reason": "libheif fixes in sharp 0.35.5, a 0.x minor (breaking by semver); same upgrade as GHSA-f88m-g3jw-g9cj.",
+      "expires": "2026-12-30"
+    },
+    {
+      "id": "GHSA-ggr8-5vv4-36mx",
+      "package": "deepmerge-ts",
+      "reason": "Pulled in by the prisma CLI (@prisma/config); no Prisma 7 release has the fix and npm only offers a downgrade to Prisma 6. The CLI only merges its own config at migrate time.",
+      "expires": "2026-12-30"
+    },
+    {
+      "id": "GHSA-3f6p-5ww8-9rcr",
+      "package": "mysql2",
+      "reason": "Pulled in by the prisma CLI; Shotstash only talks to PostgreSQL, so the MySQL driver never opens a connection. No Prisma 7 release has the fix.",
+      "expires": "2026-12-30"
+    }
+  ]
+}

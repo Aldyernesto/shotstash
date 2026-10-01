@@ -17,11 +17,16 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Register a worker
- * @description Exchanges the shared bootstrap token for a per-worker token (shown once). The manifest names the worker, its version, the kinds it processes and the contract major (1).
+ * @description Exchanges the shared bootstrap token for a per-worker token (shown once). The manifest names the worker and its version and the kinds it processes and the contract major (1).
  * @tag Pipeline
- * @auth apikey
+ * @auth bootstrap
  * @body RegisterRequest
- * @response 201:RegisterResponse
+ * @response 201:RegisterResponse:Worker registered
+ * @response 400:ErrorBody:INVALID_BODY or INVALID_MANIFEST
+ * @response 401:ErrorBody:Wrong or missing bootstrap token
+ * @response 422:ErrorBody:CONTRACT_UNSUPPORTED
+ * @response 429:ErrorBody:RATE_LIMITED
+ * @response 503:ErrorBody:PIPELINE_DISABLED or SETUP_REQUIRED
  * @openapi
  */
 export const POST = defineRoute({

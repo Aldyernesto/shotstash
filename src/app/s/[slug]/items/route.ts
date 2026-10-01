@@ -11,6 +11,19 @@ import { shareSigner, shareUnlocked } from '@/modules/share';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Next page of a share grid
+ * @description One more page of files or Sections with signed media URLs. PUBLIC links need nothing; PRIVATE links need the share cookie from unlock.
+ * @tag Share
+ * @auth share
+ * @pathParams SharePathParams
+ * @params ShareItemsQuery
+ * @response 200:ShareItemsResponse:The page
+ * @response 401:ShareStateBody:PRIVATE link without the share cookie
+ * @response 404:ShareStateBody:No such link
+ * @response 410:ShareStateBody:Expired or revoked or the target is gone
+ * @openapi
+ */
 export const GET = defineRoute<{ slug: string }>({
   auth: 'share',
   handler: async ({ req, params }) => {

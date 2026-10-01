@@ -24,6 +24,19 @@ export function routeFiles() {
   return walk(join(ROOT, 'src', 'app')).sort();
 }
 
+/**
+ * The OpenAPI form of a route path: `[x]`, catch-all `[...x]` and optional
+ * catch-all `[[...x]]` segments all become `{x}`.
+ */
+export function openApiPathOf(path) {
+  return path.replace(/\[\[\.\.\.(\w+)\]\]|\[\.\.\.(\w+)\]|\[(\w+)\]/g, (_, a, b, c) => `{${a ?? b ?? c}}`);
+}
+
+/** True when the route path has a dynamic segment of any kind. */
+export function hasDynamicSegment(path) {
+  return /\[(\[)?(\.\.\.)?\w+\](\])?/.test(path);
+}
+
 export function routePathOf(file) {
   const rel = relative(join(ROOT, 'src', 'app'), file).split(sep).join('/');
   const dir = rel.replace(/\/?route\.(ts|js)$/, '');
@@ -42,12 +55,21 @@ function stringProp(obj, name) {
   return undefined;
 }
 
+function boolProp(obj, name) {
+  for (const p of obj.properties) {
+    if (ts.isPropertyAssignment(p) && p.name && p.name.getText() === name) {
+      return p.initializer.kind === ts.SyntaxKind.TrueKeyword;
+    }
+  }
+  return false;
+}
+
 function defineRouteCall(expr) {
   if (!expr || !ts.isCallExpression(expr)) return null;
   if (expr.expression.getText() !== 'defineRoute') return null;
   const arg = expr.arguments[0];
   if (!arg || !ts.isObjectLiteralExpression(arg)) return null;
-  return { auth: stringProp(arg, 'auth'), action: stringProp(arg, 'action') ?? null };
+  return { auth: stringProp(arg, 'auth'), action: stringProp(arg, 'action') ?? null, bootstrap: boolProp(arg, 'bootstrap') };
 }
 
 /**

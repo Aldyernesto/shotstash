@@ -17,5 +17,31 @@ const handler = defineRoute<{ fileId: string }>({
   },
 });
 
+/**
+ * File thumbnail
+ * @description The JPEG thumbnail of a library file. With v equal to the current thumbnail version the answer is cached for a year.
+ * @tag Media
+ * @auth cookie
+ * @pathParams FilePathParams
+ * @params ThumbnailQuery
+ * @response 200:JpegImage:The thumbnail
+ * @response 401:ErrorBody:No valid session
+ * @response 403:ErrorBody:FORBIDDEN
+ * @response 404:ErrorBody:NOT_FOUND
+ * @openapi
+ */
 export const GET = handler;
+/**
+ * File thumbnail (headers only)
+ * @description Same as GET without the body. The JPEG thumbnail of a library file. With v equal to the current thumbnail version the answer is cached for a year.
+ * @tag Media
+ * @auth cookie
+ * @pathParams FilePathParams
+ * @params ThumbnailQuery
+ * @response 200:JpegImage:The thumbnail
+ * @response 401:ErrorBody:No valid session
+ * @response 403:ErrorBody:FORBIDDEN
+ * @response 404:ErrorBody:NOT_FOUND
+ * @openapi
+ */
 export const HEAD = handler;

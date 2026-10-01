@@ -23,7 +23,7 @@ import { GraphQLError } from 'graphql';
 import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { folderChainTrashed } from '@/lib/shareLink';
-import { revokeLinksForTargets } from '@/services/share.service';
+import { revokeLinksForTargets } from '@/modules/share';
 import { coverIdFromUrl, deleteCover } from '@/modules/media';
 import { storage, storageKeys } from '@/modules/storage';
 import { detachDuplicates, detachDuplicatesOfProject, markConflictsAsDuplicates, resettle } from '@/modules/upload';

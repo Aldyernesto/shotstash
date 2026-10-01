@@ -20,12 +20,20 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Upload the job output
- * @description The raw bytes of the one output, streamed. Content-Type is its media type (video/mp4) and X-Output-Ext its extension (mp4). The size limit is SHOTSTASH_PIPELINE_MAX_OUTPUT_MB.
+ * @description The raw bytes of the one output; streamed. Content-Type is its media type (video/mp4) and X-Output-Ext its extension (mp4). The size limit is SHOTSTASH_PIPELINE_MAX_OUTPUT_MB.
  * @tag Pipeline
- * @auth apikey
+ * @auth worker
  * @pathParams JobPathParams
- * @body Blob
- * @response 200:OutputResponse
+ * @header OutputHeaders
+ * @contentType application/octet-stream
+ * @body BinaryBody
+ * @response 200:OutputResponse:Output stored
+ * @response 400:ErrorBody:INVALID_OUTPUT or CLAIM_TOKEN_REQUIRED
+ * @response 401:ErrorBody:Missing or revoked worker token
+ * @response 404:ErrorBody:JOB_NOT_FOUND
+ * @response 409:ErrorBody:CLAIM_STALE or JOB_TERMINAL
+ * @response 413:ErrorBody:OUTPUT_TOO_LARGE
+ * @response 503:ErrorBody:STORAGE_UNAVAILABLE
  * @openapi
  */
 export const PUT = defineRoute<{ id: string }>({

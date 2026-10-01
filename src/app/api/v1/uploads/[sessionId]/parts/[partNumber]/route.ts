@@ -14,6 +14,7 @@
  */
 import { Readable } from 'stream';
 import { NextResponse } from 'next/server';
+import type { UploadPartResponse } from '@/lib/apiContract/uploads';
 import { defineRoute, jsonError } from '@/lib/defineRoute';
 import { limitBy, rateLimitedResponse } from '@/lib/rateLimit';
 import { can } from '@/modules/auth';
@@ -23,6 +24,26 @@ export const dynamic = 'force-dynamic';
 
 const ID_RE = /^[0-9a-f-]{36}$/i;
 
+/**
+ * Upload one part
+ * @description Streams one part of a resumable upload started with the initiateUpload mutation. The body is the raw bytes; Content-MD5 is required and checked. Sending a part again replaces it.
+ * @tag Uploads
+ * @auth session
+ * @pathParams UploadPartPathParams
+ * @header UploadPartHeaders
+ * @contentType application/octet-stream
+ * @body BinaryBody
+ * @response 200:UploadPartResponse:Part stored
+ * @response 400:ErrorBody:PART_CHECKSUM_MISMATCH or PART_CHECKSUM_REQUIRED or PART_SIZE_MISMATCH or INVALID_PART_NUMBER
+ * @response 401:ErrorBody:No valid session
+ * @response 403:ErrorBody:FORBIDDEN (another user session)
+ * @response 404:ErrorBody:UPLOAD_SESSION_NOT_FOUND
+ * @response 409:ErrorBody:UPLOAD_SESSION_CLOSED
+ * @response 410:ErrorBody:UPLOAD_SESSION_EXPIRED
+ * @response 429:ErrorBody:RATE_LIMITED
+ * @response 503:ErrorBody:STORAGE_UNAVAILABLE
+ * @openapi
+ */
 export const PUT = defineRoute<{ sessionId: string; partNumber: string }>({
   auth: 'session',
   action: 'upload',
@@ -48,7 +69,14 @@ export const PUT = defineRoute<{ sessionId: string; partNumber: string }>({
         contentLength,
         md5: req.headers.get('content-md5'),
       });
-      return NextResponse.json(result);
+      // Exactly the documented body: no field more, no field less.
+      const answer: UploadPartResponse = {
+        partNumber: result.partNumber,
+        size: result.size,
+        confirmedParts: result.confirmedParts,
+        partCount: result.partCount,
+      } satisfies Record<keyof typeof result, unknown>;
+      return NextResponse.json(answer);
     } catch (err) {
       body.destroy();
       if (err instanceof UploadFailure) return jsonError(err.status, err.code, err.message, err.details);

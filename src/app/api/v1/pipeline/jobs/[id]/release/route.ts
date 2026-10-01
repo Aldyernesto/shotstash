@@ -20,10 +20,15 @@ export const dynamic = 'force-dynamic';
  * Release the job
  * @description Puts a claimed or running job back in the queue without spending an attempt (use it on shutdown). Another worker can claim it at once.
  * @tag Pipeline
- * @auth apikey
+ * @auth worker
  * @pathParams JobPathParams
+ * @header ClaimHeaders
  * @body EmptyBody
- * @response 200:ReleaseResponse
+ * @response 200:ReleaseResponse:Job back in the queue
+ * @response 400:ErrorBody:CLAIM_TOKEN_REQUIRED
+ * @response 401:ErrorBody:Missing or revoked worker token
+ * @response 404:ErrorBody:JOB_NOT_FOUND
+ * @response 409:ErrorBody:CLAIM_STALE or JOB_TERMINAL
  * @openapi
  */
 export const POST = defineRoute<{ id: string }>({

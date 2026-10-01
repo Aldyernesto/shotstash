@@ -20,10 +20,15 @@ export const dynamic = 'force-dynamic';
  * Complete the job
  * @description Turns the uploaded output into a processed version of the file. Upload the output first.
  * @tag Pipeline
- * @auth apikey
+ * @auth worker
  * @pathParams JobPathParams
+ * @header ClaimHeaders
  * @body EmptyBody
- * @response 200:CompleteResponse
+ * @response 200:CompleteResponse:Job done
+ * @response 400:ErrorBody:CLAIM_TOKEN_REQUIRED
+ * @response 401:ErrorBody:Missing or revoked worker token
+ * @response 404:ErrorBody:JOB_NOT_FOUND
+ * @response 409:ErrorBody:CLAIM_STALE or JOB_TERMINAL or OUTPUT_MISSING
  * @openapi
  */
 export const POST = defineRoute<{ id: string }>({

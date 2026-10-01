@@ -1,0 +1,29 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "alpha": {
+      "name": "alpha",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        { "source": 1001, "name": "alpha", "title": "Alpha overflow", "url": "https://github.com/advisories/GHSA-aaaa-aaaa-aaaa", "severity": "high" }
+      ]
+    },
+    "beta": {
+      "name": "beta",
+      "severity": "critical",
+      "isDirect": false,
+      "via": [
+        { "source": 1002, "name": "beta", "title": "Beta remote code execution", "url": "https://github.com/advisories/GHSA-bbbb-bbbb-bbbb", "severity": "critical" },
+        { "source": 1003, "name": "beta", "title": "Beta slow regex", "url": "https://github.com/advisories/GHSA-cccc-cccc-cccc", "severity": "moderate" }
+      ]
+    },
+    "gamma": {
+      "name": "gamma",
+      "severity": "critical",
+      "isDirect": true,
+      "via": ["beta"]
+    }
+  },
+  "metadata": { "vulnerabilities": { "info": 0, "low": 0, "moderate": 1, "high": 1, "critical": 2, "total": 4 } }
+}

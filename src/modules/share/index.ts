@@ -18,5 +18,6 @@ export {
 /** Signs share media URLs through the media module. */
 export const shareSigner: ShareSigner = (shareId, target) => signShareUrl(shareId, target);
 
+export { revokeLinksForTargets } from './revoke';
 export { shareUnlocked } from './unlock';
 export type { CookieReader } from './unlock';

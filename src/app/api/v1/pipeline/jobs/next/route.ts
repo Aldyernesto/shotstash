@@ -15,11 +15,14 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Claim the next job
- * @description Answers 204 when no queued job of the worker's kinds exists. The claim token in the answer goes into X-Claim-Token on every later call for the job.
+ * @description Claims the oldest queued job of the worker kinds. The claim token in the answer goes into X-Claim-Token on every later call for the job.
  * @tag Pipeline
- * @auth apikey
+ * @auth worker
  * @body EmptyBody
- * @response 200:ClaimResponse
+ * @response 200:ClaimResponse:A job was claimed
+ * @response 204:NoBody:No queued job of the worker kinds
+ * @response 401:ErrorBody:Missing or revoked worker token
+ * @response 429:ErrorBody:RATE_LIMITED
  * @openapi
  */
 export const POST = defineRoute({

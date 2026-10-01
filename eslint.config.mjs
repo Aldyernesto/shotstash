@@ -18,6 +18,22 @@ const TEXT_ATTRS =
 const LETTERS = "/[A-Za-z]{2,}/";
 const literalAttrMessage = "User-visible attribute text must come from messages (t(...)).";
 
+const literalAttrSelectors = [
+  { selector: `JSXAttribute[name.name=${TEXT_ATTRS}] > Literal[value=${LETTERS}]`, message: literalAttrMessage },
+  { selector: `JSXAttribute[name.name=${TEXT_ATTRS}] > JSXExpressionContainer > Literal[value=${LETTERS}]`, message: literalAttrMessage },
+  { selector: `JSXAttribute[name.name=${TEXT_ATTRS}] > JSXExpressionContainer > TemplateLiteral > TemplateElement[value.raw=${LETTERS}]`, message: literalAttrMessage },
+  { selector: `JSXAttribute[name.name=${TEXT_ATTRS}] > JSXExpressionContainer > :matches(ConditionalExpression, LogicalExpression) > Literal[value=${LETTERS}]`, message: literalAttrMessage },
+];
+
+// Import direction (Story 6.4): what src/modules/** may not import, by alias
+// or by a relative path (`./`, `../`, `../../src/`). Relative paths are
+// matched by name, so a folder inside a module named app, components,
+// graphql or services is refused too: name module subfolders differently.
+const LAYER_IMPORT = String.raw`^(@/|\./|(\.\./)+(src/)?)(app|components|graphql|services)(/|$)`;
+const layerImportMessage =
+  "src/modules must not import app, components, graphql or services; move the shared code into a module. " +
+  "(Relative paths are matched by folder name: do not name a module subfolder app, components, graphql or services.)";
+
 // Module boundaries (AD-2): other code imports a module only through its
 // public surface, `@/modules/<name>` (its index.ts), never its internals.
 const noDeepModuleImports = {
@@ -76,6 +92,11 @@ const eslintConfig = defineConfig([
       "react-hooks/purity": "warn",
       "react-hooks/preserve-manual-memoization": "warn",
       "no-restricted-imports": ["error", { patterns: [noDeepModuleImports] }],
+      // New in eslint-config-next 16.3. The flagged `window.location.href`
+      // assignments are deliberate full reloads after a sign-in state change
+      // (they drop the Apollo cache and stored token); a soft router push
+      // would keep stale client state.
+      "@next/next/no-location-assign-relative-destination": "off",
     },
   },
   {
@@ -111,11 +132,21 @@ const eslintConfig = defineConfig([
           exclude: [/^[^\p{L}]*$/u, /^[A-Z0-9_-]+$/],
         },
       }],
+      "no-restricted-syntax": ["error", ...literalAttrSelectors],
+    },
+  },
+  {
+    // Import direction (Story 6.4): domain modules sit below the app layers.
+    // Static imports through no-restricted-imports, dynamic import() through
+    // no-restricted-syntax (which also keeps the i18n selectors above).
+    files: ["src/modules/**"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [noDeepModuleImports, { regex: LAYER_IMPORT, message: layerImportMessage }],
+      }],
       "no-restricted-syntax": ["error",
-        { selector: `JSXAttribute[name.name=${TEXT_ATTRS}] > Literal[value=${LETTERS}]`, message: literalAttrMessage },
-        { selector: `JSXAttribute[name.name=${TEXT_ATTRS}] > JSXExpressionContainer > Literal[value=${LETTERS}]`, message: literalAttrMessage },
-        { selector: `JSXAttribute[name.name=${TEXT_ATTRS}] > JSXExpressionContainer > TemplateLiteral > TemplateElement[value.raw=${LETTERS}]`, message: literalAttrMessage },
-        { selector: `JSXAttribute[name.name=${TEXT_ATTRS}] > JSXExpressionContainer > :matches(ConditionalExpression, LogicalExpression) > Literal[value=${LETTERS}]`, message: literalAttrMessage },
+        ...literalAttrSelectors,
+        { selector: `ImportExpression[source.value=/${LAYER_IMPORT.replaceAll("/", String.raw`\/`)}/]`, message: layerImportMessage },
       ],
     },
   },

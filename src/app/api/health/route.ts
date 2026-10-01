@@ -18,6 +18,7 @@
  * (local root readable and writable, or the S3 bucket reachable).
  */
 import { NextResponse } from 'next/server';
+import type { HealthResponse } from '@/lib/apiContract/system';
 import { cacheUp, dbUp } from '@/lib/healthChecks';
 import { storageHealth } from '@/modules/storage';
 import { defineRoute } from '@/lib/defineRoute';
@@ -39,6 +40,15 @@ async function mayReadDetails(req: Request): Promise<boolean> {
   return Boolean(session && can(session.actor, 'instance.configure'));
 }
 
+/**
+ * Health check
+ * @description Public and served before first-run setup. Everyone gets ok and setupRequired and version; a loopback client (the TCP peer, never a forwarded header) or a Bearer session whose account may configure the instance (instance.configure) also gets db and cache and storage and schemeMismatch. 503 carries the same body with ok false.
+ * @tag System
+ * @auth public
+ * @response 200:HealthResponse:Every dependency answers
+ * @response 503:HealthResponse:A dependency is down
+ * @openapi
+ */
 export const GET = defineRoute({
   auth: 'public',
   allowBeforeSetup: true,
@@ -53,8 +63,8 @@ export const GET = defineRoute({
     const status = ok ? 200 : 503;
     const headers = { 'Cache-Control': 'no-store' };
     const version = config().version;
-    if (!(await mayReadDetails(req))) return NextResponse.json({ ok, setupRequired, version }, { status, headers });
-    const body = {
+    if (!(await mayReadDetails(req))) return NextResponse.json({ ok, setupRequired, version } satisfies HealthResponse, { status, headers });
+    const body: HealthResponse = {
       ok,
       version,
       db,

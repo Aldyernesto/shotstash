@@ -2,9 +2,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
+import { AUTH_SECURITY, UNGATED_PATHS as AUTH_GATE_UNGATED, leakProblems, referenceProblems } from './gen-openapi.mjs';
 import {
+  ROOT,
   analyzeRoute,
+  hasDynamicSegment,
   loadAuthMap,
+  openApiPathOf,
   resolverFields,
   routeFiles,
   schemaFields,
@@ -60,24 +65,70 @@ test('worker auth is used exactly by the pipeline contract routes, and nothing e
   ]);
 });
 
-test('every pipeline route carries its OpenAPI annotations (@openapi, @auth apikey, @body, @response)', () => {
+// Story 7.3: POST routes that read no body (the Bearer token is the whole request).
+const NO_BODY = new Set(['POST /api/v1/auth/cookie', 'POST /api/v1/auth/logout']);
+
+test('every route under src/app/api, src/app/media and src/app/s carries its OpenAPI annotations', () => {
   const problems = [];
-  for (const file of routeFiles()) {
+  const files = routeFiles();
+  for (const file of files) {
     const r = analyzeRoute(file);
-    if (!r.path.startsWith('/api/v1/pipeline/')) continue;
+    const rel = relative(ROOT, file).split(sep).join('/');
+    if (!/^src\/app\/(api|media|s)\//.test(rel)) {
+      problems.push(`${rel}: route outside api, media and s (document it and extend the OpenAPI scope)`);
+      continue;
+    }
     for (const m of r.methods) {
+      const where = `${rel} ${m.method}`;
       const doc = jsdocBefore(file, m.method);
       if (!doc) {
-        problems.push(`${m.method} ${r.path}: no JSDoc on the export`);
+        problems.push(`${where}: no JSDoc on the export`);
         continue;
       }
-      for (const tag of ['@openapi', '@auth apikey', '@response']) if (!doc.includes(tag)) problems.push(`${m.method} ${r.path}: missing ${tag}`);
-      if (['POST', 'PUT', 'PATCH'].includes(m.method) && !/@body \w+/.test(doc)) problems.push(`${m.method} ${r.path}: missing @body`);
-      if (/\[id\]/.test(r.path) && !doc.includes('@pathParams')) problems.push(`${m.method} ${r.path}: missing @pathParams`);
-      if (!/^\s*\*\s+[A-Z][^@\n]+$/m.test(doc)) problems.push(`${m.method} ${r.path}: no summary line`);
+      if (!/^\s*\*\s+[A-Z][^@\n]+$/m.test(doc)) problems.push(`${where}: no summary line`);
+      for (const tag of ['@openapi', '@description', '@tag', '@response']) if (!doc.includes(tag)) problems.push(`${where}: missing ${tag}`);
+      const auth = doc.match(/@auth (\w+)/)?.[1];
+      // `bootstrap: true` is read from this method's own defineRoute() call.
+      const expected = m.declared?.bootstrap ? 'bootstrap' : m.declared?.auth;
+      if (auth !== expected) problems.push(`${where}: @auth ${auth ?? '(missing)'} but defineRoute auth is ${expected}`);
+      const needsBody = ['POST', 'PUT', 'PATCH'].includes(m.method) && !NO_BODY.has(`${m.method} ${r.path}`);
+      if (needsBody && !/@body \w+/.test(doc)) problems.push(`${where}: missing @body`);
+      if (hasDynamicSegment(r.path) && !/@pathParams \w+/.test(doc)) problems.push(`${where}: missing @pathParams`);
     }
   }
   assert.deepEqual(problems, []);
+});
+
+test('openapi.json has one operation per exported route method and nothing else', () => {
+  const doc = JSON.parse(readFileSync(join(ROOT, 'openapi.json'), 'utf8'));
+  assert.equal(doc.openapi, '3.1.0');
+  const expected = [];
+  for (const file of routeFiles()) {
+    const r = analyzeRoute(file);
+    const path = openApiPathOf(r.path);
+    for (const m of r.methods) expected.push(`${m.method} ${path}`);
+  }
+  const actual = [];
+  for (const [path, item] of Object.entries(doc.paths)) {
+    for (const method of Object.keys(item)) actual.push(`${method.toUpperCase()} ${path}`);
+  }
+  assert.deepEqual(actual.sort(), expected.sort(), 'run `npm run openapi` after changing a route');
+});
+
+test('openapi.json maps every auth mode to its security and embeds no host or token', () => {
+  const text = readFileSync(join(ROOT, 'openapi.json'), 'utf8');
+  const doc = JSON.parse(text);
+  assert.deepEqual(doc.servers.map((s) => s.url), ['/']);
+  for (const [path, item] of Object.entries(doc.paths)) {
+    for (const [method, op] of Object.entries(item)) {
+      const mode = op['x-shotstash-auth'];
+      assert.ok(mode in AUTH_SECURITY, `${method} ${path}: ${mode}`);
+      assert.deepEqual(op.security, AUTH_SECURITY[mode], `${method} ${path}`);
+    }
+  }
+  assert.deepEqual(leakProblems(text), []);
+  assert.doesNotMatch(text, /demo/i, 'no demo host or token until the demo instance exists');
+  assert.deepEqual(referenceProblems(doc), []);
 });
 
 test('cookie auth is only used under /media', () => {
@@ -157,9 +208,36 @@ test('only health, config and setup are served before first-run setup (Stories 2
     .map((f) => routePathOf(f))
     .sort();
   assert.deepEqual(early, ['/api/health', '/api/v1/config', '/api/v1/setup']);
+  assert.deepEqual([...AUTH_GATE_UNGATED].sort(), early, 'gen-openapi UNGATED_PATHS must list the same routes');
   // Nothing else may opt in by any other spelling.
   for (const f of routeFiles()) {
     const src = readFileSync(f, 'utf8');
     if (/allowBeforeSetup/.test(src)) assert.ok(early.includes(routePathOf(f)), routePathOf(f));
+  }
+});
+
+test('path conversion handles dynamic, catch-all and optional catch-all segments', () => {
+  assert.equal(openApiPathOf('/media/d/[fileId]'), '/media/d/{fileId}');
+  assert.equal(openApiPathOf('/docs/[...slug]'), '/docs/{slug}');
+  assert.equal(openApiPathOf('/docs/[[...slug]]'), '/docs/{slug}');
+  assert.equal(openApiPathOf('/a/[x]/b/[...rest]'), '/a/{x}/b/{rest}');
+  for (const p of ['/x/[id]', '/x/[...all]', '/x/[[...all]]']) assert.ok(hasDynamicSegment(p), p);
+  assert.ok(!hasDynamicSegment('/api/health'));
+});
+
+test('bootstrap is read per method from its own defineRoute() call', async () => {
+  const { writeFileSync, mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const dir = mkdtempSync(join(tmpdir(), 'route-'));
+  const file = join(dir, 'route.ts');
+  writeFileSync(file, [
+    "export const POST = defineRoute({ auth: 'worker', bootstrap: true, handler: async () => null });",
+    "export const GET = defineRoute({ auth: 'worker', handler: async () => null });",
+  ].join('\n'));
+  try {
+    const byMethod = Object.fromEntries(analyzeRoute(file).methods.map((m) => [m.method, m.declared.bootstrap]));
+    assert.deepEqual(byMethod, { POST: true, GET: false });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -1,0 +1,18 @@
+# Published images instead of local builds (Story 6.4). Use it together with
+# docker-compose.yml, after the first release exists:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.images.yml pull
+#   docker compose -f docker-compose.yml -f docker-compose.images.yml up -d
+#
+# IMAGE_TAG picks the release (default latest; pin X.Y.Z or X.Y in .env for
+# controlled upgrades and rollbacks). IMAGE_REGISTRY is where the images
+# live; change it only if the project moves (see docs/releasing.md).
+
+services:
+  app:
+    image: ${IMAGE_REGISTRY:-ghcr.io/aldyernesto}/shotstash:${IMAGE_TAG:-latest}
+    build: !reset null
+
+  worker:
+    image: ${IMAGE_REGISTRY:-ghcr.io/aldyernesto}/shotstash-worker:${IMAGE_TAG:-latest}
+    build: !reset null

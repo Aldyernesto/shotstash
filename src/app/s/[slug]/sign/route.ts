@@ -29,6 +29,19 @@ async function readable(key: string): Promise<boolean> {
 
 type SignBody = { fileIds?: unknown; zip?: unknown; section?: unknown; thumbs?: unknown } | null;
 
+/**
+ * Sign share media again
+ * @description Mints fresh signed URLs for files and optionally the ZIP and the thumbnails (signed URLs expire). PUBLIC links need nothing; PRIVATE links need the share cookie from unlock.
+ * @tag Share
+ * @auth share
+ * @pathParams SharePathParams
+ * @body ShareSignRequest
+ * @response 200:ShareSignResponse:Fresh signed URLs
+ * @response 401:ShareStateBody:PRIVATE link without the share cookie
+ * @response 404:ShareStateBody:No such link
+ * @response 410:ShareStateBody:Expired or revoked or the target is gone
+ * @openapi
+ */
 export const POST = defineRoute<{ slug: string }>({
   auth: 'share',
   handler: async ({ req, params }) => {

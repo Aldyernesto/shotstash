@@ -14,5 +14,33 @@ const handler = defineRoute<{ fileId: string }>({
   },
 });
 
+/**
+ * Download a file
+ * @description The original bytes as an attachment; Range is supported for parallel and resumed downloads.
+ * @tag Media
+ * @auth cookie
+ * @pathParams FilePathParams
+ * @response 200:MediaBytes:The whole file
+ * @response 206:MediaBytes:One byte range
+ * @response 401:ErrorBody:No valid session
+ * @response 403:ErrorBody:FORBIDDEN
+ * @response 404:ErrorBody:NOT_FOUND
+ * @response 416:NoBody:Range not satisfiable
+ * @openapi
+ */
 export const GET = handler;
+/**
+ * Download a file (headers only)
+ * @description Same as GET without the body. The original bytes as an attachment; Range is supported for parallel and resumed downloads.
+ * @tag Media
+ * @auth cookie
+ * @pathParams FilePathParams
+ * @response 200:MediaBytes:The whole file
+ * @response 206:MediaBytes:One byte range
+ * @response 401:ErrorBody:No valid session
+ * @response 403:ErrorBody:FORBIDDEN
+ * @response 404:ErrorBody:NOT_FOUND
+ * @response 416:NoBody:Range not satisfiable
+ * @openapi
+ */
 export const HEAD = handler;

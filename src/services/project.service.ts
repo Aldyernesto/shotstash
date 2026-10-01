@@ -1,5 +1,5 @@
 import prisma from '../lib/prisma';
-import { createNotification } from './notification.service';
+import { createNotification } from '@/modules/activity';
 
 // Projects and Sections exist only in the database (Story 4.1): storage keys
 // never encode hierarchy, so creating, renaming or moving them touches no bytes.

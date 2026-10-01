@@ -5,6 +5,15 @@ import { SESSION_COOKIE, SESSION_COOKIE_PATH, clearedCookieOptions, destroySessi
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Sign out
+ * @description Revokes the session of the Bearer token and clears the media cookie. No body.
+ * @tag Auth
+ * @auth session
+ * @response 200:OkResponse:Signed out
+ * @response 401:ErrorBody:No valid session
+ * @openapi
+ */
 export const POST = defineRoute({
   auth: 'session',
   handler: async ({ req, session }) => {

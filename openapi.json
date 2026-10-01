@@ -1,0 +1,4516 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Shotstash REST API",
+    "version": "0.1.0",
+    "description": "REST routes of a Shotstash instance: auth, uploads, media, share pages, health and the processing worker contract (v1). Everything else (projects, files, sharing, discussion, jobs in the UI) is GraphQL at /api/graphql; see schema.graphql. Errors answer `{ code, message }` with a stable code. Until first-run setup is done every route except health, config and setup answers 503 SETUP_REQUIRED.",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "The instance serving this document"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Auth",
+      "description": "Sign in and out; the Bearer token and the media cookie."
+    },
+    {
+      "name": "GraphQL",
+      "description": "The GraphQL endpoint. The schema reference is schema.graphql."
+    },
+    {
+      "name": "Media",
+      "description": "File bytes, thumbnails, processed versions and ZIPs under /media."
+    },
+    {
+      "name": "Pipeline",
+      "description": "Worker contract v1: register, heartbeat, claim, input, output, progress, complete, fail, release."
+    },
+    {
+      "name": "Share",
+      "description": "Data of public and private share pages under /s/{slug}."
+    },
+    {
+      "name": "System",
+      "description": "Health, runtime config, first-run setup and instance status."
+    },
+    {
+      "name": "Uploads",
+      "description": "Resumable upload parts and cover images. Uploads start and complete through GraphQL."
+    }
+  ],
+  "paths": {
+    "/api/graphql": {
+      "get": {
+        "operationId": "getApiGraphql",
+        "summary": "Run a GraphQL query (GET)",
+        "description": "GraphQL over GET for queries only (query and variables in the URL). The schema and every operation are documented in schema.graphql at the repository root; each root field declares its own auth (public or Bearer session).",
+        "tags": [
+          "GraphQL"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The GraphQL document."
+            },
+            "description": "The GraphQL document."
+          },
+          {
+            "in": "query",
+            "name": "variables",
+            "required": false,
+            "schema": {
+              "type": "object",
+              "additionalProperties": {},
+              "description": "Operation variables."
+            },
+            "description": "Operation variables.",
+            "style": "deepObject",
+            "explode": true
+          },
+          {
+            "in": "query",
+            "name": "operationName",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Which operation of the document to run."
+            },
+            "description": "Which operation of the document to run."
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "GraphQL result (errors are inside the body)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphQLResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "public"
+      },
+      "post": {
+        "operationId": "postApiGraphql",
+        "summary": "Run a GraphQL operation",
+        "description": "The GraphQL endpoint for queries and mutations; subscriptions use graphql-ws on the same path. The schema and every operation are documented in schema.graphql at the repository root. Send the session as a Bearer token; each root field declares its own auth (public or session). The media cookie is never read here.",
+        "tags": [
+          "GraphQL"
+        ],
+        "parameters": [],
+        "security": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GraphQLRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "GraphQL result (errors are inside the body)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphQLResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "public"
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "getApiHealth",
+        "summary": "Health check",
+        "description": "Public and served before first-run setup. Everyone gets ok and setupRequired and version; a loopback client (the TCP peer, never a forwarded header) or a Bearer session whose account may configure the instance (instance.configure) also gets db and cache and storage and schemeMismatch. 503 carries the same body with ok false.",
+        "tags": [
+          "System"
+        ],
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Every dependency answers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A dependency is down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-shotstash-auth": "public"
+      }
+    },
+    "/api/ping": {
+      "get": {
+        "operationId": "getApiPing",
+        "summary": "Ping",
+        "description": "Liveness answer with the server time; touches no dependency.",
+        "tags": [
+          "System"
+        ],
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The server is up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PingResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "public"
+      }
+    },
+    "/api/upload/cover": {
+      "post": {
+        "operationId": "postApiUploadCover",
+        "summary": "Upload a cover or avatar",
+        "description": "Multipart form with kind (project or user) and file. Project covers need section.create; an avatar needs an active writable account. The image is re-encoded to JPEG; the answer names its cookie-authorised URL under /media/c.",
+        "tags": [
+          "Uploads"
+        ],
+        "parameters": [],
+        "security": [
+          {
+            "SessionToken": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/CoverUploadForm"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cover stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BAD_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "TOO_LARGE (over 10 MiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "UNSUPPORTED_TYPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "session"
+      }
+    },
+    "/api/v1/auth/cookie": {
+      "post": {
+        "operationId": "postApiV1AuthCookie",
+        "summary": "Set the media cookie",
+        "description": "Bearer in and media cookie out: sets shotstash_session (HttpOnly; SameSite=Lax; Path=/media) for the session of the Bearer token. Browsers call it after sign-in and on boot. No body.",
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [],
+        "security": [
+          {
+            "SessionToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cookie set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CookieResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "session"
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "postApiV1AuthLogin",
+        "summary": "Sign in",
+        "description": "Email and password in and a Bearer token out; also sets the shotstash_session media cookie. Rate limited to 10 attempts per 15 minutes per IP and per email.",
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [],
+        "security": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BAD_REQUEST (email and password are required)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "INVALID_CREDENTIALS or another login refusal code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "public"
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "postApiV1AuthLogout",
+        "summary": "Sign out",
+        "description": "Revokes the session of the Bearer token and clears the media cookie. No body.",
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [],
+        "security": [
+          {
+            "SessionToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Signed out",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "session"
+      }
+    },
+    "/api/v1/config": {
+      "get": {
+        "operationId": "getApiV1Config",
+        "summary": "Runtime config",
+        "description": "Public settings the browser needs (app URL and Google client id and feature switches and version and default locale). Public and served before setup; never carries a secret.",
+        "tags": [
+          "System"
+        ],
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Public settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicConfigResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-shotstash-auth": "public"
+      }
+    },
+    "/api/v1/pipeline/jobs/next": {
+      "post": {
+        "operationId": "postApiV1PipelineJobsNext",
+        "summary": "Claim the next job",
+        "description": "Claims the oldest queued job of the worker kinds. The claim token in the answer goes into X-Claim-Token on every later call for the job.",
+        "tags": [
+          "Pipeline"
+        ],
+        "parameters": [],
+        "security": [
+          {
+            "WorkerToken": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A job was claimed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimResponse"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No queued job of the worker kinds"
+          },
+          "401": {
+            "description": "Missing or revoked worker token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "worker"
+      }
+    },
+    "/api/v1/pipeline/jobs/{id}/complete": {
+      "post": {
+        "operationId": "postApiV1PipelineJobsByIdComplete",
+        "summary": "Complete the job",
+        "description": "Turns the uploaded output into a processed version of the file. Upload the output first.",
+        "tags": [
+          "Pipeline"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Job id (UUID)."
+            },
+            "description": "Job id (UUID)."
+          },
+          {
+            "in": "header",
+            "name": "X-Claim-Token",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Claim token from the claim answer."
+            },
+            "description": "Claim token from the claim answer."
+          }
+        ],
+        "security": [
+          {
+            "WorkerToken": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Job done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompleteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "CLAIM_TOKEN_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or revoked worker token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "JOB_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CLAIM_STALE or JOB_TERMINAL or OUTPUT_MISSING",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "worker"
+      }
+    },
+    "/api/v1/pipeline/jobs/{id}/fail": {
+      "post": {
+        "operationId": "postApiV1PipelineJobsByIdFail",
+        "summary": "Fail the job",
+        "description": "Reports an error. Retryable failures are requeued while attempts remain (3 in total); the rest fail for good.",
+        "tags": [
+          "Pipeline"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Job id (UUID)."
+            },
+            "description": "Job id (UUID)."
+          },
+          {
+            "in": "header",
+            "name": "X-Claim-Token",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Claim token from the claim answer."
+            },
+            "description": "Claim token from the claim answer."
+          }
+        ],
+        "security": [
+          {
+            "WorkerToken": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FailRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Failure recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_BODY or CLAIM_TOKEN_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or revoked worker token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "JOB_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CLAIM_STALE or JOB_TERMINAL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "worker"
+      }
+    },
+    "/api/v1/pipeline/jobs/{id}/input": {
+      "get": {
+        "operationId": "getApiV1PipelineJobsByIdInput",
+        "summary": "Read the job input",
+        "description": "The original file of the job; whole or one byte range (Range: bytes=start-end). Only for the worker holding the claim.",
+        "tags": [
+          "Pipeline"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Job id (UUID)."
+            },
+            "description": "Job id (UUID)."
+          },
+          {
+            "in": "header",
+            "name": "X-Claim-Token",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Claim token from the claim answer."
+            },
+            "description": "Claim token from the claim answer."
+          }
+        ],
+        "security": [
+          {
+            "WorkerToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The whole file",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/octet-stream",
+                  "description": "Raw file bytes; Content-Type is the media type of the file."
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "One byte range",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/octet-stream",
+                  "description": "Raw file bytes; Content-Type is the media type of the file."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "CLAIM_TOKEN_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or revoked worker token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "JOB_NOT_FOUND or FILE_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CLAIM_STALE or JOB_TERMINAL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Range not satisfiable"
+          },
+          "503": {
+            "description": "STORAGE_UNAVAILABLE or SETUP_REQUIRED (first-run setup not done)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "x-shotstash-auth": "worker"
+      }
+    },
+    "/api/v1/pipeline/jobs/{id}/output": {
+      "put": {
+        "operationId": "putApiV1PipelineJobsByIdOutput",
+        "summary": "Upload the job output",
+        "description": "The raw bytes of the one output; streamed. Content-Type is its media type (video/mp4) and X-Output-Ext its extension (mp4). The size limit is SHOTSTASH_PIPELINE_MAX_OUTPUT_MB.",
+        "tags": [
+          "Pipeline"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Job id (UUID)."
+            },
+            "description": "Job id (UUID)."
+          },
+          {
+            "in": "header",
+            "name": "X-Claim-Token",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Claim token from the claim answer."
+            },
+            "description": "Claim token from the claim answer."
+          },
+          {
+            "in": "header",
+            "name": "X-Output-Ext",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Extension of the output, such as `mp4`."
+            },
+            "description": "Extension of the output, such as `mp4`."
+          }
+        ],
+        "security": [
+          {
+            "WorkerToken": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "contentMediaType": "application/octet-stream",
+                "description": "Raw bytes, streamed."
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Output stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutputResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_OUTPUT or CLAIM_TOKEN_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or revoked worker token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "JOB_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CLAIM_STALE or JOB_TERMINAL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "OUTPUT_TOO_LARGE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "STORAGE_UNAVAILABLE or SETUP_REQUIRED (first-run setup not done)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "x-shotstash-auth": "worker"
+      }
+    },
+    "/api/v1/pipeline/jobs/{id}/progress": {
+      "post": {
+        "operationId": "postApiV1PipelineJobsByIdProgress",
+        "summary": "Report progress",
+        "description": "Percent done (0 to 100). A cancelled job answers 409 JOB_TERMINAL: stop and drop the work.",
+        "tags": [
+          "Pipeline"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Job id (UUID)."
+            },
+            "description": "Job id (UUID)."
+          },
+          {
+            "in": "header",
+            "name": "X-Claim-Token",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Claim token from the claim answer."
+            },
+            "description": "Claim token from the claim answer."
+          }
+        ],
+        "security": [
+          {
+            "WorkerToken": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProgressRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Progress stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgressResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_BODY or CLAIM_TOKEN_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or revoked worker token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "JOB_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CLAIM_STALE or JOB_TERMINAL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "worker"
+      }
+    },
+    "/api/v1/pipeline/jobs/{id}/release": {
+      "post": {
+        "operationId": "postApiV1PipelineJobsByIdRelease",
+        "summary": "Release the job",
+        "description": "Puts a claimed or running job back in the queue without spending an attempt (use it on shutdown). Another worker can claim it at once.",
+        "tags": [
+          "Pipeline"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Job id (UUID)."
+            },
+            "description": "Job id (UUID)."
+          },
+          {
+            "in": "header",
+            "name": "X-Claim-Token",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Claim token from the claim answer."
+            },
+            "description": "Claim token from the claim answer."
+          }
+        ],
+        "security": [
+          {
+            "WorkerToken": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Job back in the queue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "CLAIM_TOKEN_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or revoked worker token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "JOB_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CLAIM_STALE or JOB_TERMINAL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "worker"
+      }
+    },
+    "/api/v1/pipeline/workers/heartbeat": {
+      "post": {
+        "operationId": "postApiV1PipelineWorkersHeartbeat",
+        "summary": "Send a heartbeat",
+        "description": "Keeps the worker live and refreshes the leases of the jobs it is processing. A claim without a heartbeat for the lease (90 s by default) goes back to the queue.",
+        "tags": [
+          "Pipeline"
+        ],
+        "parameters": [],
+        "security": [
+          {
+            "WorkerToken": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Heartbeat stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeartbeatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_BODY or INVALID_MANIFEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or revoked worker token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "CONTRACT_UNSUPPORTED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "worker"
+      }
+    },
+    "/api/v1/pipeline/workers/register": {
+      "post": {
+        "operationId": "postApiV1PipelineWorkersRegister",
+        "summary": "Register a worker",
+        "description": "Exchanges the shared bootstrap token for a per-worker token (shown once). The manifest names the worker and its version and the kinds it processes and the contract major (1).",
+        "tags": [
+          "Pipeline"
+        ],
+        "parameters": [],
+        "security": [
+          {
+            "WorkerBootstrapToken": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Worker registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_BODY or INVALID_MANIFEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Wrong or missing bootstrap token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "CONTRACT_UNSUPPORTED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PIPELINE_DISABLED or SETUP_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "x-shotstash-auth": "bootstrap"
+      }
+    },
+    "/api/v1/setup": {
+      "post": {
+        "operationId": "postApiV1Setup",
+        "summary": "First-run setup",
+        "description": "Creates the first super admin once. Public and served before setup; rate limited to 10 per 15 minutes per IP. When the operator set SETUP_TOKEN the body must carry the same setupToken.",
+        "tags": [
+          "System"
+        ],
+        "parameters": [],
+        "security": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Super admin created and setup complete",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_INPUT or PASSWORD_TOO_SHORT or PASSWORD_TOO_LONG or PASSWORD_MISMATCH",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "SETUP_TOKEN_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SETUP_ALREADY_DONE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "STORAGE_UNAVAILABLE (nothing was created)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "x-shotstash-auth": "public"
+      }
+    },
+    "/api/v1/status": {
+      "get": {
+        "operationId": "getApiV1Status",
+        "summary": "Instance status",
+        "description": "Version and storage and database and cache and search and the processing queue for the status page. Only for accounts that may configure the instance; everyone else gets 404.",
+        "tags": [
+          "System"
+        ],
+        "parameters": [],
+        "security": [
+          {
+            "SessionToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Instance status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND (not allowed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "session"
+      }
+    },
+    "/api/v1/uploads/{sessionId}/parts/{partNumber}": {
+      "put": {
+        "operationId": "putApiV1UploadsBySessionIdPartsByPartNumber",
+        "summary": "Upload one part",
+        "description": "Streams one part of a resumable upload started with the initiateUpload mutation. The body is the raw bytes; Content-MD5 is required and checked. Sending a part again replaces it.",
+        "tags": [
+          "Uploads"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Upload session id (UUID) from the `initiateUpload` mutation."
+            },
+            "description": "Upload session id (UUID) from the `initiateUpload` mutation."
+          },
+          {
+            "in": "path",
+            "name": "partNumber",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Part number, from 1 to the session's `partCount`."
+            },
+            "description": "Part number, from 1 to the session's `partCount`."
+          },
+          {
+            "in": "header",
+            "name": "Content-MD5",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Base64 MD5 of the part body (RFC 1864); the server checks it."
+            },
+            "description": "Base64 MD5 of the part body (RFC 1864); the server checks it."
+          }
+        ],
+        "security": [
+          {
+            "SessionToken": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "contentMediaType": "application/octet-stream",
+                "description": "Raw bytes, streamed."
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Part stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadPartResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "PART_CHECKSUM_MISMATCH or PART_CHECKSUM_REQUIRED or PART_SIZE_MISMATCH or INVALID_PART_NUMBER",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN (another user session)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "UPLOAD_SESSION_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "UPLOAD_SESSION_CLOSED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "UPLOAD_SESSION_EXPIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "STORAGE_UNAVAILABLE or SETUP_REQUIRED (first-run setup not done)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "x-shotstash-auth": "session"
+      }
+    },
+    "/media/c/{kind}/{id}": {
+      "get": {
+        "operationId": "getMediaCByKindById",
+        "summary": "Cover or avatar image",
+        "description": "A project cover or user avatar as JPEG; for any signed-in account that may view projects.",
+        "tags": [
+          "Media"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Cache-busting version from the cover URL."
+            },
+            "description": "Cache-busting version from the cover URL."
+          },
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "project",
+                "user"
+              ],
+              "description": "`project` or `user`."
+            },
+            "description": "`project` or `user`."
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Cover id (UUID)."
+            },
+            "description": "Cover id (UUID)."
+          }
+        ],
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The image",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "image/jpeg",
+                  "description": "A JPEG image."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "cookie"
+      }
+    },
+    "/media/d/{fileId}": {
+      "get": {
+        "operationId": "getMediaDByFileId",
+        "summary": "Download a file",
+        "description": "The original bytes as an attachment; Range is supported for parallel and resumed downloads.",
+        "tags": [
+          "Media"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fileId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "File id (UUID)."
+            },
+            "description": "File id (UUID)."
+          }
+        ],
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The whole file",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/octet-stream",
+                  "description": "Raw file bytes; Content-Type is the media type of the file."
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "One byte range",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/octet-stream",
+                  "description": "Raw file bytes; Content-Type is the media type of the file."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Range not satisfiable"
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "cookie"
+      },
+      "head": {
+        "operationId": "headMediaDByFileId",
+        "summary": "Download a file (headers only)",
+        "description": "Same as GET without the body. The original bytes as an attachment; Range is supported for parallel and resumed downloads.",
+        "tags": [
+          "Media"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fileId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "File id (UUID)."
+            },
+            "description": "File id (UUID)."
+          }
+        ],
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The whole file"
+          },
+          "206": {
+            "description": "One byte range"
+          },
+          "401": {
+            "description": "No valid session"
+          },
+          "403": {
+            "description": "FORBIDDEN"
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          },
+          "416": {
+            "description": "Range not satisfiable"
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "cookie"
+      }
+    },
+    "/media/i/{fileId}": {
+      "get": {
+        "operationId": "getMediaIByFileId",
+        "summary": "Show a file inline",
+        "description": "The original bytes inline (viewer and video scrubbing with Range).",
+        "tags": [
+          "Media"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fileId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "File id (UUID)."
+            },
+            "description": "File id (UUID)."
+          }
+        ],
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The whole file",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/octet-stream",
+                  "description": "Raw file bytes; Content-Type is the media type of the file."
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "One byte range",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/octet-stream",
+                  "description": "Raw file bytes; Content-Type is the media type of the file."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Range not satisfiable"
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "cookie"
+      },
+      "head": {
+        "operationId": "headMediaIByFileId",
+        "summary": "Show a file inline (headers only)",
+        "description": "Same as GET without the body. The original bytes inline (viewer and video scrubbing with Range).",
+        "tags": [
+          "Media"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fileId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "File id (UUID)."
+            },
+            "description": "File id (UUID)."
+          }
+        ],
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The whole file"
+          },
+          "206": {
+            "description": "One byte range"
+          },
+          "401": {
+            "description": "No valid session"
+          },
+          "403": {
+            "description": "FORBIDDEN"
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          },
+          "416": {
+            "description": "Range not satisfiable"
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "cookie"
+      }
+    },
+    "/media/p/{versionId}": {
+      "get": {
+        "operationId": "getMediaPByVersionId",
+        "summary": "Download a processed version",
+        "description": "A processed version (such as a 720p proxy) as an attachment; allowed like its parent file. Range is supported.",
+        "tags": [
+          "Media"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "versionId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Processed version id (UUID)."
+            },
+            "description": "Processed version id (UUID)."
+          }
+        ],
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The whole file",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/octet-stream",
+                  "description": "Raw file bytes; Content-Type is the media type of the file."
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "One byte range",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/octet-stream",
+                  "description": "Raw file bytes; Content-Type is the media type of the file."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Range not satisfiable"
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "cookie"
+      },
+      "head": {
+        "operationId": "headMediaPByVersionId",
+        "summary": "Download a processed version (headers only)",
+        "description": "Same as GET without the body. A processed version (such as a 720p proxy) as an attachment; allowed like its parent file. Range is supported.",
+        "tags": [
+          "Media"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "versionId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Processed version id (UUID)."
+            },
+            "description": "Processed version id (UUID)."
+          }
+        ],
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The whole file"
+          },
+          "206": {
+            "description": "One byte range"
+          },
+          "401": {
+            "description": "No valid session"
+          },
+          "403": {
+            "description": "FORBIDDEN"
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          },
+          "416": {
+            "description": "Range not satisfiable"
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "cookie"
+      }
+    },
+    "/media/s/{token}": {
+      "get": {
+        "operationId": "getMediaSByToken",
+        "summary": "Signed share media",
+        "description": "A file or thumbnail or ZIP of a share link through an HMAC-signed URL minted by the share page (valid 5 minutes; ZIPs 24 hours). The token is checked again against the live share link. Range is supported for files.",
+        "tags": [
+          "Media"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "dl",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ],
+              "description": "`1` serves the file as an attachment instead of inline."
+            },
+            "description": "`1` serves the file as an attachment instead of inline."
+          },
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "HMAC-signed token minted by the share page; it names the link and the target and expires."
+            },
+            "description": "HMAC-signed token minted by the share page; it names the link and the target and expires."
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The file or thumbnail or ZIP",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/octet-stream",
+                  "description": "Raw file bytes; Content-Type is the media type of the file."
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "One byte range",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/octet-stream",
+                  "description": "Raw file bytes; Content-Type is the media type of the file."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND (bad or expired token or a dead link)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Range not satisfiable"
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "signed"
+      },
+      "head": {
+        "operationId": "headMediaSByToken",
+        "summary": "Signed share media (headers only)",
+        "description": "Same as GET without the body. A file or thumbnail or ZIP of a share link through an HMAC-signed URL minted by the share page (valid 5 minutes; ZIPs 24 hours). The token is checked again against the live share link. Range is supported for files.",
+        "tags": [
+          "Media"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "dl",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ],
+              "description": "`1` serves the file as an attachment instead of inline."
+            },
+            "description": "`1` serves the file as an attachment instead of inline."
+          },
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "HMAC-signed token minted by the share page; it names the link and the target and expires."
+            },
+            "description": "HMAC-signed token minted by the share page; it names the link and the target and expires."
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The file or thumbnail or ZIP"
+          },
+          "206": {
+            "description": "One byte range"
+          },
+          "404": {
+            "description": "NOT_FOUND (bad or expired token or a dead link)"
+          },
+          "416": {
+            "description": "Range not satisfiable"
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "signed"
+      }
+    },
+    "/media/t/{fileId}": {
+      "get": {
+        "operationId": "getMediaTByFileId",
+        "summary": "File thumbnail",
+        "description": "The JPEG thumbnail of a library file. With v equal to the current thumbnail version the answer is cached for a year.",
+        "tags": [
+          "Media"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Thumbnail version; equal to the current one, the answer is cached for a year."
+            },
+            "description": "Thumbnail version; equal to the current one, the answer is cached for a year."
+          },
+          {
+            "in": "path",
+            "name": "fileId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "File id (UUID)."
+            },
+            "description": "File id (UUID)."
+          }
+        ],
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The thumbnail",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "image/jpeg",
+                  "description": "A JPEG image."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "cookie"
+      },
+      "head": {
+        "operationId": "headMediaTByFileId",
+        "summary": "File thumbnail (headers only)",
+        "description": "Same as GET without the body. The JPEG thumbnail of a library file. With v equal to the current thumbnail version the answer is cached for a year.",
+        "tags": [
+          "Media"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Thumbnail version; equal to the current one, the answer is cached for a year."
+            },
+            "description": "Thumbnail version; equal to the current one, the answer is cached for a year."
+          },
+          {
+            "in": "path",
+            "name": "fileId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "File id (UUID)."
+            },
+            "description": "File id (UUID)."
+          }
+        ],
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The thumbnail"
+          },
+          "401": {
+            "description": "No valid session"
+          },
+          "403": {
+            "description": "FORBIDDEN"
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "cookie"
+      }
+    },
+    "/media/z": {
+      "get": {
+        "operationId": "getMediaZ",
+        "summary": "Download a ZIP",
+        "description": "A ZIP of a whole folder (folderId) or of chosen files (fileIds) of one project; streamed without compression.",
+        "tags": [
+          "Media"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project id (UUID)."
+            },
+            "description": "Project id (UUID)."
+          },
+          {
+            "in": "query",
+            "name": "folderId",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Folder (Section) id to download whole."
+            },
+            "description": "Folder (Section) id to download whole."
+          },
+          {
+            "in": "query",
+            "name": "fileIds",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Comma-separated file ids to download."
+            },
+            "description": "Comma-separated file ids to download."
+          }
+        ],
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The archive",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/zip",
+                  "description": "A ZIP archive (STORE, ZIP64 when needed)."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BAD_REQUEST (projectId and folderId or fileIds are required)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "cookie"
+      }
+    },
+    "/s/{slug}/items": {
+      "get": {
+        "operationId": "getSBySlugItems",
+        "summary": "Next page of a share grid",
+        "description": "One more page of files or Sections with signed media URLs. PUBLIC links need nothing; PRIVATE links need the share cookie from unlock.",
+        "tags": [
+          "Share"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "description": "Items to skip."
+            },
+            "description": "Items to skip."
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "description": "Page size, 1 to 60 (default 12)."
+            },
+            "description": "Page size, 1 to 60 (default 12)."
+          },
+          {
+            "in": "query",
+            "name": "section",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Section id to page inside (project links)."
+            },
+            "description": "Section id to page inside (project links)."
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Sort id: `name`, `date`, `size`, `type` for files; `number`, `name`, `count` for Sections."
+            },
+            "description": "Sort id: `name`, `date`, `size`, `type` for files; `number`, `name`, `count` for Sections."
+          },
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Share link slug."
+            },
+            "description": "Share link slug."
+          }
+        ],
+        "security": [
+          {
+            "ShareCookie": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "description": "The page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareItemsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "PRIVATE link without the share cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareStateBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareStateBody"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired or revoked or the target is gone",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareStateBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "share"
+      }
+    },
+    "/s/{slug}/sign": {
+      "post": {
+        "operationId": "postSBySlugSign",
+        "summary": "Sign share media again",
+        "description": "Mints fresh signed URLs for files and optionally the ZIP and the thumbnails (signed URLs expire). PUBLIC links need nothing; PRIVATE links need the share cookie from unlock.",
+        "tags": [
+          "Share"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Share link slug."
+            },
+            "description": "Share link slug."
+          }
+        ],
+        "security": [
+          {
+            "ShareCookie": []
+          },
+          {}
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShareSignRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Fresh signed URLs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareSignResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "PRIVATE link without the share cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareStateBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareStateBody"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired or revoked or the target is gone",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareStateBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "share"
+      }
+    },
+    "/s/{slug}/unlock": {
+      "post": {
+        "operationId": "postSBySlugUnlock",
+        "summary": "Unlock a share link",
+        "description": "Checks the access code of a PRIVATE link and sets the shotstash_share_<slug> cookie (HttpOnly; Path=/s/<slug>); answers the page. PUBLIC links answer the page without a code. 5 attempts per 15 minutes per IP and 20 per hour per link.",
+        "tags": [
+          "Share"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Share link slug."
+            },
+            "description": "Share link slug."
+          }
+        ],
+        "security": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShareUnlockRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The share page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareUnlockResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "INVALID_CODE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SetupRequired"
+          }
+        },
+        "x-shotstash-auth": "public"
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "SetupRequired": {
+        "description": "SETUP_REQUIRED: first-run setup is not done yet. Every route except health, config and setup answers this until the first super admin exists.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorBody"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ClaimResponse": {
+        "type": "object",
+        "properties": {
+          "job": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Job id (UUID)."
+              },
+              "kind": {
+                "type": "string",
+                "description": "Job kind, `<namespace>/<name>`, such as `shotstash/proxy-720p`."
+              },
+              "params": {
+                "type": "object",
+                "additionalProperties": {},
+                "description": "Free-form parameters given at enqueue (an object)."
+              },
+              "attempt": {
+                "type": "number",
+                "description": "1 for the first try, up to `maxAttempts`."
+              },
+              "maxAttempts": {
+                "type": "number",
+                "description": "Attempts allowed in total (3)."
+              },
+              "claimToken": {
+                "type": "string",
+                "description": "Send as `X-Claim-Token` on every call for this job."
+              },
+              "input": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "description": "Path of the input stream (Range supported)."
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "Name of the original as uploaded."
+                  },
+                  "mimeType": {
+                    "type": "string",
+                    "description": "Media type of the original."
+                  },
+                  "size": {
+                    "type": "number",
+                    "description": "Size of the original in bytes."
+                  }
+                },
+                "required": [
+                  "url",
+                  "name",
+                  "mimeType",
+                  "size"
+                ],
+                "description": "The original file to process."
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "params",
+              "attempt",
+              "maxAttempts",
+              "claimToken",
+              "input"
+            ],
+            "description": "The claimed job."
+          }
+        },
+        "required": [
+          "job"
+        ]
+      },
+      "CompleteResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "done"
+            ],
+            "description": "Always `done`."
+          },
+          "versionId": {
+            "type": "string",
+            "description": "Id of the processed version that was created."
+          }
+        },
+        "required": [
+          "status",
+          "versionId"
+        ]
+      },
+      "CookieResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Always true."
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "When the session and the cookie expire (ISO-8601 UTC)."
+          }
+        },
+        "required": [
+          "ok",
+          "expiresAt"
+        ]
+      },
+      "CoverResponse": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Relative cookie-authorised URL, `/media/c/<kind>/<id>?v=<n>`."
+          },
+          "id": {
+            "type": "string",
+            "description": "Cover id (UUID)."
+          }
+        },
+        "required": [
+          "url",
+          "id"
+        ]
+      },
+      "CoverUploadForm": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "project",
+              "user",
+              null
+            ],
+            "description": "`project` (a project cover, needs `section.create`) or `user` (your own avatar)."
+          },
+          "file": {
+            "type": "string",
+            "description": "The image, at most 10 MiB; re-encoded to JPEG.",
+            "contentMediaType": "application/octet-stream"
+          }
+        },
+        "required": [
+          "file"
+        ]
+      },
+      "EmptyBody": {
+        "type": "object",
+        "additionalProperties": {
+          "not": {}
+        }
+      },
+      "ErrorBody": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Stable machine-readable code, such as `NOT_FOUND` or `RATE_LIMITED`."
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable English message; never shown as is to end users."
+          },
+          "field": {
+            "type": "string",
+            "description": "The input field the error is about, when there is one."
+          },
+          "retryAfter": {
+            "type": "number",
+            "description": "Seconds to wait before trying again (429 answers only; also in `Retry-After`)."
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "Extra machine-readable details for some codes."
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ]
+      },
+      "FailRequest": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "What went wrong (shown to people with access to the file)."
+          },
+          "retryable": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "True when another attempt may succeed (the job is requeued while attempts remain)."
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "FailResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "failed"
+            ],
+            "description": "`queued` when another attempt follows, else `failed`."
+          },
+          "attempts": {
+            "type": "number",
+            "description": "Attempts spent so far."
+          },
+          "maxAttempts": {
+            "type": "number",
+            "description": "Attempts allowed in total."
+          }
+        },
+        "required": [
+          "status",
+          "attempts",
+          "maxAttempts"
+        ]
+      },
+      "GraphQLRequest": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The GraphQL document."
+          },
+          "variables": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "Operation variables."
+          },
+          "operationName": {
+            "type": "string",
+            "description": "Which operation of the document to run."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "GraphQLResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {},
+            "description": "The result, shaped by the query."
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "description": "Errors; each carries `extensions.code`."
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "description": "True when the database, the cache and storage all answer."
+          },
+          "setupRequired": {
+            "type": "boolean",
+            "description": "True until first-run setup has created the super admin."
+          },
+          "version": {
+            "type": "string",
+            "description": "Running version (`SHOTSTASH_VERSION` in the image, else package.json)."
+          },
+          "db": {
+            "type": "boolean",
+            "description": "Detailed body only: the database answers."
+          },
+          "cache": {
+            "type": "boolean",
+            "description": "Detailed body only: Dragonfly answers."
+          },
+          "storage": {
+            "type": "boolean",
+            "description": "Detailed body only: the storage backend is reachable."
+          },
+          "schemeMismatch": {
+            "type": "boolean",
+            "description": "Detailed body only: the request scheme differs from `APP_URL` (a proxy without `TRUST_PROXY=true`)."
+          }
+        },
+        "required": [
+          "ok",
+          "setupRequired",
+          "version"
+        ]
+      },
+      "HeartbeatRequest": {
+        "type": "object",
+        "properties": {
+          "manifest": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Display name of the worker, such as \"reference-proxy\"."
+              },
+              "version": {
+                "type": "string",
+                "description": "Worker version, such as \"0.1.0\"."
+              },
+              "kinds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Kinds this worker processes, `<namespace>/<name>`."
+              },
+              "contract": {
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "description": "Contract major the worker speaks (1). A string such as \"1.2\" is read by its major."
+              }
+            },
+            "required": [
+              "name",
+              "version",
+              "kinds",
+              "contract"
+            ],
+            "description": "What the worker is and does (it may change between heartbeats)."
+          },
+          "activeJobIds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids of the jobs the worker is processing; their leases are refreshed."
+          }
+        },
+        "required": [
+          "manifest"
+        ]
+      },
+      "HeartbeatResponse": {
+        "type": "object",
+        "properties": {
+          "contract": {
+            "type": "number",
+            "description": "Contract major of the server (1)."
+          },
+          "lostJobIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids from `activeJobIds` this worker no longer holds (cancelled, requeued or gone): stop working on them."
+          }
+        },
+        "required": [
+          "contract",
+          "lostJobIds"
+        ]
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Account email."
+          },
+          "password": {
+            "type": "string",
+            "description": "Account password."
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Bearer token for `/api/graphql` and `/api/v1/*`. Keep it secret."
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "When the session expires unless used (ISO-8601 UTC)."
+          },
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "User id."
+              },
+              "email": {
+                "type": "string",
+                "description": "Account email."
+              },
+              "name": {
+                "type": "string",
+                "description": "Display name."
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "SUPER_ADMIN",
+                  "ADMIN",
+                  "FIELD_CREW",
+                  "EDITOR",
+                  "VIEWER"
+                ],
+                "description": "Instance role."
+              },
+              "avatarUrl": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Relative URL of the avatar, or null."
+              },
+              "accountStatus": {
+                "type": "string",
+                "enum": [
+                  "PENDING",
+                  "ACTIVE",
+                  "REJECTED"
+                ],
+                "description": "PENDING accounts may sign in to see the waiting screen."
+              },
+              "onboardedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "When onboarding was finished (ISO-8601 UTC), or null."
+              }
+            },
+            "required": [
+              "id",
+              "email",
+              "name",
+              "role",
+              "avatarUrl",
+              "accountStatus",
+              "onboardedAt"
+            ],
+            "description": "The signed-in account."
+          }
+        },
+        "required": [
+          "token",
+          "expiresAt",
+          "user"
+        ]
+      },
+      "OkResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Always true."
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "OutputResponse": {
+        "type": "object",
+        "properties": {
+          "versionId": {
+            "type": "string",
+            "description": "Id of the stored output (it becomes a processed version on complete)."
+          },
+          "size": {
+            "type": "number",
+            "description": "Bytes stored."
+          },
+          "mimeType": {
+            "type": "string",
+            "description": "Media type of the output."
+          }
+        },
+        "required": [
+          "versionId",
+          "size",
+          "mimeType"
+        ]
+      },
+      "PingResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Always true."
+          },
+          "time": {
+            "type": "number",
+            "description": "Server time in milliseconds since the epoch."
+          }
+        },
+        "required": [
+          "ok",
+          "time"
+        ]
+      },
+      "ProgressRequest": {
+        "type": "object",
+        "properties": {
+          "progress": {
+            "type": "number",
+            "description": "Percent done, 0 to 100."
+          }
+        },
+        "required": [
+          "progress"
+        ]
+      },
+      "ProgressResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "running"
+            ],
+            "description": "Always `running` after a progress report."
+          },
+          "progress": {
+            "type": "number",
+            "description": "The stored percent."
+          },
+          "seq": {
+            "type": "number",
+            "description": "Event sequence number of the job (realtime ordering)."
+          }
+        },
+        "required": [
+          "status",
+          "progress",
+          "seq"
+        ]
+      },
+      "PublicConfigResponse": {
+        "type": "object",
+        "properties": {
+          "appUrl": {
+            "type": "string",
+            "description": "Public URL of the instance, without a trailing slash."
+          },
+          "googleClientId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Google OAuth client id, or null when Google sign-in is off."
+          },
+          "features": {
+            "type": "object",
+            "properties": {
+              "signup": {
+                "type": "boolean",
+                "description": "Self sign-up is open (`SHOTSTASH_FEATURE_SIGNUP`)."
+              },
+              "google": {
+                "type": "boolean",
+                "description": "Google sign-in is configured."
+              },
+              "search": {
+                "type": "boolean",
+                "description": "Elasticsearch search is configured."
+              },
+              "passwordResetEmail": {
+                "type": "boolean",
+                "description": "Password reset email can be sent."
+              },
+              "discussion": {
+                "type": "boolean",
+                "description": "Project discussion is on (`SHOTSTASH_FEATURE_DISCUSSION`)."
+              }
+            },
+            "required": [
+              "signup",
+              "google",
+              "search",
+              "passwordResetEmail",
+              "discussion"
+            ],
+            "description": "Feature switches."
+          },
+          "version": {
+            "type": "string",
+            "description": "Running version."
+          },
+          "defaultLocale": {
+            "type": "string",
+            "description": "Default UI locale, such as `en`."
+          }
+        },
+        "required": [
+          "appUrl",
+          "googleClientId",
+          "features",
+          "version",
+          "defaultLocale"
+        ]
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "properties": {
+          "manifest": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Display name of the worker, such as \"reference-proxy\"."
+              },
+              "version": {
+                "type": "string",
+                "description": "Worker version, such as \"0.1.0\"."
+              },
+              "kinds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Kinds this worker processes, `<namespace>/<name>`."
+              },
+              "contract": {
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "description": "Contract major the worker speaks (1). A string such as \"1.2\" is read by its major."
+              }
+            },
+            "required": [
+              "name",
+              "version",
+              "kinds",
+              "contract"
+            ],
+            "description": "What the worker is and does."
+          }
+        },
+        "required": [
+          "manifest"
+        ]
+      },
+      "RegisterResponse": {
+        "type": "object",
+        "properties": {
+          "workerId": {
+            "type": "string",
+            "description": "Id of the new worker."
+          },
+          "token": {
+            "type": "string",
+            "description": "Per-worker token for `X-Worker-Token`. Shown once; keep it."
+          },
+          "contract": {
+            "type": "number",
+            "description": "Contract major of the server (1)."
+          },
+          "heartbeatSeconds": {
+            "type": "number",
+            "description": "Send a heartbeat this often (seconds)."
+          },
+          "leaseSeconds": {
+            "type": "number",
+            "description": "A claim without a heartbeat for this long is requeued (seconds)."
+          }
+        },
+        "required": [
+          "workerId",
+          "token",
+          "contract",
+          "heartbeatSeconds",
+          "leaseSeconds"
+        ]
+      },
+      "ReleaseResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued"
+            ],
+            "description": "Always `queued`: the job is back in the queue."
+          },
+          "attempts": {
+            "type": "number",
+            "description": "Attempts spent so far (unchanged by a release)."
+          }
+        },
+        "required": [
+          "status",
+          "attempts"
+        ]
+      },
+      "SetupRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Display name, 1 to 80 characters."
+          },
+          "email": {
+            "type": "string",
+            "description": "Account email."
+          },
+          "password": {
+            "type": "string",
+            "description": "Password, 10 to 256 characters."
+          },
+          "confirm": {
+            "type": "string",
+            "description": "The same password again."
+          },
+          "setupToken": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required when the operator set `SETUP_TOKEN`: the same value."
+          }
+        },
+        "required": [
+          "name",
+          "email",
+          "password",
+          "confirm"
+        ]
+      },
+      "ShareItemsResponse": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "File id."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "File name."
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "image",
+                    "video",
+                    "audio",
+                    "document"
+                  ],
+                  "description": "File kind derived from the media type."
+                },
+                "sizeBytes": {
+                  "type": "number",
+                  "description": "Size in bytes."
+                },
+                "sizeText": {
+                  "type": "string",
+                  "description": "Size for people, such as `12.4 MB`."
+                },
+                "thumbnailUrl": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Signed thumbnail URL, or null when the file has no thumbnail."
+                },
+                "inlineUrl": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Signed URL to show the file inline."
+                },
+                "downloadUrl": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Signed URL to download the file."
+                },
+                "duration": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Duration text; not recorded yet, always null."
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "kind",
+                "sizeBytes",
+                "sizeText",
+                "thumbnailUrl",
+                "inlineUrl",
+                "downloadUrl",
+                "duration"
+              ]
+            },
+            "description": "Files of the page (empty when the page lists Sections)."
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Folder (Section) id."
+                },
+                "number": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Leading number of the Section name, such as `25`, or null."
+                },
+                "title": {
+                  "type": "string",
+                  "description": "Section title without the number."
+                },
+                "fileCount": {
+                  "type": "number",
+                  "description": "Files in the Section."
+                },
+                "repThumbs": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "description": "Up to 3 signed representative thumbnail URLs."
+                }
+              },
+              "required": [
+                "id",
+                "number",
+                "title",
+                "fileCount",
+                "repThumbs"
+              ]
+            },
+            "description": "Sections of the page (project links without a drill-in only)."
+          },
+          "total": {
+            "type": "number",
+            "description": "Items in the whole list."
+          }
+        },
+        "required": [
+          "files",
+          "sections",
+          "total"
+        ]
+      },
+      "ShareSignRequest": {
+        "type": "object",
+        "properties": {
+          "fileIds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Files to sign (at most 200)."
+          },
+          "zip": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Also sign the ZIP of the link or of `section`."
+          },
+          "section": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Section id for the ZIP and the thumbnails."
+          },
+          "thumbs": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Also sign the stage and Section card thumbnails."
+          }
+        }
+      },
+      "ShareSignResponse": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "thumbnailUrl": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Signed thumbnail URL, or null when the file has no thumbnail."
+                },
+                "inlineUrl": {
+                  "type": "string",
+                  "description": "Signed URL to show the file inline."
+                },
+                "downloadUrl": {
+                  "type": "string",
+                  "description": "Signed URL to download the file."
+                }
+              },
+              "required": [
+                "thumbnailUrl",
+                "inlineUrl",
+                "downloadUrl"
+              ]
+            },
+            "description": "Signed URLs by file id."
+          },
+          "zipUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Signed ZIP URL, or null when not asked or not possible."
+          },
+          "cause": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "EMPTY",
+              "UNREADABLE",
+              "NOT_FOUND",
+              null
+            ],
+            "description": "Why the ZIP could not be signed."
+          },
+          "stageThumbs": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": "Signed stage thumbnails, when asked."
+          },
+          "sectionThumbs": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "description": "Signed Section card thumbnails by Section id, when asked."
+          }
+        },
+        "required": [
+          "files",
+          "zipUrl",
+          "cause",
+          "stageThumbs",
+          "sectionThumbs"
+        ]
+      },
+      "ShareStateBody": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "`NOT_FOUND`, `UNAUTHENTICATED` or `GONE`."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "not-found",
+              "private",
+              "expired",
+              "revoked",
+              "gone"
+            ],
+            "description": "`not-found`, `private`, `expired`, `revoked` or `gone`."
+          },
+          "target": {
+            "type": "string",
+            "enum": [
+              "project",
+              "section",
+              "file",
+              "unknown"
+            ],
+            "description": "For `gone`: what was removed."
+          }
+        },
+        "required": [
+          "code",
+          "state"
+        ]
+      },
+      "ShareUnlockRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Access code (ignored for PUBLIC links)."
+          },
+          "section": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Section id to open inside a project link."
+          }
+        }
+      },
+      "ShareUnlockResponse": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "expired",
+              "revoked",
+              "gone",
+              "not-found",
+              "private"
+            ],
+            "description": "`ok`, or why the link cannot be shown."
+          },
+          "target": {
+            "type": "string",
+            "enum": [
+              "project",
+              "section",
+              "file",
+              "unknown"
+            ],
+            "description": "What was removed (`gone` only)."
+          },
+          "payload": {
+            "type": "object",
+            "properties": {
+              "slug": {
+                "type": "string",
+                "description": "Share link slug."
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "project",
+                  "section",
+                  "file"
+                ],
+                "description": "What the link shares."
+              },
+              "title": {
+                "type": "string",
+                "description": "Headline without the number prefix."
+              },
+              "number": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Leading number of the title, or null."
+              },
+              "projectId": {
+                "type": "string",
+                "description": "Project id."
+              },
+              "folderId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Section links: the shared folder id."
+              },
+              "zipUrl": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Signed ZIP URL of the whole payload (valid 24 h), or null."
+              },
+              "projectName": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Project name, or null."
+              },
+              "sectionLabel": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "number": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Leading number, or null."
+                  },
+                  "title": {
+                    "type": "string",
+                    "description": "Title without the number."
+                  }
+                },
+                "required": [
+                  "number",
+                  "title"
+                ],
+                "description": "File links: the parent Section, or null."
+              },
+              "fileCount": {
+                "type": "number",
+                "description": "Files shared."
+              },
+              "sectionCount": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "Sections shared (project links), or null."
+              },
+              "totalSizeText": {
+                "type": "string",
+                "description": "Total size for people."
+              },
+              "dateText": {
+                "type": "string",
+                "description": "Date for people."
+              },
+              "breakdown": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "photos": {
+                    "type": "number",
+                    "description": "Images."
+                  },
+                  "videos": {
+                    "type": "number",
+                    "description": "Videos."
+                  },
+                  "documents": {
+                    "type": "number",
+                    "description": "Everything else."
+                  }
+                },
+                "required": [
+                  "photos",
+                  "videos",
+                  "documents"
+                ],
+                "description": "Counts per kind, or null when empty."
+              },
+              "expiresAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "When the link expires (ISO-8601 UTC), or null."
+              },
+              "stageThumbs": {
+                "type": "array",
+                "items": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "description": "1 to 3 signed stage thumbnails."
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "File id."
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "File name."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "image",
+                        "video",
+                        "audio",
+                        "document"
+                      ],
+                      "description": "File kind derived from the media type."
+                    },
+                    "sizeBytes": {
+                      "type": "number",
+                      "description": "Size in bytes."
+                    },
+                    "sizeText": {
+                      "type": "string",
+                      "description": "Size for people, such as `12.4 MB`."
+                    },
+                    "thumbnailUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Signed thumbnail URL, or null when the file has no thumbnail."
+                    },
+                    "inlineUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Signed URL to show the file inline."
+                    },
+                    "downloadUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Signed URL to download the file."
+                    },
+                    "duration": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Duration text; not recorded yet, always null."
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "kind",
+                    "sizeBytes",
+                    "sizeText",
+                    "thumbnailUrl",
+                    "inlineUrl",
+                    "downloadUrl",
+                    "duration"
+                  ]
+                },
+                "description": "First page of files."
+              },
+              "sections": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Folder (Section) id."
+                    },
+                    "number": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Leading number of the Section name, such as `25`, or null."
+                    },
+                    "title": {
+                      "type": "string",
+                      "description": "Section title without the number."
+                    },
+                    "fileCount": {
+                      "type": "number",
+                      "description": "Files in the Section."
+                    },
+                    "repThumbs": {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "description": "Up to 3 signed representative thumbnail URLs."
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "number",
+                    "title",
+                    "fileCount",
+                    "repThumbs"
+                  ]
+                },
+                "description": "Shared Sections (project links)."
+              },
+              "single": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "File id."
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "File name."
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "image",
+                      "video",
+                      "audio",
+                      "document"
+                    ],
+                    "description": "File kind derived from the media type."
+                  },
+                  "sizeBytes": {
+                    "type": "number",
+                    "description": "Size in bytes."
+                  },
+                  "sizeText": {
+                    "type": "string",
+                    "description": "Size for people, such as `12.4 MB`."
+                  },
+                  "thumbnailUrl": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Signed thumbnail URL, or null when the file has no thumbnail."
+                  },
+                  "inlineUrl": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Signed URL to show the file inline."
+                  },
+                  "downloadUrl": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Signed URL to download the file."
+                  },
+                  "duration": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Duration text; not recorded yet, always null."
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "kind",
+                  "sizeBytes",
+                  "sizeText",
+                  "thumbnailUrl",
+                  "inlineUrl",
+                  "downloadUrl",
+                  "duration"
+                ],
+                "description": "File links: the file."
+              },
+              "section": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Folder (Section) id."
+                  },
+                  "number": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Leading number, or null."
+                  },
+                  "title": {
+                    "type": "string",
+                    "description": "Title without the number."
+                  },
+                  "fileCount": {
+                    "type": "number",
+                    "description": "Files in the Section."
+                  }
+                },
+                "required": [
+                  "id",
+                  "number",
+                  "title",
+                  "fileCount"
+                ],
+                "description": "The opened Section of a project link, or null."
+              }
+            },
+            "required": [
+              "slug",
+              "kind",
+              "title",
+              "number",
+              "projectId",
+              "folderId",
+              "zipUrl",
+              "projectName",
+              "sectionLabel",
+              "fileCount",
+              "sectionCount",
+              "totalSizeText",
+              "dateText",
+              "breakdown",
+              "expiresAt",
+              "stageThumbs",
+              "files",
+              "sections",
+              "single",
+              "section"
+            ],
+            "description": "The page (`ok` only)."
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "StatusResponse": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "Running version."
+          },
+          "storage": {
+            "type": "object",
+            "properties": {
+              "backend": {
+                "type": "string",
+                "description": "`local` or `s3` (`STORAGE_BACKEND`)."
+              },
+              "reachable": {
+                "type": "boolean",
+                "description": "The backend answers."
+              }
+            },
+            "required": [
+              "backend",
+              "reachable"
+            ],
+            "description": "Storage backend status."
+          },
+          "database": {
+            "type": "boolean",
+            "description": "The database answers."
+          },
+          "cache": {
+            "type": "boolean",
+            "description": "Dragonfly answers."
+          },
+          "search": {
+            "type": "boolean",
+            "description": "Elasticsearch search is configured."
+          },
+          "workers": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Registered workers seen within the lease; null when the database cannot answer."
+          },
+          "queuedJobs": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Every queued job (with or without a live worker); null when the database cannot answer."
+          },
+          "jobs": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "queued": {
+                "type": "number",
+                "description": "Queued with a live worker for the kind."
+              },
+              "waitingForWorker": {
+                "type": "number",
+                "description": "Queued, but no live worker processes the kind."
+              },
+              "claimed": {
+                "type": "number",
+                "description": "Claimed by a worker, not started."
+              },
+              "running": {
+                "type": "number",
+                "description": "Being processed."
+              },
+              "done24h": {
+                "type": "number",
+                "description": "Finished in the last 24 hours."
+              },
+              "failed24h": {
+                "type": "number",
+                "description": "Failed in the last 24 hours."
+              },
+              "cancelled24h": {
+                "type": "number",
+                "description": "Cancelled in the last 24 hours."
+              }
+            },
+            "required": [
+              "queued",
+              "waitingForWorker",
+              "claimed",
+              "running",
+              "done24h",
+              "failed24h",
+              "cancelled24h"
+            ],
+            "description": "Queue figures by state; null when the database cannot answer."
+          }
+        },
+        "required": [
+          "version",
+          "storage",
+          "database",
+          "cache",
+          "search",
+          "workers",
+          "queuedJobs",
+          "jobs"
+        ]
+      },
+      "UploadPartResponse": {
+        "type": "object",
+        "properties": {
+          "partNumber": {
+            "type": "number",
+            "description": "The part that was stored."
+          },
+          "size": {
+            "type": "number",
+            "description": "Bytes stored for this part."
+          },
+          "confirmedParts": {
+            "type": "number",
+            "description": "How many parts of the session are stored so far (a count, not a list)."
+          },
+          "partCount": {
+            "type": "number",
+            "description": "Parts the session needs in total."
+          }
+        },
+        "required": [
+          "partNumber",
+          "size",
+          "confirmedParts",
+          "partCount"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "SessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "shotstash_session",
+        "description": "The same session as an HttpOnly cookie scoped to /media (set by login and POST /api/v1/auth/cookie). Only /media routes read it."
+      },
+      "SessionToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Session token from POST /api/v1/auth/login or the login mutation, sent as `Authorization: Bearer <token>`."
+      },
+      "ShareCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "shotstash_share_{slug}",
+        "description": "Access to a PRIVATE share link, set by POST /s/{slug}/unlock and scoped to /s/{slug}. The real cookie name ends with the link slug. PUBLIC links need no cookie."
+      },
+      "WorkerBootstrapToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Worker-Bootstrap-Token",
+        "description": "The shared WORKER_BOOTSTRAP_TOKEN of the instance; accepted by worker registration only."
+      },
+      "WorkerToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Worker-Token",
+        "description": "Per-worker token returned once by worker registration."
+      }
+    }
+  }
+}

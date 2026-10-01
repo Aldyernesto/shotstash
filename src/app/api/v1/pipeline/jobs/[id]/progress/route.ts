@@ -19,10 +19,15 @@ export const dynamic = 'force-dynamic';
  * Report progress
  * @description Percent done (0 to 100). A cancelled job answers 409 JOB_TERMINAL: stop and drop the work.
  * @tag Pipeline
- * @auth apikey
+ * @auth worker
  * @pathParams JobPathParams
+ * @header ClaimHeaders
  * @body ProgressRequest
- * @response 200:ProgressResponse
+ * @response 200:ProgressResponse:Progress stored
+ * @response 400:ErrorBody:INVALID_BODY or CLAIM_TOKEN_REQUIRED
+ * @response 401:ErrorBody:Missing or revoked worker token
+ * @response 404:ErrorBody:JOB_NOT_FOUND
+ * @response 409:ErrorBody:CLAIM_STALE or JOB_TERMINAL
  * @openapi
  */
 export const POST = defineRoute<{ id: string }>({

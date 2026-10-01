@@ -144,13 +144,30 @@ export function parseManifest(value: unknown): ParsedManifest {
 /* Request and response bodies                                         */
 /* ------------------------------------------------------------------ */
 
+/** Headers of every call about a claimed job (`_` in a name stands for `-`; see scripts/gen-openapi.mjs). */
+export type ClaimHeaders = {
+  /** Claim token from the claim answer. */
+  X_Claim_Token: string;
+};
+
+/** Headers of a job output upload (`_` in a name stands for `-`). */
+export type OutputHeaders = {
+  /** Claim token from the claim answer. */
+  X_Claim_Token: string;
+  /** Extension of the output, such as `mp4`. */
+  X_Output_Ext: string;
+};
+
 /** Path parameters of `/api/v1/pipeline/jobs/:id/*`. */
 export type JobPathParams = {
   /** Job id (UUID). */
   id: string;
 };
 
-export type RegisterRequest = { manifest: Manifest };
+export type RegisterRequest = {
+  /** What the worker is and does. */
+  manifest: Manifest;
+};
 
 export type RegisterResponse = {
   /** Id of the new worker. */
@@ -166,51 +183,82 @@ export type RegisterResponse = {
 };
 
 export type HeartbeatRequest = {
+  /** What the worker is and does (it may change between heartbeats). */
   manifest: Manifest;
   /** Ids of the jobs the worker is processing; their leases are refreshed. */
   activeJobIds?: string[];
 };
 
 export type HeartbeatResponse = {
+  /** Contract major of the server (1). */
   contract: number;
   /** Ids from `activeJobIds` this worker no longer holds (cancelled, requeued or gone): stop working on them. */
   lostJobIds: string[];
 };
 
 export type ClaimedJob = {
+  /** Job id (UUID). */
   id: string;
+  /** Job kind, `<namespace>/<name>`, such as `shotstash/proxy-720p`. */
   kind: string;
   /** Free-form parameters given at enqueue (an object). */
   params: Record<string, unknown>;
   /** 1 for the first try, up to `maxAttempts`. */
   attempt: number;
+  /** Attempts allowed in total (3). */
   maxAttempts: number;
   /** Send as `X-Claim-Token` on every call for this job. */
   claimToken: string;
+  /** The original file to process. */
   input: {
     /** Path of the input stream (Range supported). */
     url: string;
     /** Name of the original as uploaded. */
     name: string;
+    /** Media type of the original. */
     mimeType: string;
+    /** Size of the original in bytes. */
     size: number;
   };
 };
 
-export type ClaimResponse = { job: ClaimedJob };
+export type ClaimResponse = {
+  /** The claimed job. */
+  job: ClaimedJob;
+};
 
 export type ProgressRequest = {
   /** Percent done, 0 to 100. */
   progress: number;
 };
 
-export type ProgressResponse = { status: 'running'; progress: number; seq: number };
+export type ProgressResponse = {
+  /** Always `running` after a progress report. */
+  status: 'running';
+  /** The stored percent. */
+  progress: number;
+  /** Event sequence number of the job (realtime ordering). */
+  seq: number;
+};
 
-export type OutputResponse = { versionId: string; size: number; mimeType: string };
+export type OutputResponse = {
+  /** Id of the stored output (it becomes a processed version on complete). */
+  versionId: string;
+  /** Bytes stored. */
+  size: number;
+  /** Media type of the output. */
+  mimeType: string;
+};
 
+/** An empty JSON object (`{}`); the body may also be left out. */
 export type EmptyBody = Record<string, never>;
 
-export type CompleteResponse = { status: 'done'; versionId: string };
+export type CompleteResponse = {
+  /** Always `done`. */
+  status: 'done';
+  /** Id of the processed version that was created. */
+  versionId: string;
+};
 
 export type FailRequest = {
   /** What went wrong (shown to people with access to the file). */
@@ -219,9 +267,21 @@ export type FailRequest = {
   retryable?: boolean;
 };
 
-export type FailResponse = { status: 'queued' | 'failed'; attempts: number; maxAttempts: number };
+export type FailResponse = {
+  /** `queued` when another attempt follows, else `failed`. */
+  status: 'queued' | 'failed';
+  /** Attempts spent so far. */
+  attempts: number;
+  /** Attempts allowed in total. */
+  maxAttempts: number;
+};
 
-export type ReleaseResponse = { status: 'queued'; attempts: number };
+export type ReleaseResponse = {
+  /** Always `queued`: the job is back in the queue. */
+  status: 'queued';
+  /** Attempts spent so far (unchanged by a release). */
+  attempts: number;
+};
 
 const JOB_ID_RE = /^[0-9a-f-]{36}$/i;
 

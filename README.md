@@ -6,6 +6,8 @@
 # Shotstash
 
 [![CI](https://github.com/Aldyernesto/shotstash/actions/workflows/pr.yml/badge.svg?branch=main)](https://github.com/Aldyernesto/shotstash/actions/workflows/pr.yml)
+[![Release](https://img.shields.io/github/v/release/Aldyernesto/shotstash?include_prereleases&sort=semver)](https://github.com/Aldyernesto/shotstash/releases)
+[![License: MIT](https://img.shields.io/github/license/Aldyernesto/shotstash)](LICENSE)
 
 **Self-hosted media cloud for creators. Your footage, your hardware, your cloud.**
 
@@ -28,7 +30,7 @@ Shotstash sits in the gap: **video-first storage and sharing for creators and sm
 - **Viewer** for photos and video that follows the file's real aspect ratio, custom video controls, keyboard navigation, an info panel with dimensions and duration.
 - **Share links** per file, section or project, public or private, with a clean client page and ZIP download.
 - **Roles and onboarding**: super admin, admin, crew, editor, viewer; account approval; email password reset.
-- **API**: GraphQL over HTTP and WebSocket (documented from the schema), plus REST routes for upload, ranged download and sharing (OpenAPI).
+- **API**: GraphQL over HTTP and WebSocket, every type and field described in the generated [`schema.graphql`](schema.graphql), plus REST routes for upload, ranged download, sharing, the worker pipeline and health, described in the generated OpenAPI 3.1 document [`openapi.json`](openapi.json). CI fails when either file is stale.
 - **Bring your own AI**: a small job-pipeline contract (queue, worker heartbeat, progress, finalize) so you can plug in your own model or worker for proxy transcodes, transcription or scene detection. A reference worker is included.
 - **One-command install** with Docker Compose.
 
@@ -99,6 +101,7 @@ What runs: `app` (Shotstash with ffmpeg), `db` (PostgreSQL 17), `cache` (Dragonf
 
 - **Logs:** `docker compose logs -f app`. The app writes one JSON line per event.
 - **Status:** a super admin can open `/status` for the version, storage, database, cache, live workers and queued jobs. `GET /api/health` answers `{ ok, setupRequired, version }` for monitoring.
+- **Official images (after the first release):** every release publishes `ghcr.io/aldyernesto/shotstash` and `ghcr.io/aldyernesto/shotstash-worker` for linux/amd64 and linux/arm64, tagged `X.Y.Z`, `X.Y` and `latest`. Until the first release is out these do not exist yet and compose builds both images locally. Once they do, add the override file [`docker-compose.images.yml`](docker-compose.images.yml) to every compose command, which uses the published images instead of building (`IMAGE_TAG` in `.env` picks the release, default `latest`): `docker compose -f docker-compose.yml -f docker-compose.images.yml pull`, then the same with `up -d`. Details, pinning and rollback: [docs/releasing.md](docs/releasing.md).
 - **Upgrade:** `git pull && docker compose up -d --build`. **Upgrade note (processing worker):** before pulling a version with the `worker` service, add `WORKER_BOOTSTRAP_TOKEN` to your existing `.env` (`openssl rand -hex 32`, its own value); docker compose refuses to start without it. Once images are published, upgrading becomes `docker compose pull && docker compose up -d`.
 - **Rollback:** check out the previous release tag and run `docker compose up -d --build` (with published images: pin the previous image tag). Every migration stays compatible with the previous release, so the older version still runs on the upgraded database. Before v1.0.0 databases are throwaway: a pre-release upgrade may ask you to start with an empty database. **Upgrade note (storage keys):** from migration `0006_storage_keys_uploads` on, files live under hierarchy-free keys and old bytes are not moved; reset pre-1.0 development data after upgrading (empty database and `./data/media`, see [docs/storage.md](docs/storage.md)).
 - **Backup:** stop the app first so files and database match (`docker compose stop app`), dump the database with `docker compose exec -T db pg_dump -U shotstash shotstash > shotstash.sql`, copy `./data/media`, then `docker compose start app`.
@@ -140,6 +143,9 @@ npm run check:tokens && npm run check:legacy && npm run brand:css -- --check
 npm run security:matrix -- --check    # docs/security/route-matrix.md matches the code
 npm run i18n:check                   # no Indonesian leftovers anywhere in src or messages
 npm run env:example:check            # .env.example and docs/configuration.md match src/lib/config.ts
+npm run sdl:check                    # schema.graphql matches src/graphql/schema.ts, every member described
+npm run openapi:check                # openapi.json matches the route annotations and validates as 3.1
+npm run audit:check                  # no unlisted high or critical advisory (audit-allowlist.json)
 npm test
 node scripts/privacy-scan.mjs --all   # uses gitleaks when installed
 npm run build                         # next build plus the compiled server (dist/server.js)
@@ -154,6 +160,10 @@ Every route handler is wrapped in `defineRoute({ auth })` and every GraphQL root
 All UI text lives in `messages/en.json` (next-intl, English only in v1). How to add a locale, the translation checks and the copy rules: [docs/i18n.md](docs/i18n.md).
 
 Product name, logo and brand colors live in `src/lib/brand.ts`. The identity is blue: the three-bar mark (`#3d6cff`) and a UI accent family (`accent` `#3563f2` with white text) documented in [docs/design/DESIGN.md](docs/design/DESIGN.md). To rebrand: edit `src/lib/brand.ts`, replace the SVG sources in `public/brand/` (`icon.svg`, `logo-on-dark.svg`, `logo-on-light.svg`, `og.svg`), run `npm run brand:assets` (copies the favicon to `src/app/icon.svg` and renders `logo.png`, `og.png` and `src/app/apple-icon.png` with sharp), then `npm run brand:css`.
+
+## Contributing and releases
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `feat!:` for a breaking change); see [CONTRIBUTING.md](CONTRIBUTING.md). Releases are cut by merging the release PR that release-please keeps open; how that works, what gets published and how to roll back: [docs/releasing.md](docs/releasing.md).
 
 ## License
 

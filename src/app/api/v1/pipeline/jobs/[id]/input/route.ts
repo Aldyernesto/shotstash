@@ -17,11 +17,19 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Read the job input
- * @description The original file of the job, whole or one byte range (Range: bytes=start-end). Only for the worker holding the claim.
+ * @description The original file of the job; whole or one byte range (Range: bytes=start-end). Only for the worker holding the claim.
  * @tag Pipeline
- * @auth apikey
+ * @auth worker
  * @pathParams JobPathParams
- * @response 200:Blob
+ * @header ClaimHeaders
+ * @response 200:MediaBytes:The whole file
+ * @response 206:MediaBytes:One byte range
+ * @response 400:ErrorBody:CLAIM_TOKEN_REQUIRED
+ * @response 401:ErrorBody:Missing or revoked worker token
+ * @response 404:ErrorBody:JOB_NOT_FOUND or FILE_NOT_FOUND
+ * @response 409:ErrorBody:CLAIM_STALE or JOB_TERMINAL
+ * @response 416:NoBody:Range not satisfiable
+ * @response 503:ErrorBody:STORAGE_UNAVAILABLE
  * @openapi
  */
 export const GET = defineRoute<{ id: string }>({

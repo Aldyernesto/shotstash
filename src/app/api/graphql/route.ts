@@ -74,5 +74,23 @@ const route = defineRoute({
   handler: ({ req }) => handle(req),
 });
 
+/**
+ * Run a GraphQL query (GET)
+ * @description GraphQL over GET for queries only (query and variables in the URL). The schema and every operation are documented in schema.graphql at the repository root; each root field declares its own auth (public or Bearer session).
+ * @tag GraphQL
+ * @auth public
+ * @params GraphQLRequest
+ * @response 200:GraphQLResponse:GraphQL result (errors are inside the body)
+ * @openapi
+ */
 export const GET = route;
+/**
+ * Run a GraphQL operation
+ * @description The GraphQL endpoint for queries and mutations; subscriptions use graphql-ws on the same path. The schema and every operation are documented in schema.graphql at the repository root. Send the session as a Bearer token; each root field declares its own auth (public or session). The media cookie is never read here.
+ * @tag GraphQL
+ * @auth public
+ * @body GraphQLRequest
+ * @response 200:GraphQLResponse:GraphQL result (errors are inside the body)
+ * @openapi
+ */
 export const POST = route;

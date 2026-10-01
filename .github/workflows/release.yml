@@ -1,0 +1,287 @@
+name: Release
+
+# Story 6.4: release-please keeps a release PR open from the conventional
+# commits on main (changelog plus the root, worker and openapi.json versions).
+# Merging it tags vX.Y.Z and creates the GitHub release; the same run then
+# builds and publishes the app and worker images to GHCR. Tags made with
+# GITHUB_TOKEN do not start other workflows, so the images are built here,
+# gated on release_created.
+#
+# Runs only after CI succeeded on main (workflow_run), on the commit CI
+# checked. A manual run with `tag` rebuilds and republishes both images for
+# an existing tag (repairs a release whose publish failed). Image paths and
+# labels come from the repository owner: moving the repository to an
+# organisation needs no change in this file.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Republish the images of this existing tag (such as v1.2.3); empty runs release-please"
+        required: false
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Release PR and tag
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+      || (github.event_name == 'workflow_dispatch' && inputs.tag == '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      # The commit CI checked (release-please itself works through the API on main).
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: googleapis/release-please-action@v5
+        id: release
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      # A PR opened or updated with GITHUB_TOKEN starts no workflow, so the
+      # release PR would never get its checks: start CI on its branch.
+      - name: Run CI on the release PR
+        if: steps.release.outputs.prs_created == 'true' && steps.release.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+        run: gh workflow run pr.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+
+  # What to publish: the release just created, or the tag of a manual
+  # republish. `latest` and `X.Y` only move when this is the highest release
+  # (of its minor line for `X.Y`), so republishing an old tag never moves them back.
+  meta:
+    name: Release metadata
+    needs: release-please
+    if: >-
+      always()
+      && (needs.release-please.outputs.release_created == 'true'
+          || (github.event_name == 'workflow_dispatch' && inputs.tag != ''))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      ref: ${{ steps.meta.outputs.ref }}
+      version: ${{ steps.meta.outputs.version }}
+      latest: ${{ steps.meta.outputs.latest }}
+      latest_minor: ${{ steps.meta.outputs.latest_minor }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Resolve the tag, version and moving tags
+        id: meta
+        env:
+          CREATED_TAG: ${{ needs.release-please.outputs.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          tag="${CREATED_TAG:-$INPUT_TAG}"
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$tag' is not a release tag such as v1.2.3"; exit 1
+          fi
+          git fetch --force --tags origin
+          git rev-parse -q --verify "refs/tags/$tag" >/dev/null || { echo "::error::tag $tag does not exist"; exit 1; }
+          version="${tag#v}"
+          minor_line="$(echo "$version" | cut -d. -f1-2)"
+          stable='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          highest="$(git tag -l 'v*' --sort=-v:refname | grep -E "$stable" | head -n 1)"
+          highest_minor="$(git tag -l "v${minor_line}.*" --sort=-v:refname | grep -E "$stable" | head -n 1)"
+          echo "ref=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "latest=$([ "$tag" = "$highest" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "latest_minor=$([ "$tag" = "$highest_minor" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag version=$version highest=$highest highest in $minor_line=$highest_minor"
+
+  # One leg per image and architecture on a native runner, each pushing by
+  # digest only (no tag yet). A failed leg shows as failed; the publish job
+  # of each image decides from the digests that exist.
+  build:
+    name: Build ${{ matrix.image }} (${{ matrix.arch }})
+    needs: meta
+    if: always() && needs.meta.result == 'success'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [app, worker]
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+          - image: app
+            name: shotstash
+            dockerfile: docker/Dockerfile
+            title: Shotstash
+            description: Self-hosted media cloud for creators
+          - image: worker
+            name: shotstash-worker
+            dockerfile: docker/worker.Dockerfile
+            title: Shotstash worker
+            description: Reference processing worker for Shotstash (720p proxies with ffmpeg)
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.meta.outputs.ref }}
+
+      - name: Image path from the repository owner
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.name }}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Title and description are set per image so the metadata-action
+      # defaults (repository name and description) never replace them.
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          # Revision and refs from the checked-out tag, not the run's commit.
+          context: git
+          images: ${{ env.IMAGE }}
+          labels: |
+            org.opencontainers.image.title=${{ matrix.title }}
+            org.opencontainers.image.description=${{ matrix.description }}
+            org.opencontainers.image.version=${{ needs.meta.outputs.version }}
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+      - uses: docker/build-push-action@v7
+        id: build
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/${{ matrix.arch }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ needs.meta.outputs.version }}
+            SOURCE_URL=${{ github.server_url }}/${{ github.repository }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
+
+      - name: Record the digest
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          test -n "$digest"
+          touch "$RUNNER_TEMP/digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.image }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # One multi-arch manifest per image, on its own: amd64 is required for that
+  # image, arm64 is added when its leg succeeded. A failed leg of one image
+  # never blocks the other image.
+  publish:
+    name: Publish ${{ matrix.image }}
+    needs: [meta, build]
+    if: always() && needs.meta.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: app
+            name: shotstash
+          - image: worker
+            name: shotstash-worker
+    steps:
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: digests-${{ matrix.image }}-*
+          path: ${{ runner.temp }}/digests
+
+      - name: Check the digests (amd64 required, arm64 best effort)
+        id: digests
+        working-directory: ${{ runner.temp }}
+        run: |
+          amd64="$(ls -A "digests/digests-${{ matrix.image }}-amd64" 2>/dev/null | head -n 1)"
+          arm64="$(ls -A "digests/digests-${{ matrix.image }}-arm64" 2>/dev/null | head -n 1)"
+          if [ -z "$amd64" ]; then
+            echo "::error::no amd64 digest for ${{ matrix.image }}: its amd64 build failed, nothing is published for this image"
+            exit 1
+          fi
+          if [ -z "$arm64" ]; then
+            echo "::warning::no arm64 digest for ${{ matrix.image }}: publishing amd64 only (re-run the failed jobs to add arm64)"
+          fi
+          echo "list=$amd64${arm64:+ $arm64}" >> "$GITHUB_OUTPUT"
+
+      - name: Image path from the repository owner
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.name }}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # X.Y.Z always; X.Y when this is the highest release of its minor line;
+      # latest (latest=auto, so never for a pre-release) only for the highest release.
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: |
+            latest=${{ needs.meta.outputs.latest == 'true' && 'auto' || 'false' }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.meta.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.meta.outputs.version }},enable=${{ needs.meta.outputs.latest_minor == 'true' }}
+
+      - name: Create the multi-arch manifest
+        env:
+          DIGESTS: ${{ steps.digests.outputs.list }}
+        run: |
+          refs=""
+          for d in $DIGESTS; do refs="$refs $IMAGE@sha256:$d"; done
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $refs
+
+      - name: Inspect
+        run: docker buildx imagetools inspect "$IMAGE:${{ needs.meta.outputs.version }}"

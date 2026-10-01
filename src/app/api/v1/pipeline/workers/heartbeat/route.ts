@@ -18,9 +18,13 @@ export const dynamic = 'force-dynamic';
  * Send a heartbeat
  * @description Keeps the worker live and refreshes the leases of the jobs it is processing. A claim without a heartbeat for the lease (90 s by default) goes back to the queue.
  * @tag Pipeline
- * @auth apikey
+ * @auth worker
  * @body HeartbeatRequest
- * @response 200:HeartbeatResponse
+ * @response 200:HeartbeatResponse:Heartbeat stored
+ * @response 400:ErrorBody:INVALID_BODY or INVALID_MANIFEST
+ * @response 401:ErrorBody:Missing or revoked worker token
+ * @response 422:ErrorBody:CONTRACT_UNSUPPORTED
+ * @response 429:ErrorBody:RATE_LIMITED
  * @openapi
  */
 export const POST = defineRoute({

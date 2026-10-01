@@ -28,9 +28,9 @@ jobs:
       SESSION_SECRET: ci-placeholder-not-a-secret
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -76,6 +76,21 @@ jobs:
             exit 1
           fi
 
+      # Story 7.2: schema.graphql is generated from src/graphql/schema.ts and
+      # every public member carries a description.
+      - name: GraphQL SDL is described and up to date
+        run: npm run sdl:check
+
+      # Story 7.3: openapi.json is generated from the route annotations and
+      # validates as OpenAPI 3.1.
+      - name: OpenAPI document is up to date and valid
+        run: npm run openapi:check
+
+      # Story 6.4: no unlisted high or critical advisory in production
+      # dependencies (exceptions in audit-allowlist.json, with an expiry).
+      - name: Dependency audit
+        run: npm run audit:check
+
       - name: Tests
         run: npm test
 
@@ -105,6 +120,43 @@ jobs:
       - name: Build
         run: npm run build
 
+  # Story 6.4: both release images build natively for amd64 and arm64 on
+  # every PR, without pushing anywhere (the release workflow publishes).
+  images:
+    name: Image ${{ matrix.image }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [app, worker]
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+          - image: app
+            dockerfile: docker/Dockerfile
+          - image: worker
+            dockerfile: docker/worker.Dockerfile
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/${{ matrix.arch }}
+          push: false
+          build-args: |
+            VERSION=ci-${{ github.sha }}
+            SOURCE_URL=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
+
   # Stories 6.1-6.3: the image builds, the compose quick start boots on a
   # fresh machine, migrations run, the app runs as non-root and survives a
   # restart, and first-run setup works against the container. Story 5.3:
@@ -118,9 +170,9 @@ jobs:
       VERSION: ci-${{ github.sha }}
       BASE: http://localhost:3005
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -226,7 +278,7 @@ jobs:
           docker run --rm --network "container:$(docker compose ps -q app)" \
             -v "$PWD:/w" -w /w \
             -e E2E_BASE_URL=http://127.0.0.1:3005 \
-            -e E2E_EMAIL=owner@example.com \
+            -e E2E_EMAIL=owner@example.com,other@example.com \
             -e E2E_PASSWORD=owner-password-1 \
             -e E2E_SAMPLE=ci-out/sample.mp4 \
             -e E2E_OUT=ci-out/proxy.mp4 \
@@ -285,9 +337,9 @@ jobs:
       S3_TEST_ACCESS_KEY_ID: shotstash
       S3_TEST_SECRET_ACCESS_KEY: shotstash-secret
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -375,9 +427,9 @@ jobs:
       # A 1 MiB output limit lets e2e:pipeline prove 413 OUTPUT_TOO_LARGE cheaply.
       SHOTSTASH_PIPELINE_MAX_OUTPUT_MB: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm

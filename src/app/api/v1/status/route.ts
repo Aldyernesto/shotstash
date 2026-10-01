@@ -14,6 +14,7 @@
  * `storage.backend` is `local` or `s3` (STORAGE_BACKEND).
  */
 import { NextResponse } from 'next/server';
+import type { JobCountsBody, StatusResponse } from '@/lib/apiContract/system';
 import { defineRoute, jsonError } from '@/lib/defineRoute';
 import { cacheUp, dbUp } from '@/lib/healthChecks';
 import { storageHealth } from '@/modules/storage';
@@ -23,6 +24,16 @@ import { jobCounts, pipelineCounts } from '@/modules/pipeline';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Instance status
+ * @description Version and storage and database and cache and search and the processing queue for the status page. Only for accounts that may configure the instance; everyone else gets 404.
+ * @tag System
+ * @auth session
+ * @response 200:StatusResponse:Instance status
+ * @response 401:ErrorBody:No valid session
+ * @response 404:ErrorBody:NOT_FOUND (not allowed)
+ * @openapi
+ */
 export const GET = defineRoute({
   auth: 'session',
   action: 'instance.configure',
@@ -31,7 +42,7 @@ export const GET = defineRoute({
     const c = config();
     const [database, cache, storage] = [await dbUp(), await cacheUp(), await storageHealth()];
     const pipeline = database ? await pipelineCounts().catch(() => null) : null;
-    const jobs = database ? await jobCounts().catch(() => null) : null;
+    const jobs: JobCountsBody | null = database ? await jobCounts().catch(() => null) : null;
     return NextResponse.json(
       {
         version: c.version,
@@ -43,7 +54,7 @@ export const GET = defineRoute({
         // Kept for older clients: every queued job (with or without a live worker).
         queuedJobs: jobs ? jobs.queued + jobs.waitingForWorker : null,
         jobs,
-      },
+      } satisfies StatusResponse,
       { headers: { 'Cache-Control': 'no-store' } },
     );
   },

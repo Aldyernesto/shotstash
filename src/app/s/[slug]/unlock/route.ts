@@ -15,6 +15,19 @@ import { mintShareAccess, shareCookieName, shareCookiePath, shareSigner, verifyA
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Unlock a share link
+ * @description Checks the access code of a PRIVATE link and sets the shotstash_share_<slug> cookie (HttpOnly; Path=/s/<slug>); answers the page. PUBLIC links answer the page without a code. 5 attempts per 15 minutes per IP and 20 per hour per link.
+ * @tag Share
+ * @auth public
+ * @pathParams SharePathParams
+ * @body ShareUnlockRequest
+ * @response 200:ShareUnlockResponse:The share page
+ * @response 401:ErrorBody:INVALID_CODE
+ * @response 404:ErrorBody:NOT_FOUND
+ * @response 429:ErrorBody:RATE_LIMITED
+ * @openapi
+ */
 export const POST = defineRoute<{ slug: string }>({
   auth: 'public',
   handler: async ({ req, params }) => {

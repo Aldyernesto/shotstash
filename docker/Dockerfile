@@ -3,7 +3,8 @@
 # server (dist/server.js), ffmpeg for thumbnails, non-root at runtime.
 # Built with no .env present: every setting is read at runtime.
 #
-#   docker build -f docker/Dockerfile --build-arg VERSION=1.2.3 -t shotstash .
+#   docker build -f docker/Dockerfile --build-arg VERSION=1.2.3 \
+#     --build-arg SOURCE_URL=https://github.com/<owner>/shotstash -t shotstash .
 
 ARG NODE_IMAGE=node:24-bookworm-slim
 
@@ -34,10 +35,13 @@ RUN npx prisma generate \
 # ---------- runtime ----------
 FROM ${NODE_IMAGE} AS runtime
 ARG VERSION=dev
+# The repository URL, passed by the release workflow (server URL plus owner/repo),
+# so the label follows the repository wherever it lives. Empty for local builds.
+ARG SOURCE_URL=
 LABEL org.opencontainers.image.title="Shotstash" \
       org.opencontainers.image.description="Self-hosted media cloud for creators" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.source="https://github.com/Aldyernesto/shotstash" \
+      org.opencontainers.image.source="${SOURCE_URL}" \
       org.opencontainers.image.version="${VERSION}"
 
 RUN apt-get update \

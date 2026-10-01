@@ -19,10 +19,15 @@ export const dynamic = 'force-dynamic';
  * Fail the job
  * @description Reports an error. Retryable failures are requeued while attempts remain (3 in total); the rest fail for good.
  * @tag Pipeline
- * @auth apikey
+ * @auth worker
  * @pathParams JobPathParams
+ * @header ClaimHeaders
  * @body FailRequest
- * @response 200:FailResponse
+ * @response 200:FailResponse:Failure recorded
+ * @response 400:ErrorBody:INVALID_BODY or CLAIM_TOKEN_REQUIRED
+ * @response 401:ErrorBody:Missing or revoked worker token
+ * @response 404:ErrorBody:JOB_NOT_FOUND
+ * @response 409:ErrorBody:CLAIM_STALE or JOB_TERMINAL
  * @openapi
  */
 export const POST = defineRoute<{ id: string }>({

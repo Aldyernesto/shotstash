@@ -19,6 +19,20 @@ import { SetupError, completeSetup, isSetupComplete, setupTokenMatches, validate
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * First-run setup
+ * @description Creates the first super admin once. Public and served before setup; rate limited to 10 per 15 minutes per IP. When the operator set SETUP_TOKEN the body must carry the same setupToken.
+ * @tag System
+ * @auth public
+ * @body SetupRequest
+ * @response 201:OkResponse:Super admin created and setup complete
+ * @response 400:ErrorBody:INVALID_INPUT or PASSWORD_TOO_SHORT or PASSWORD_TOO_LONG or PASSWORD_MISMATCH
+ * @response 403:ErrorBody:SETUP_TOKEN_INVALID
+ * @response 409:ErrorBody:SETUP_ALREADY_DONE
+ * @response 429:ErrorBody:RATE_LIMITED
+ * @response 500:ErrorBody:STORAGE_UNAVAILABLE (nothing was created)
+ * @openapi
+ */
 export const POST = defineRoute({
   auth: 'public',
   action: 'first-run only',

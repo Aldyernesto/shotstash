@@ -5,6 +5,8 @@
  * Rate limited to 10 attempts per 15 minutes per IP and per email.
  */
 import { NextResponse } from 'next/server';
+import type { LoginResponse } from '@/lib/apiContract/auth';
+import type { Wire } from '@/lib/apiContract/conformance';
 import { defineRoute, jsonError } from '@/lib/defineRoute';
 import { clientIp } from '@/lib/request';
 import { loginLimit, rateLimitedResponse } from '@/lib/rateLimit';
@@ -13,6 +15,18 @@ import * as AuthService from '@/services/auth.service';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Sign in
+ * @description Email and password in and a Bearer token out; also sets the shotstash_session media cookie. Rate limited to 10 attempts per 15 minutes per IP and per email.
+ * @tag Auth
+ * @auth public
+ * @body LoginRequest
+ * @response 200:LoginResponse:Signed in
+ * @response 400:ErrorBody:BAD_REQUEST (email and password are required)
+ * @response 401:ErrorBody:INVALID_CREDENTIALS or another login refusal code
+ * @response 429:ErrorBody:RATE_LIMITED
+ * @openapi
+ */
 export const POST = defineRoute({
   auth: 'public',
   handler: async ({ req }) => {
@@ -50,7 +64,7 @@ export const POST = defineRoute({
         accountStatus: user.accountStatus,
         onboardedAt: user.onboardedAt,
       },
-    });
+    } satisfies Wire<LoginResponse>);
     res.cookies.set(SESSION_COOKIE, session.token, sessionCookieOptions(req, session.expiresAt));
     return res;
   },

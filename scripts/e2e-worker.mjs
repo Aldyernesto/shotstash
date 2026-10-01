@@ -45,13 +45,21 @@ async function gql(token, query, variables) {
   return body.data;
 }
 
-const login = await fetch(`${B}/api/v1/auth/login`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ email: process.env.E2E_EMAIL || 'editor@example.com', password: process.env.E2E_PASSWORD || 'shotstash-dev' }),
-});
-const session = await login.json();
-if (login.status !== 200) throw new Error(`login failed: ${login.status}`);
+// E2E_EMAIL may list several accounts, tried in order: in CI, e2e:setup
+// races two owners and either one may win, so the step passes both.
+let login;
+let session;
+for (const email of (process.env.E2E_EMAIL || 'editor@example.com').split(',')) {
+  login = await fetch(`${B}/api/v1/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: email.trim(), password: process.env.E2E_PASSWORD || 'shotstash-dev' }),
+  });
+  session = await login.json().catch(() => null);
+  if (login.status === 200 && session) break;
+  console.error(`login as ${email.trim()}: ${login.status} ${session?.code ?? ''}`);
+}
+if (login.status !== 200 || !session) throw new Error(`login failed: ${login.status} ${session?.code ?? ''}`);
 const token = session.token;
 const cookie = (login.headers.get('set-cookie') || '').split(';')[0];
 
