@@ -79,7 +79,7 @@ const SEND_MESSAGE = gql`
   }
 `;
 
-/* Story 4.3: pencarian mention — HANYA query yang sudah ada di skema,
+/* Story 4.3: pencarian mention: HANYA query yang sudah ada di skema,
    dibatasi ke project yang sedang dibuka. Satu dokumen = satu permintaan. */
 /* Story 5.5: people come from their own query, so a failure there never
    blanks the Section and file results (and the other way round). */
