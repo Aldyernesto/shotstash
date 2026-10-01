@@ -15,7 +15,7 @@ import prisma from '../lib/prisma';
 import { config } from '../lib/config';
 import { publicSignupRefusal } from '../lib/signupGuard';
 import { validateSessionToken } from '../lib/sessionStore';
-import { mentionHandleFor } from '../lib/mentions';
+import { assignMentionHandles } from '../lib/mentions';
 import { isRenderableImageUrl, mediaUrl } from '../lib/mediaUrls';
 import {
   assertCan,
@@ -439,7 +439,10 @@ async function processedVersionsOf(parent: { id: string; processedVersions?: unk
  * Story 5.4: per-request loader of `MediaFile.currentJob`: every file of one
  * GraphQL request (a 10,000-file Section) is answered by one query.
  */
-type CurrentJobLoader = { cache: Map<string, Promise<Pipeline.JobView | null>>; queue: Map<string, (job: Pipeline.JobView | null) => void> };
+type CurrentJobLoader = {
+  cache: Map<string, Promise<Pipeline.JobView | null>>;
+  queue: Map<string, { resolve: (job: Pipeline.JobView | null) => void; reject: (err: unknown) => void }>;
+};
 const currentJobLoaders = new WeakMap<object, CurrentJobLoader>();
 
 function loadCurrentJob(context: object | undefined, fileId: string): Promise<Pipeline.JobView | null> {
@@ -452,16 +455,23 @@ function loadCurrentJob(context: object | undefined, fileId: string): Promise<Pi
   const l = loader;
   const hit = l.cache.get(fileId);
   if (hit) return hit;
-  const p = new Promise<Pipeline.JobView | null>((resolve) => {
+  const p = new Promise<Pipeline.JobView | null>((resolve, reject) => {
     if (!l.queue.size) {
       setImmediate(async () => {
         const batch = new Map(l.queue);
         l.queue.clear();
-        const jobs = await Pipeline.currentJobsFor([...batch.keys()]).catch(() => new Map<string, Pipeline.JobView>());
-        for (const [id, done] of batch) done(jobs.get(id) ?? null);
+        try {
+          const jobs = await Pipeline.currentJobsFor([...batch.keys()]);
+          for (const [id, done] of batch) done.resolve(jobs.get(id) ?? null);
+        } catch (err) {
+          // A field error on currentJob (the file list still loads), never a silent null.
+          log.error('currentJob load failed', { files: batch.size, err: errMessage(err) });
+          const coded = codedError('INTERNAL', 'The job state could not be loaded');
+          for (const done of batch.values()) done.reject(coded);
+        }
       });
     }
-    l.queue.set(fileId, resolve);
+    l.queue.set(fileId, { resolve, reject });
   });
   l.cache.set(fileId, p);
   return p;
@@ -488,20 +498,22 @@ function currentSubscriber(context: GraphQLContext): () => Promise<Actor | null>
 }
 
 /** A channel stream where every event is re-authorised and loaded by `deliver`. */
-function guardedStream<T>(context: GraphQLContext, channel: string, deliver: (event: RealtimeEvent, actor: Actor) => Promise<T | null>) {
+function guardedStream<T>(
+  context: GraphQLContext,
+  channel: string,
+  accepts: (event: RealtimeEvent) => boolean,
+  deliver: (event: RealtimeEvent, actor: Actor) => Promise<T | null>,
+  resync?: (event: RealtimeEvent) => T | null,
+) {
   return authorizedStream<Actor, T>({
     source: channelMessages(channel),
+    accepts,
     authorize: currentSubscriber(context),
-    deliver: async (event, actor) => {
-      try {
-        return await deliver(event, actor);
-      } catch (err) {
-        // Skipped, never half-delivered; the client catches up on its next refetch.
-        log.warn('subscription event skipped', { type: event.type, err: errMessage(err) });
-        return null;
-      }
-    },
+    deliver,
+    resync,
     recheckMs: SUBSCRIPTION_RECHECK_MS,
+    // Skipped, never half-delivered; a resync payload makes the client refetch.
+    onError: (err, event) => log.warn('subscription event skipped', { type: event?.type, err: errMessage(err) }),
   });
 }
 
@@ -513,15 +525,42 @@ async function chatForSubscriber(actor: Actor, projectId: string, chatId: string
   return chat && chat.projectId === projectId ? chat : null;
 }
 
-/** A job for this actor, or null when its file is gone, trashed, elsewhere or not viewable. */
-async function jobForSubscriber(actor: Actor, jobId: string, projectId?: string) {
+/**
+ * The job as loaded, unless a newer change already happened: its own event
+ * (higher seq) follows and carries it, so this one is not delivered twice.
+ */
+function fresh<J extends { seq: number }>(event: RealtimeEvent, job: J | null): J | null {
+  return job && job.seq <= event.seq ? job : null;
+}
+
+/**
+ * A job for this actor, or null when its file is gone, elsewhere or not
+ * viewable. A trashed file hides its jobs, except (for live events) the
+ * finished state the trash itself caused, so open chips end as Cancelled.
+ */
+async function jobForSubscriber(actor: Actor, jobId: string, projectId?: string, finishedOfTrashed = false) {
   const job = await Pipeline.jobById(jobId);
   if (!job) return null;
   const file = await prisma.mediaFile.findUnique({ where: { id: job.fileId }, select: { projectId: true, status: true, trashedAt: true, folderId: true } });
-  if (!file || file.status !== 'ready' || file.trashedAt || (await folderChainTrashed(file.folderId))) return null;
+  if (!file || file.status !== 'ready') return null;
+  const trashed = !!file.trashedAt || (await folderChainTrashed(file.folderId));
+  if (trashed && !(finishedOfTrashed && Pipeline.isTerminal(job.status))) return null;
   if (projectId && file.projectId !== projectId) return null;
   if (!(await canViewProject(actor, file.projectId))) return null;
   return job;
+}
+
+/**
+ * Active accounts whose name (spaces removed) or email local part equals a
+ * handle candidate of `people`: the accounts a handle could collide with.
+ */
+async function mentionRivals(people: { name: string; email: string }[]) {
+  const keys = [...new Set(people.flatMap((p) => [p.name.replace(/\s+/g, '').toLowerCase(), (p.email.split('@')[0] ?? '').toLowerCase()]))].filter(Boolean);
+  if (!keys.length) return [];
+  return prisma.$queryRaw<{ id: string; name: string; email: string }[]>`
+    SELECT id, name, email FROM users
+    WHERE active AND "accountStatus" = 'ACTIVE'
+      AND (lower(regexp_replace(name, '[[:space:]]+', '', 'g')) = ANY(${keys}::text[]) OR lower(split_part(email, '@', 1)) = ANY(${keys}::text[]))`;
 }
 
 // Story 4.7: `includeTrashed` hanya untuk Section yang SUDAH di Trash
@@ -690,7 +729,7 @@ const rawResolvers = {
     availableKinds: async (_: unknown, { fileId }: { fileId: string }, context: GraphQLContext) => {
       assertCan(context.actor, 'pipeline.trigger');
       const file = await assertLiveFile(fileId);
-      return Pipeline.availableKinds(file.mimeType);
+      return Pipeline.availableKinds(file);
     },
 
     mentionPeople: async (_: unknown, { projectId, query }: { projectId: string; query?: string | null }, context: GraphQLContext) => {
@@ -699,12 +738,14 @@ const rawResolvers = {
       assertCan(actor, 'discussion.use');
       assertCan(actor, 'project.view');
       await assertProject(projectId);
-      const q = (query ?? '').trim().toLowerCase();
-      return (await listActorsWithAccess(projectId))
-        .filter((p) => p.id !== actor.id)
-        .map((p) => ({ id: p.id, name: p.name, role: p.role, handle: mentionHandleFor(p) }))
-        .filter((p) => !q || p.name.toLowerCase().includes(q) || p.handle.toLowerCase().includes(q))
-        .slice(0, 20);
+      // Filtered and limited in the database; handles are made unique
+      // against everyone who could share them (one pick notifies one person).
+      const people = (await listActorsWithAccess(projectId, { query: query ?? '', take: 20 })).filter((p) => p.id !== actor.id);
+      const rivals = await mentionRivals(people);
+      const handles = assignMentionHandles([...people, ...rivals.filter((r) => !people.some((p) => p.id === r.id))]);
+      return people
+        .filter((p) => handles.has(p.id))
+        .map((p) => ({ id: p.id, name: p.name, role: p.role, handle: handles.get(p.id)! }));
     },
 
     // Story 4.5: one query shape with or without Elasticsearch (library module).
@@ -1559,9 +1600,10 @@ const rawResolvers = {
     repFiles: async (parent: any, { limit }: { limit: number }) => {
       return projectRepFiles(parent, limit);
     },
-    // Story 5.5: FEATURE_DISABLED while discussion is off (the schema stays the same).
+    // Story 5.5: empty while discussion is off, so screens that load a
+    // Project keep working (the top-level discussion API answers FEATURE_DISABLED).
     chats: async (parent: any) => {
-      assertDiscussionEnabled(config().features);
+      if (!config().features.discussion) return [];
       if (Array.isArray(parent.chats)) return parent.chats;
       return prisma.projectChat.findMany({
         where: { projectId: parent.id },
@@ -1741,22 +1783,26 @@ const rawResolvers = {
       subscribe: async (_: any, { sessionId }: { sessionId: string }, context: GraphQLContext) => {
         await assertUploadOwner(context, sessionId);
         const actor = actorOf(context);
-        return guardedStream(context, channels.user(actor.id), async (event, current) => {
-          if (event.type !== 'upload.progress' || event.id !== sessionId) return null;
-          const session = await prisma.uploadSession.findUnique({
-            where: { id: sessionId },
-            select: { id: true, filename: true, totalChunks: true, uploadedById: true, _count: { select: { parts: true } } },
-          });
-          if (!session || !can(current, 'upload', { ownerId: session.uploadedById })) return null;
-          const confirmed = session._count.parts;
-          return {
-            sessionId: session.id,
-            filename: session.filename,
-            partCount: session.totalChunks,
-            confirmedParts: confirmed,
-            percentage: session.totalChunks ? (confirmed / session.totalChunks) * 100 : 0,
-          };
-        });
+        return guardedStream(
+          context,
+          channels.user(actor.id),
+          (event) => event.type === 'upload.progress' && event.id === sessionId,
+          async (_event, current) => {
+            const session = await prisma.uploadSession.findUnique({
+              where: { id: sessionId },
+              select: { id: true, filename: true, totalChunks: true, uploadedById: true, _count: { select: { parts: true } } },
+            });
+            if (!session || !can(current, 'upload', { ownerId: session.uploadedById })) return null;
+            const confirmed = session._count.parts;
+            return {
+              sessionId: session.id,
+              filename: session.filename,
+              partCount: session.totalChunks,
+              confirmedParts: confirmed,
+              percentage: session.totalChunks ? (confirmed / session.totalChunks) * 100 : 0,
+            };
+          },
+        );
       },
       resolve: (payload: unknown) => payload,
     },
@@ -1769,8 +1815,11 @@ const rawResolvers = {
         assertCan(context?.actor, 'project.view');
         // Story 2.5: only an existing project (projects themselves are never trashed).
         await assertProject(projectId);
-        return guardedStream(context, channels.project(projectId), async (event, actor) =>
-          event.type === 'chat.created' ? chatForSubscriber(actor, projectId, event.id) : null,
+        return guardedStream(
+          context,
+          channels.project(projectId),
+          (event) => event.type === 'chat.created',
+          (event, actor) => chatForSubscriber(actor, projectId, event.id),
         );
       },
       resolve: (payload: unknown) => payload,
@@ -1778,8 +1827,11 @@ const rawResolvers = {
     notificationReceived: {
       subscribe: (_: any, __: any, context: GraphQLContext) => {
         const actor = actorOf(context);
-        return guardedStream(context, channels.user(actor.id), async (event, current) =>
-          event.type === 'notification.created' && current.id === actor.id ? NotifService.notificationFor(current, event.id) : null,
+        return guardedStream(
+          context,
+          channels.user(actor.id),
+          (event) => event.type === 'notification.created',
+          async (event, current) => (current.id === actor.id ? NotifService.notificationFor(current, event.id) : null),
         );
       },
       resolve: (payload: unknown) => payload,
@@ -1789,8 +1841,11 @@ const rawResolvers = {
         const actor = actorOf(context);
         assertCan(actor, 'project.view');
         if (!(await jobForSubscriber(actor, jobId))) throw notFound('Job not found');
-        return guardedStream(context, channels.job(jobId), async (event, current) =>
-          event.type === 'job.updated' && event.id === jobId ? jobForSubscriber(current, jobId) : null,
+        return guardedStream(
+          context,
+          channels.job(jobId),
+          (event) => event.type === 'job.updated' && event.id === jobId,
+          async (event, current) => fresh(event, await jobForSubscriber(current, jobId, undefined, true)),
         );
       },
       resolve: (payload: unknown) => payload,
@@ -1800,17 +1855,22 @@ const rawResolvers = {
         const actor = actorOf(context);
         assertCan(actor, 'project.view');
         await assertProject(projectId);
-        return guardedStream(context, channels.project(projectId), async (event, current) => {
-          if (event.type === 'chat.created') {
-            const chat = await chatForSubscriber(current, projectId, event.id);
-            return chat ? { type: event.type, id: chat.id, seq: Number(chat.seq), chat, job: null } : null;
-          }
-          if (event.type === 'job.updated') {
-            const job = await jobForSubscriber(current, event.id, projectId);
+        type ProjectEventPayload = { type: string; id: string; seq: number; chat: unknown; job: unknown };
+        return guardedStream<ProjectEventPayload>(
+          context,
+          channels.project(projectId),
+          (event) => event.type === 'chat.created' || event.type === 'job.updated',
+          async (event, current) => {
+            if (event.type === 'chat.created') {
+              const chat = await chatForSubscriber(current, projectId, event.id);
+              return chat ? { type: event.type, id: chat.id, seq: Number(chat.seq), chat, job: null } : null;
+            }
+            const job = fresh(event, await jobForSubscriber(current, event.id, projectId, true));
             return job ? { type: event.type, id: job.id, seq: job.seq, chat: null, job } : null;
-          }
-          return null;
-        });
+          },
+          // A transient failure: the client refetches the Project's lists.
+          (event) => ({ type: 'resync', id: projectId, seq: event.seq, chat: null, job: null }),
+        );
       },
       resolve: (payload: unknown) => payload,
     },

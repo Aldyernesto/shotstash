@@ -669,8 +669,46 @@ let doneVersionId = null;
   ok([404, 409].includes(late.status) && ['JOB_NOT_FOUND', 'FILE_GONE'].includes(late.json?.code), 'complete after the purge answers 404 or FILE_GONE, never 500', `${late.status} ${late.json?.code}`);
 }
 
+/* ---------------- currentJob after a job finished (Story 5.4) ---------------- */
+{
+  const k = kind('current');
+  const w = await register([k]);
+  const cur = async (id) =>
+    ((await gql(editor.token, 'query($id: ID!){ folder(id:$id){ files { id currentJob { id state } } } }', { id: folder.id })).data?.folder?.files ?? []).find((x) => x.id === id)?.currentJob ?? null;
+  const failedFile = await upload(`current-failed-${RUN}.mp4`);
+  await enqueue(failedFile.id, k);
+  const fj = await claimOne(w);
+  await failJob(w, fj, 'e2e current', false);
+  ok((await cur(failedFile.id))?.state === 'failed', 'currentJob: a recent failure shows when nothing is open');
+  // Timestamps are stored as UTC without a zone (as Prisma writes them), whatever the session zone.
+  await sql("UPDATE pipeline_jobs SET finished_at = (now() AT TIME ZONE 'UTC') - interval '25 hours' WHERE id = $1", [fj.id]);
+  ok((await cur(failedFile.id)) === null, 'currentJob: a failure older than 24 h is not shown');
+  const doneFile = await upload(`current-done-${RUN}.mp4`);
+  await enqueue(doneFile.id, k);
+  const dj = await claimOne(w);
+  await output(w, dj, randomBytes(500));
+  ok((await complete(w, dj)).status === 200, 'a job for currentJob completes');
+  ok((await cur(doneFile.id)) === null, 'currentJob: a done job is not shown');
+}
+
 /* ---------------- status page figures ---------------- */
 {
+  // A kind whose only worker is revoked: a new job waits for a worker.
+  const lonely = kind('lonely');
+  const lw = await register([lonely]);
+  await gql(sa.token, 'mutation($id: ID!){ revokeWorker(id:$id){ id } }', { id: lw.id });
+  const figures = async () => (await (await fetch(`${B}/api/v1/status`, { headers: { authorization: `Bearer ${sa.token}` } })).json()).jobs;
+  const before = await figures();
+  const lonelyFile = await upload(`lonely-${RUN}.mp4`);
+  const lq = await enqueue(lonelyFile.id, lonely);
+  const after = await figures();
+  ok(
+    after.waitingForWorker === before.waitingForWorker + 1 && after.queued === before.queued,
+    'status: a job of a kind without a live worker counts as waiting for worker, not queued',
+    `${JSON.stringify(before)} -> ${JSON.stringify(after)}`,
+  );
+  await gql(editor.token, 'mutation($id: ID!){ cancelJob(id:$id){ id } }', { id: lq.data?.enqueueJob?.id });
+
   const r = await fetch(`${B}/api/v1/status`, { headers: { authorization: `Bearer ${sa.token}` } });
   const body = await r.json().catch(() => ({}));
   ok(r.status === 200 && Number.isInteger(body.workers) && body.workers >= 1 && Number.isInteger(body.queuedJobs), 'status reports live workers and queued jobs', JSON.stringify({ workers: body.workers, queuedJobs: body.queuedJobs }));

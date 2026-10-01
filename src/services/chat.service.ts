@@ -1,7 +1,7 @@
 import { v7 as uuidv7 } from 'uuid';
 import type { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
-import { handleMatchesUser, mentionHandles } from '../lib/mentions';
+import { assignMentionHandles, mentionHandles, resolveMentionHandle } from '../lib/mentions';
 import { listActorsWithAccess } from '@/modules/auth';
 import { afterCommit, channels } from '@/modules/realtime';
 import { createNotification } from './notification.service';
@@ -60,8 +60,14 @@ export async function sendMessage(senderId: string, projectId: string, message: 
     const senderName = chat.sender?.name?.trim() || '';
     const projectTitle = chat.project?.title || '';
     const excerpt = message.slice(0, 80);
-    for (const u of candidates) {
-      if (!handles.some((h) => handleMatchesUser(h, u))) continue;
+    // One typed handle names at most one account (an ambiguous one names none).
+    const assigned = assignMentionHandles(candidates);
+    const named = new Map<string, (typeof candidates)[number]>();
+    for (const h of handles) {
+      const u = resolveMentionHandle(h, candidates, assigned);
+      if (u) named.set(u.id, u);
+    }
+    for (const u of named.values()) {
       createNotification({
         userId: u.id,
         type: 'chat_mention',

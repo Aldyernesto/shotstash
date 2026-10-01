@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useApolloClient } from "@apollo/client";
 import { issueMediaCookie, serverLogout } from "@/lib/authClient";
+import { disposeRealtime } from "@/lib/apollo-client";
 import { syncLocaleCookie } from "@/i18n/client";
 
 if (typeof window !== "undefined") {
@@ -120,6 +121,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     syncLocaleCookie(null);
     localStorage.removeItem("shotstash_user");
     localStorage.removeItem("shotstash_token");
+    // Story 5.5: the realtime socket still carries the old session; close it.
+    disposeRealtime();
     apolloClient.clearStore().catch((err) => {
       console.error('[AuthContext] Failed to clear Apollo store', err);
     });

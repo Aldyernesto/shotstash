@@ -465,10 +465,14 @@ jobs:
           E2E_UPLOAD_MB: "256"
         run: npm run e2e:upload
 
-      # Both steps log in from the same IP; flush the throwaway CI cache (it
-      # holds rate limit counters) so e2e:security starts with a fresh budget.
+      # Both steps log in from the same IP; delete the rate limit counters so
+      # e2e:security starts with a fresh budget.
       - name: Reset rate limit counters
-        run: docker exec "$(docker ps -q --filter ancestor=docker.dragonflydb.io/dragonflydb/dragonfly:v2.0.0)" redis-cli FLUSHALL
+        # Only the limiter's keys (rl:*); the cache container is the one publishing 6379.
+        run: |
+          c="$(docker ps -q --filter publish=6379 | head -n 1)"
+          test -n "$c"
+          docker exec "$c" redis-cli --scan --pattern 'rl:*' | xargs -r -n 100 docker exec "$c" redis-cli DEL
 
       - name: e2e:security (uploads, dedup, cancel, expiry, shares, trash)
         env:
@@ -478,7 +482,11 @@ jobs:
       # Stories 5.1-5.2: queue and worker contract (claims, kind filter,
       # requeue, late completion, cancel race, Range input, output, fail).
       - name: Reset rate limit counters (pipeline)
-        run: docker exec "$(docker ps -q --filter ancestor=docker.dragonflydb.io/dragonflydb/dragonfly:v2.0.0)" redis-cli FLUSHALL
+        # Only the limiter's keys (rl:*); the cache container is the one publishing 6379.
+        run: |
+          c="$(docker ps -q --filter publish=6379 | head -n 1)"
+          test -n "$c"
+          docker exec "$c" redis-cli --scan --pattern 'rl:*' | xargs -r -n 100 docker exec "$c" redis-cli DEL
 
       - name: e2e:pipeline (job queue and worker contract)
         env:
@@ -490,7 +498,11 @@ jobs:
       # events, nothing published for a rolled-back write, per-event auth
       # ends a stream, delivery across the two app processes).
       - name: Reset rate limit counters (realtime)
-        run: docker exec "$(docker ps -q --filter ancestor=docker.dragonflydb.io/dragonflydb/dragonfly:v2.0.0)" redis-cli FLUSHALL
+        # Only the limiter's keys (rl:*); the cache container is the one publishing 6379.
+        run: |
+          c="$(docker ps -q --filter publish=6379 | head -n 1)"
+          test -n "$c"
+          docker exec "$c" redis-cli --scan --pattern 'rl:*' | xargs -r -n 100 docker exec "$c" redis-cli DEL
 
       - name: e2e:realtime (ordered events through Dragonfly, two app processes)
         env:
@@ -498,9 +510,34 @@ jobs:
           E2E_BASE_URL_2: http://127.0.0.1:3006
         run: npm run e2e:realtime
 
+      - name: Reset rate limit counters (discussion off)
+        run: |
+          c="$(docker ps -q --filter publish=6379 | head -n 1)"
+          test -n "$c"
+          docker exec "$c" redis-cli --scan --pattern 'rl:*' | xargs -r -n 100 docker exec "$c" redis-cli DEL
+
+      # Story 5.5: the discussion toggle, on a short-lived third process.
+      - name: e2e:discussion-off (SHOTSTASH_FEATURE_DISCUSSION=false)
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3007
+          E2E_OTHER_BASE_URL: http://127.0.0.1:3005
+        run: |
+          SHOTSTASH_FEATURE_DISCUSSION=false PORT=3007 NODE_ENV=production nohup node dist/server.js > /tmp/app3.log 2>&1 &
+          pid=$!
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3007/api/health >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          status=0
+          npm run e2e:discussion-off || status=$?
+          kill "$pid" || true
+          exit "$status"
+
       - name: App log on failure
         if: failure()
         run: |
           tail -n 300 /tmp/app.log
           echo "---- second app process ----"
           tail -n 100 /tmp/app2.log || true
+          echo "---- third app process (discussion off) ----"
+          tail -n 100 /tmp/app3.log || true

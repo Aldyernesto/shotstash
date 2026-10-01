@@ -56,7 +56,7 @@ import { useToast, useHumanizeError } from "@/components/feedback/ToastProvider"
 import { useFormat } from "@/i18n/useFormat";
 import { encodeMentionTag, type MentionTagType } from "@/lib/mentions";
 import { compareChat, insertOrdered } from "@/lib/realtimeSeq";
-import { useProjectEvents, useRealtimeReconnect } from "@/components/realtime/useProjectEvents";
+import { noteProjectSeq, useProjectEvents, useRealtimeReconnect } from "@/components/realtime/useProjectEvents";
 import { CHAT_FIELDS } from "@/components/realtime/fields";
 import type { MentionTargetType } from "./chips";
 
@@ -81,14 +81,21 @@ const SEND_MESSAGE = gql`
 
 /* Story 4.3: pencarian mention — HANYA query yang sudah ada di skema,
    dibatasi ke project yang sedang dibuka. Satu dokumen = satu permintaan. */
-const MENTION_SEARCH = gql`
-  query ProjectMentionSearch($q: String!, $projectId: ID!) {
+/* Story 5.5: people come from their own query, so a failure there never
+   blanks the Section and file results (and the other way round). */
+const MENTION_PEOPLE = gql`
+  query ProjectMentionPeople($q: String!, $projectId: ID!) {
     mentionPeople(projectId: $projectId, query: $q) {
       id
       name
       handle
       role
     }
+  }
+`;
+
+const MENTION_SEARCH = gql`
+  query ProjectMentionSearch($q: String!, $projectId: ID!) {
     searchFolders(query: $q, projectId: $projectId) {
       id
       name
@@ -196,6 +203,10 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
   useProjectEvents(
     projectId,
     (event) => {
+      if (event.type === "resync") {
+        refetch().catch(() => undefined);
+        return;
+      }
       if (event.type !== "chat.created" || !event.chat) return;
       const fresh = event.chat as ChatMessage;
       client.cache.updateQuery({ query: GET_PROJECT_CHATS, variables: { projectId } }, (prev: any) => {
@@ -205,6 +216,10 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
     },
     isOpen,
   );
+  // Messages already loaded never come back as "new" from a late event.
+  useEffect(() => {
+    for (const c of (data?.project?.chats ?? []) as ChatMessage[]) noteProjectSeq(projectId, "chat.created", c.id, c.seq);
+  }, [data, projectId]);
   // After a reconnect the stream may have missed messages: reload the history.
   useRealtimeReconnect(() => {
     if (isOpen) refetch().catch(() => undefined);
@@ -275,11 +290,16 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
     async (term: string) => {
       const seq = ++lookupSeq.current;
       try {
-        const { data: res } = await client.query({
-          query: MENTION_SEARCH,
-          variables: { q: term, projectId },
-          fetchPolicy: "network-only",
-        });
+        const [peopleRes, searchRes] = await Promise.allSettled([
+          client.query({ query: MENTION_PEOPLE, variables: { q: term, projectId }, fetchPolicy: "network-only" }),
+          client.query({ query: MENTION_SEARCH, variables: { q: term, projectId }, fetchPolicy: "network-only" }),
+        ]);
+        if (peopleRes.status === "rejected" && searchRes.status === "rejected") throw searchRes.reason;
+        const res = {
+          mentionPeople: peopleRes.status === "fulfilled" ? peopleRes.value.data?.mentionPeople : [],
+          searchFolders: searchRes.status === "fulfilled" ? searchRes.value.data?.searchFolders : [],
+          searchFiles: searchRes.status === "fulfilled" ? searchRes.value.data?.searchFiles : [],
+        };
         if (seq !== lookupSeq.current) return; // balasan basi
         const needle = term.toLowerCase();
         const options: MentionOption[] = [];

@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { useQuery, useMutation, useSubscription, gql } from "@apollo/client";
+import { useQuery, useMutation, gql } from "@apollo/client";
 import { useTranslations } from "next-intl";
 import { useAuth } from "./AuthContext";
 import { useFormat } from "@/i18n/useFormat";
 import { notificationText, type NotificationTranslate } from "@/lib/notificationText";
-import { useRealtimeReconnect } from "@/components/realtime/useProjectEvents";
+import { useRealtimeReconnect, useResilientSubscription } from "@/components/realtime/useProjectEvents";
 
 const ALL_NOTIFS = gql`query AllNotifs { notifications { id type title body data read createdAt } unreadNotificationCount }`;
 const MARK_READ_MUT = gql`mutation MarkRead { markNotificationsRead }`;
@@ -26,12 +26,10 @@ export default function NotificationBell({ large = false }: { large?: boolean } 
     skip: !isAuthenticated,
     fetchPolicy: "network-only",
   });
-  useSubscription(NOTIF_RECEIVED, {
-    skip: !isAuthenticated,
-    onData: () => {
-      refetch().catch(() => undefined);
-    },
-  });
+  // Reopened with backoff when the server ends the stream.
+  useResilientSubscription(NOTIF_RECEIVED, {}, () => {
+    refetch().catch(() => undefined);
+  }, isAuthenticated);
   useRealtimeReconnect(() => {
     if (isAuthenticated) refetch().catch(() => undefined);
   });

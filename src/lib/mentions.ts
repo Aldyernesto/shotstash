@@ -104,12 +104,76 @@ export function handleMatchesUser(handle: string, user: { name: string; email: s
 }
 
 /* "@handle" a person can be mentioned with: the display name without spaces
-   when it is a valid handle, else the local part of the email. Both are
-   what `handleMatchesUser` accepts. */
+   when it is a valid handle, else the local part of the email when that is
+   one; null when neither is (the person is not offered). Both are what
+   `handleMatchesUser` accepts. */
 const PERSON_HANDLE_RE = /^[\p{L}\p{N}][\p{L}\p{N}._-]{0,63}$/u;
 
-export function mentionHandleFor(user: { name: string; email: string }): string {
+function validHandle(value: string): boolean {
+  return PERSON_HANDLE_RE.test(value) && !/[._-]$/.test(value);
+}
+
+function emailLocal(user: { email: string }): string {
+  return user.email.split("@")[0] ?? "";
+}
+
+export function mentionHandleFor(user: { name: string; email: string }): string | null {
   const compact = user.name.replace(/\s+/g, "");
-  if (PERSON_HANDLE_RE.test(compact) && !/[._-]$/.test(compact)) return compact;
-  return user.email.split("@")[0] || compact;
+  if (validHandle(compact)) return compact;
+  const local = emailLocal(user);
+  return validHandle(local) ? local : null;
+}
+
+/**
+ * Story 5.5: one handle per person, never shared. A person whose name handle
+ * collides with someone else's falls back to the email local part; a handle
+ * that still collides (or none is valid) is dropped, so one pick or one
+ * typed "@handle" names exactly one account. Answers id to handle.
+ */
+export function assignMentionHandles<T extends { id: string; name: string; email: string }>(people: readonly T[]): Map<string, string> {
+  const taken = (pairs: [string, string][]) => {
+    const count = new Map<string, number>();
+    for (const [, h] of pairs) count.set(h.toLowerCase(), (count.get(h.toLowerCase()) ?? 0) + 1);
+    return count;
+  };
+  // Every key a typed handle can match (name and email local part) of everyone.
+  const claims = taken(
+    people.flatMap((p) => {
+      const out: [string, string][] = [];
+      const compact = p.name.replace(/\s+/g, "");
+      if (compact) out.push([p.id, compact]);
+      const local = emailLocal(p);
+      if (local && local.toLowerCase() !== compact.toLowerCase()) out.push([p.id, local]);
+      return out;
+    }),
+  );
+  const result = new Map<string, string>();
+  for (const p of people) {
+    const compact = p.name.replace(/\s+/g, "");
+    const local = emailLocal(p);
+    for (const candidate of [compact, local]) {
+      if (candidate && validHandle(candidate) && claims.get(candidate.toLowerCase()) === 1) {
+        result.set(p.id, candidate);
+        break;
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * The one account a typed handle names among `people`: the person whose
+ * assigned handle it is, else the only person `handleMatchesUser` accepts;
+ * null when none or several (an ambiguous handle notifies nobody).
+ */
+export function resolveMentionHandle<T extends { id: string; name: string; email: string }>(
+  handle: string,
+  people: readonly T[],
+  assigned: ReadonlyMap<string, string>,
+): T | null {
+  const h = handle.toLowerCase();
+  const exact = people.filter((p) => assigned.get(p.id)?.toLowerCase() === h);
+  if (exact.length === 1) return exact[0];
+  const loose = people.filter((p) => handleMatchesUser(h, p));
+  return loose.length === 1 ? loose[0] : null;
 }

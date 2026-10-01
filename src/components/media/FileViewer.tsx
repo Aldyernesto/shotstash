@@ -184,7 +184,9 @@ export default function FileViewer({
 
   const file = files[index];
   const total = files.length;
-  const version = shown && file && shown.fileId === file.id ? shown.version : null;
+  // Only while that version still exists (a refetch may have removed it).
+  const version =
+    shown && file && shown.fileId === file.id && (file.processedVersions ?? []).some((v) => v.id === shown.version.id) ? shown.version : null;
   const mediaKey = `${file?.id ?? ""}-${version?.id ?? "o"}-${retryKey}`;
 
   /* Esc BERURUTAN: keluar layar penuh → tutup lembar/panel info →

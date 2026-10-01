@@ -13,7 +13,7 @@ const { createSeqGate, compareChat, insertOrdered } = await import('../src/lib/r
 const { jobChip, showsOnCard, newerJob } = await import('../src/lib/jobChip.ts');
 const { assertDiscussionEnabled } = await import('../src/modules/errors/discussion.ts');
 const { visibleNotifications } = await import('../src/lib/notificationAccess.ts');
-const { mentionHandleFor, handleMatchesUser, mentionHandles } = await import('../src/lib/mentions.ts');
+const { mentionHandleFor, handleMatchesUser, mentionHandles, assignMentionHandles, resolveMentionHandle } = await import('../src/lib/mentions.ts');
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const read = (p) => readFileSync(path.join(ROOT, p), 'utf8');
@@ -122,6 +122,7 @@ test('every event is re-authorised and loaded; skipped events never reach the cl
       return { id: 'u1' };
     },
     deliver: async (ev, actor) => (ev.id === 'secret' ? null : { id: ev.id, seq: ev.seq, for: actor.id }),
+    authorizeCacheMs: 0,
   });
   ch.push({ type: 'job.updated', id: 'secret', seq: 1 });
   ch.push({ type: 'job.updated', id: 'j1', seq: 2 });
@@ -143,6 +144,7 @@ test('a revoked session or deactivated account ends the stream at the next event
     source: ch.iterator,
     authorize: async () => (allowed ? { id: 'u1' } : null),
     deliver: async (ev) => ev,
+    authorizeCacheMs: 0,
     onEnd: (reason) => {
       ended = reason;
     },
@@ -167,6 +169,64 @@ test('without events the subscriber is re-checked on a timer and the stream ends
   const r = await stream.next();
   assert.equal(r.done, true);
   assert.equal(ch.closed(), true);
+});
+
+test('the type and id filter runs before authorize; a positive answer is reused for 5 s', async () => {
+  const ch = channel();
+  let checks = 0;
+  let clock = 0;
+  const stream = authorizedStream({
+    source: ch.iterator,
+    accepts: (ev) => ev.id === 'mine',
+    authorize: async () => {
+      checks++;
+      return { id: 'u1' };
+    },
+    deliver: async (ev) => ev.seq,
+    now: () => clock,
+  });
+  ch.push({ type: 'job.updated', id: 'other', seq: 1 });
+  ch.push({ type: 'job.updated', id: 'mine', seq: 2 });
+  assert.equal((await stream.next()).value, 2);
+  assert.equal(checks, 1, 'the other id never reached authorize');
+  clock = 4000;
+  ch.push({ type: 'job.updated', id: 'mine', seq: 3 });
+  assert.equal((await stream.next()).value, 3);
+  assert.equal(checks, 1, 'reused within 5 s');
+  clock = 5100;
+  ch.push({ type: 'job.updated', id: 'mine', seq: 4 });
+  assert.equal((await stream.next()).value, 4);
+  assert.equal(checks, 2, 'checked again after 5 s');
+  await stream.return();
+});
+
+test('a transient error skips the event, sends resync and keeps the stream open', async () => {
+  const ch = channel();
+  let failAuth = true;
+  const errors = [];
+  const stream = authorizedStream({
+    source: ch.iterator,
+    authorize: async () => {
+      if (failAuth) throw new Error('db down');
+      return { id: 'u1' };
+    },
+    deliver: async (ev) => {
+      if (ev.id === 'boom') throw new Error('load failed');
+      return { type: ev.type, id: ev.id };
+    },
+    resync: (ev) => ({ type: 'resync', id: 'p1', seq: ev.seq }),
+    onError: (err) => errors.push(err.message),
+    authorizeCacheMs: 0,
+  });
+  ch.push({ type: 'job.updated', id: 'a', seq: 1 });
+  assert.deepEqual((await stream.next()).value, { type: 'resync', id: 'p1', seq: 1 });
+  failAuth = false;
+  ch.push({ type: 'job.updated', id: 'boom', seq: 2 });
+  assert.equal((await stream.next()).value.type, 'resync');
+  ch.push({ type: 'job.updated', id: 'b', seq: 3 });
+  assert.deepEqual((await stream.next()).value, { type: 'job.updated', id: 'b' });
+  assert.deepEqual(errors, ['db down', 'load failed']);
+  await stream.return();
 });
 
 test('a throwing loader skips the event instead of ending the stream', async () => {
@@ -219,6 +279,8 @@ test('chat order is (createdAt, id): two messages of the same millisecond sort t
   for (const m of [c, b, a, b]) list = insertOrdered(list, m);
   assert.deepEqual(list.map((m) => m.id), [a.id, b.id, c.id]);
   assert.equal(compareChat({ id: 'x', createdAt: String(Date.parse(t)) }, { id: 'y', createdAt: t }), -1, 'epoch strings compare as times');
+  assert.equal(compareChat({ id: 'b', createdAt: 'not a date' }, { id: 'a', createdAt: 'nope' }), 1, 'unparseable times count as 0, ids decide');
+  assert.equal(compareChat({ id: 'z', createdAt: 'not a date' }, a), -1, 'an unparseable time sorts first');
 });
 
 /* ---------------- job chip ---------------- */
@@ -308,6 +370,29 @@ test('a person is offered with a handle the mention parser matches', () => {
   const odd = { name: "O'Brien (lead)", email: 'obrien@example.com' };
   assert.equal(mentionHandleFor(odd), 'obrien');
   assert.equal(handleMatchesUser(mentionHandles(`@${mentionHandleFor(odd)} ok`)[0], odd), true);
+  assert.equal(mentionHandleFor({ name: "O'Brien", email: 'o+b@example.com' }), null, 'no valid handle: not offered');
+  assert.equal(mentionHandleFor({ name: "O'Brien", email: 'obrien.@example.com' }), null, 'trailing punctuation is not a handle');
+});
+
+test('mention handles are unique: a shared name falls back to the email, a still shared one is dropped', () => {
+  const people = [
+    { id: '1', name: 'Rina Putri', email: 'rina@example.com' },
+    { id: '2', name: 'RinaPutri', email: 'rputri@example.com' },
+    { id: '3', name: 'Dewi', email: 'dewi@example.com' },
+    { id: '4', name: 'Dewi', email: 'dewi@other.example' },
+    { id: '5', name: 'Sam', email: 'sam@example.com' },
+  ];
+  const h = assignMentionHandles(people);
+  assert.equal(h.get('1'), 'rina');
+  assert.equal(h.get('2'), 'rputri');
+  assert.equal(h.has('3'), false, 'both Dewi accounts share the name and the email local part');
+  assert.equal(h.has('4'), false);
+  assert.equal(h.get('5'), 'Sam');
+  // One typed handle names at most one account.
+  assert.equal(resolveMentionHandle('rina', people, h)?.id, '1');
+  assert.equal(resolveMentionHandle('rinaputri', people, h), null, 'ambiguous: nobody is notified');
+  assert.equal(resolveMentionHandle('dewi', people, h), null);
+  assert.equal(resolveMentionHandle('sam', people, h)?.id, '5');
 });
 
 /* ---------------- source rules ---------------- */
@@ -339,7 +424,7 @@ test('every subscription streams through the per-event authorisation', () => {
   const block = src.slice(src.indexOf('  Subscription: {'), src.indexOf('// Story 2.5: the project list type'));
   const fields = [...block.matchAll(/^ {4}(\w+): \{$/gm)].map((m) => m[1]);
   assert.deepEqual(fields.sort(), ['chatMessages', 'jobUpdated', 'notificationReceived', 'projectEvents', 'uploadProgress']);
-  assert.equal((block.match(/return guardedStream\(/g) ?? []).length, fields.length, 'each subscribe returns a guarded stream');
+  assert.equal((block.match(/return guardedStream(<\w+>)?\(/g) ?? []).length, fields.length, 'each subscribe returns a guarded stream');
   assert.ok(!block.includes('channelMessages('), 'no raw channel iterator reaches a client');
 });
 
@@ -349,7 +434,7 @@ test('job changes are announced after their statement in every writer', () => {
     const start = src.indexOf(`export async function ${fn}(`);
     assert.ok(start >= 0, fn);
     const end = src.indexOf('\nexport ', start + 10);
-    assert.match(src.slice(start, end), /await announceJobs\(/, `${fn} announces its change`);
+    assert.match(src.slice(start, end), /await announce(Jobs|Progress)\(/, `${fn} announces its change`);
   }
 });
 

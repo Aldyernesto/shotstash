@@ -39,7 +39,7 @@ export function JobChip({ job, kindLabel, announce = false, onDark = false, clas
   if (!chip || !job) return null;
   return (
     <>
-      <StatusChip tone={chip.tone} onDark={onDark} className={className} title={chip.labelKey === "failed" && job.error ? job.error : undefined}>
+      <StatusChip tone={chip.tone} onDark={onDark} className={className}>
         {label(job)}
       </StatusChip>
       {announce ? (

@@ -305,33 +305,52 @@ async function worker(path, { token, bootstrap, claim, body } = {}) {
   return { status: r.status, json: await r.json().catch(() => null) };
 }
 
+async function workerPut(path, { token, claim }, buf) {
+  const r = await fetch(`${B}/api/v1/pipeline/${path}`, {
+    method: 'PUT',
+    headers: { 'x-worker-token': token, 'x-claim-token': claim, 'content-type': 'video/mp4', 'x-output-ext': 'mp4' },
+    body: buf,
+  });
+  return { status: r.status, json: await r.json().catch(() => null) };
+}
+
 if (BOOTSTRAP.length >= 32) {
   const kind = `e2e-rt-${RUN}/probe`;
   const reg = await worker('workers/register', { bootstrap: BOOTSTRAP, body: { manifest: { name: `e2e-rt-${RUN}`, version: '0.0.1', kinds: [kind], contract: 1 } } });
   ok(reg.status === 201, 'test worker registered', reg.status);
   const wt = reg.json?.token;
   const fileId = await upload(`realtime-${RUN}.mp4`);
-  const enq = await gql(editor.token, 'mutation($f: ID!, $k: String!){ enqueueJob(fileId:$f, kind:$k){ id state seq } }', { f: fileId, k: kind });
-  const jobId = enq.data?.enqueueJob?.id;
-  ok(!!jobId, 'job queued', JSON.stringify(enq.errors ?? ''));
+  const ENQ = 'mutation($f: ID!, $k: String!){ enqueueJob(fileId:$f, kind:$k){ id state seq } }';
+  const JOB_SUB = 'subscription($j: ID!){ jobUpdated(jobId:$j){ id state status progress seq } }';
+  const enqueueOne = async (f = fileId) => (await gql(editor.token, ENQ, { f, k: kind })).data?.enqueueJob?.id;
+  const claimNext = async () => (await worker('jobs/next', { token: wt })).json?.job;
+  const jobsOf = (sub) => sub.items.map((i) => i.value.data?.jobUpdated).filter(Boolean);
+
   const missing = await subscribe(B, editor.token, 'subscription($j: ID!){ jobUpdated(jobId:$j){ id } }', { j: '00000000-0000-4000-8000-000000000000' });
   const missingEnd = await missing.waitEnd(3000);
   const missingCode = missing.items[0]?.value?.errors?.[0]?.extensions?.code;
   ok(!!missingEnd && missing.items.every((i) => !i.value.data?.jobUpdated) && (missingCode === 'NOT_FOUND' || !!missingEnd.error), 'jobUpdated of a missing job is refused', missingCode ?? '');
 
-  const jobSub = await subscribe(B, editor.token, 'subscription($j: ID!){ jobUpdated(jobId:$j){ id state status progress seq } }', { j: jobId });
+  // Job 1: claim, progress 10/20/30, output, complete.
+  const jobId = await enqueueOne();
+  ok(!!jobId, 'job queued');
+  const jobSub = await subscribe(B, editor.token, JOB_SUB, { j: jobId });
   // The job channel has no harmless event to prime it with: give it a little longer.
   await sleep(800);
-  const next = await worker('jobs/next', { token: wt });
-  ok(next.status === 200 && next.json?.job?.id === jobId, 'the test worker claims the job', next.status);
-  const claim = next.json?.job?.claimToken;
-  for (const progress of [10, 20, 30]) await worker(`jobs/${jobId}/progress`, { token: wt, claim, body: { progress } });
+  const job1 = await claimNext();
+  ok(job1?.id === jobId, 'the test worker claims the job');
+  const claim = job1?.claimToken;
+  // Progress events are coalesced to one per job per second: report slower than that.
+  for (const progress of [10, 20, 30]) {
+    await worker(`jobs/${jobId}/progress`, { token: wt, claim, body: { progress } });
+    await sleep(1100);
+  }
   const last = await jobSub.waitFor((v) => v.data?.jobUpdated?.progress === 30, 5000);
   ok(!!last, 'progress 30 arrives live');
-  const arrived = jobSub.items.map((i) => i.value.data?.jobUpdated).filter(Boolean);
+  let arrived = jobsOf(jobSub);
   const seqs = arrived.map((j) => j.seq);
-  ok(seqs.length >= 4 && seqs.every((s, i) => i === 0 || s > seqs[i - 1]), 'job events arrive in seq order (claim, 10, 20, 30)', seqs.join(','));
-  ok(arrived.some((j) => j.state === 'claimed') && arrived.at(-1).progress === 30 && arrived.at(-1).state === 'running', 'states follow the job', arrived.map((j) => `${j.state}:${j.progress}`).join(','));
+  ok(seqs.length >= 3 && seqs.every((s, i) => i === 0 || s > seqs[i - 1]), 'job events arrive in seq order, each once (10, 20, 30)', seqs.join(','));
+  ok(['10', '20', '30'].every((p) => arrived.some((j) => String(j.progress) === p)) && arrived.at(-1).state === 'running', 'states follow the job', arrived.map((j) => `${j.state}:${j.progress}`).join(','));
   // The client helper: a late copy of the progress-20 event is dropped.
   const gate = createSeqGate();
   const shown = [];
@@ -342,22 +361,96 @@ if (BOOTSTRAP.length >= 32) {
     const across = await live2.waitFor((v) => v.data?.projectEvents?.job?.id === jobId && v.data.projectEvents.job.progress === 30, 4000);
     ok(!!across, 'job progress reaches a project subscriber on the second app process');
   }
-  const cancelled = await gql(editor.token, 'mutation($id: ID!){ cancelJob(id:$id){ id state } }', { id: jobId });
+  const seq30 = arrived.at(-1).seq;
+  const out = await workerPut(`jobs/${jobId}/output`, { token: wt, claim }, randomBytes(2048));
+  ok(out.status === 200, 'the worker uploads the output', out.status);
+  const afterOutput = await jobSub.waitFor((v) => (v.data?.jobUpdated?.seq ?? 0) > seq30, 4000);
+  ok(!!afterOutput, 'the output raises the job seq', afterOutput ? `${seq30} -> ${afterOutput.value.data.jobUpdated.seq}` : '');
+  const fin = await worker(`jobs/${jobId}/complete`, { token: wt, claim });
+  ok(fin.status === 200, 'the worker completes the job', fin.status);
+  const doneEvent = await jobSub.waitFor((v) => v.data?.jobUpdated?.state === 'done', 4000);
+  ok(!!doneEvent && doneEvent.value.data.jobUpdated.seq > afterOutput?.value.data.jobUpdated.seq, 'done arrives live with a higher seq (chip Ready)');
+
+  // Job 2: cancelled while running; the worker gets 409.
+  const job2Id = await enqueueOne();
+  const sub2 = await subscribe(B, editor.token, JOB_SUB, { j: job2Id });
+  await sleep(800);
+  const job2 = await claimNext();
+  await worker(`jobs/${job2Id}/progress`, { token: wt, claim: job2?.claimToken, body: { progress: 5 } });
+  const cancelled = await gql(editor.token, 'mutation($id: ID!){ cancelJob(id:$id){ id state } }', { id: job2Id });
   ok(cancelled.data?.cancelJob?.state === 'cancelled', 'editor cancels the running job');
-  const cancelEvent = await jobSub.waitFor((v) => v.data?.jobUpdated?.state === 'cancelled', 4000);
-  ok(!!cancelEvent, 'the cancel arrives live (chip Cancelled)');
-  const late409 = await worker(`jobs/${jobId}/progress`, { token: wt, claim, body: { progress: 40 } });
+  ok(!!(await sub2.waitFor((v) => v.data?.jobUpdated?.state === 'cancelled', 4000)), 'the cancel arrives live (chip Cancelled)');
+  const late409 = await worker(`jobs/${job2Id}/progress`, { token: wt, claim: job2?.claimToken, body: { progress: 40 } });
   ok(late409.status === 409, 'the worker gets 409 after the cancel', late409.status);
+
+  // Job 3: fails for good.
+  const job3Id = await enqueueOne();
+  const sub3 = await subscribe(B, editor.token, JOB_SUB, { j: job3Id });
+  await sleep(800);
+  const job3 = await claimNext();
+  await worker(`jobs/${job3Id}/fail`, { token: wt, claim: job3?.claimToken, body: { error: 'e2e failure', retryable: false } });
+  ok(!!(await sub3.waitFor((v) => v.data?.jobUpdated?.state === 'failed', 4000)), 'a failed job arrives live (chip Failed)');
+
+  // Job 4: released (back to queued), then its worker is revoked (waiting for worker).
+  const job4Id = await enqueueOne();
+  const sub4 = await subscribe(B, editor.token, JOB_SUB, { j: job4Id });
+  await sleep(800);
+  const job4 = await claimNext();
+  await worker(`jobs/${job4Id}/release`, { token: wt, claim: job4?.claimToken });
+  const released = await sub4.waitFor((v) => v.data?.jobUpdated?.state === 'queued', 4000);
+  ok(!!released, 'a released job arrives live as queued');
+  await gql(sa.token, 'mutation($id: ID!){ revokeWorker(id:$id){ id } }', { id: reg.json?.workerId });
+  const waiting = await sub4.waitFor((v) => v.data?.jobUpdated?.state === 'waiting_for_worker', 4000);
+  ok(!!waiting && waiting.value.data.jobUpdated.seq > released?.value.data.jobUpdated.seq, 'revoking the last worker of a kind turns its queued job into waiting for worker, live');
+  await gql(editor.token, 'mutation($id: ID!){ cancelJob(id:$id){ id } }', { id: job4Id });
+
+  // Trashing a file cancels its open job; the cancel still reaches project subscribers.
   const viewerSub = await subscribe(B, viewer.token, PROJECT_EVENTS, { p: project.id });
   await warm(viewerSub);
-  const job2 = await gql(editor.token, 'mutation($f: ID!, $k: String!){ enqueueJob(fileId:$f, kind:$k){ id } }', { f: fileId, k: kind });
-  const seenByViewer = await viewerSub.waitFor((v) => v.data?.projectEvents?.job?.id === job2.data?.enqueueJob?.id, 4000);
+  const trashFile = await upload(`realtime-trash-${RUN}.mp4`);
+  const job5Id = await enqueueOne(trashFile);
+  const seenByViewer = await viewerSub.waitFor((v) => v.data?.projectEvents?.job?.id === job5Id, 4000);
   ok(!!seenByViewer, 'a viewer follows job changes of the Project (read access)');
-  await gql(editor.token, 'mutation($id: ID!){ cancelJob(id:$id){ id } }', { id: job2.data?.enqueueJob?.id });
-  const viewerEnqueue = await gql(viewer.token, 'mutation($f: ID!, $k: String!){ enqueueJob(fileId:$f, kind:$k){ id } }', { f: fileId, k: kind });
+  const viewerEnqueue = await gql(viewer.token, ENQ, { f: fileId, k: kind });
   ok(code(viewerEnqueue) === 'FORBIDDEN', 'a viewer cannot trigger jobs', code(viewerEnqueue));
+  await gql(editor.token, 'mutation($f: ID!){ moveToTrash(fileId:$f) }', { f: trashFile });
+  const trashCancel = await live.waitFor((v) => v.data?.projectEvents?.job?.id === job5Id && v.data.projectEvents.job.state === 'cancelled', 4000);
+  ok(!!trashCancel, 'trashing the file delivers its job as cancelled');
 } else {
   console.log('SKIP job events (set WORKER_BOOTSTRAP_TOKEN to the value the server runs with)');
+}
+
+/* ---------------- uploadProgress and chatMessages ---------------- */
+{
+  const buf = randomBytes(3000);
+  const init = (
+    await gql(editor.token, 'mutation($i: InitiateUploadInput!){ initiateUpload(input:$i){ id fileId } }', {
+      i: { filename: `progress-${RUN}.bin`, totalSize: buf.length, projectId: project.id, folderId: folder.id },
+    })
+  ).data?.initiateUpload;
+  const prog = await subscribe(B, editor.token, 'subscription($s: ID!){ uploadProgress(sessionId:$s){ sessionId confirmedParts partCount percentage } }', { s: init?.id });
+  await fetch(`${B}/api/v1/uploads/${init?.id}/parts/1`, {
+    method: 'PUT',
+    headers: { authorization: `Bearer ${editor.token}`, 'content-md5': md5b64(buf), 'content-type': 'application/octet-stream' },
+    body: buf,
+  });
+  const p = await prog.waitFor((v) => v.data?.uploadProgress?.confirmedParts === 1, 4000);
+  ok(!!p && p.value.data.uploadProgress.percentage === 100 && p.value.data.uploadProgress.partCount === 1, 'uploadProgress reports the confirmed part live', JSON.stringify(p?.value?.data ?? {}));
+  await gql(editor.token, 'mutation($s: ID!){ cancelUpload(sessionId:$s) }', { s: init?.id });
+
+  const chatSub = await subscribe(B, viewer.token, `subscription($p: ID!){ chatMessages(projectId:$p){ ${CHAT} } }`, { p: project.id });
+  const hit = await primed(chatSub, async (i) => (await send(editor.token, `chatMessages ${i} ${RUN}`)).data?.sendMessage, (v, m) => !!m && v.data?.chatMessages?.id === m.id);
+  ok(!!hit, 'chatMessages delivers a sent message');
+}
+
+/* ---------------- inactive accounts get no upload notification ---------------- */
+{
+  const quiet = await account('Quiet');
+  await gql(sa.token, 'mutation($id: ID!){ deactivateUser(id:$id){ id } }', { id: quiet.id });
+  await upload(`quiet-${RUN}.mp4`);
+  await sleep(600);
+  const rows = await sql("SELECT count(*)::int AS n FROM notifications WHERE \"userId\" = $1 AND type = 'upload_complete'", [quiet.id]);
+  ok(rows[0].n === 0, 'a deactivated account gets no upload_complete notification', rows[0].n);
 }
 
 /* ---------------- per-event authorisation ends the stream ---------------- */
@@ -367,6 +460,8 @@ const doomedSub = await subscribe(B, doomed.token, PROJECT_EVENTS, { p: project.
 const before = await primed(doomedSub, async (i) => (await send(editor.token, `before deactivation ${i} ${RUN}`)).data?.sendMessage, chatIs);
 ok(!!before, 'the subscriber receives events while active', before ? '' : JSON.stringify({ end: doomedSub.ended(), items: doomedSub.items.map((i) => i.value) }).slice(0, 400));
 await gql(sa.token, 'mutation($id: ID!){ deactivateUser(id:$id){ id } }', { id: doomed.id });
+// A positive check is reused for 5 s per subscription; after that the next event ends the stream.
+await sleep(5500);
 const after = (await send(editor.token, `after deactivation ${RUN}`)).data?.sendMessage;
 const end = await doomedSub.waitEnd(5000);
 ok(!!end, 'the stream ends after the account is deactivated', JSON.stringify(end ?? {}).slice(0, 80));

@@ -239,6 +239,9 @@ export const typeDefs = `#graphql
     # A worker serving this kind was seen within the lease (else the job
     # waits for one).
     live: Boolean!
+    # The file already has an unfinished job of this kind (the menu entry is
+    # disabled; enqueueJob would answer that job).
+    open: Boolean!
   }
 
   # Story 5.5: a person the mention dropdown offers (an account that may
@@ -251,8 +254,9 @@ export const typeDefs = `#graphql
   }
 
   # Story 5.5: one change in a Project, delivered after the commit and after
-  # a per-event permission check. type is chat.created (chat set) or
-  # job.updated (job set); seq orders the events of one entity (drop lower).
+  # a per-event permission check. type is chat.created (chat set),
+  # job.updated (job set) or resync (a transient server error skipped an
+  # event: refetch); seq orders the events of one entity (drop lower).
   type ProjectEvent {
     type: String!
     id: ID!

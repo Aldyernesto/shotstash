@@ -71,6 +71,11 @@ export function maxOutputBytes(): number {
 async function announceJobs(ids: readonly (string | null | undefined)[]) {
   const list = [...new Set(ids.filter((id): id is string => !!id))];
   if (!list.length) return;
+  for (const id of list) {
+    const gate = progressGate.get(id);
+    if (gate?.timer) clearTimeout(gate.timer);
+    progressGate.delete(id);
+  }
   try {
     const rows = await prisma.pipelineJob.findMany({
       where: { id: { in: list } },
@@ -86,6 +91,59 @@ async function announceJobs(ids: readonly (string | null | undefined)[]) {
     log.warn('job event failed', { err: errMessage(err) });
   }
 }
+
+/**
+ * Story 5.5: progress reports are announced at most once per job per
+ * second; a report inside the window is announced when it ends (so the last
+ * percent always goes out). State changes use `announceJobs` directly and
+ * cancel a pending progress announcement.
+ */
+const PROGRESS_EVENT_MS = 1000;
+const progressGate = new Map<string, { at: number; timer: ReturnType<typeof setTimeout> | null }>();
+
+async function announceProgress(jobId: string) {
+  const now = Date.now();
+  const gate = progressGate.get(jobId);
+  if (!gate || now - gate.at >= PROGRESS_EVENT_MS) {
+    if (gate?.timer) clearTimeout(gate.timer);
+    await announceJobs([jobId]);
+    progressGate.set(jobId, { at: now, timer: null });
+    return;
+  }
+  if (gate.timer) return;
+  gate.timer = setTimeout(() => {
+    progressGate.delete(jobId);
+    void announceJobs([jobId]);
+  }, PROGRESS_EVENT_MS - (now - gate.at));
+  (gate.timer as { unref?: () => void }).unref?.();
+}
+
+/**
+ * Story 5.5: a queued job's state depends on whether a live worker serves
+ * its kind (queued vs waiting_for_worker). When that changes for `kinds`,
+ * their queued jobs get a new seq and are announced.
+ */
+async function announceKindLiveness(kinds: Iterable<string>) {
+  const list = [...new Set(kinds)];
+  if (!list.length) return;
+  try {
+    const rows = await prisma.$queryRaw<{ id: string }[]>`
+      UPDATE pipeline_jobs SET seq = seq + 1, updated_at = now()
+      WHERE status = 'queued' AND kind = ANY(${list}::text[])
+      RETURNING id`;
+    await announceJobs(rows.map((r) => r.id));
+  } catch (err) {
+    log.warn('kind liveness event failed', { err: errMessage(err) });
+  }
+}
+
+/** Kinds that became live, or stopped being live, between two liveKinds() reads. */
+function changedKinds(before: Set<string>, after: Set<string>): string[] {
+  return [...new Set([...before, ...after])].filter((k) => before.has(k) !== after.has(k));
+}
+
+/** Last live kinds the sweeper saw (this process). */
+let sweptLiveKinds: Set<string> | null = null;
 
 /** Best effort: a key the job no longer owns. Failures are logged, never thrown. */
 async function dropObject(key: string | null | undefined) {
@@ -121,6 +179,7 @@ export async function registerWorker(manifest: ParsedManifest): Promise<Register
   const token = newWorkerToken();
   const data = { version: manifest.version, kinds: manifest.kinds, tokenHash: hashWorkerToken(token), lastSeen: new Date() };
   await addKinds(manifest.kinds);
+  const liveBefore = await liveKinds();
   let id: string | null = null;
   for (let tries = 0; tries < 2 && !id; tries++) {
     const existing = await prisma.pipelineWorker.findUnique({ where: { name: manifest.name }, select: { id: true, revokedAt: true } });
@@ -138,6 +197,7 @@ export async function registerWorker(manifest: ParsedManifest): Promise<Register
     }
   }
   if (!id) throw new PipelineFailure(403, 'WORKER_REVOKED', `The worker name ${manifest.name} is revoked`);
+  await announceKindLiveness(changedKinds(liveBefore, await liveKinds()));
   log.info('worker registered', { workerId: id, name: manifest.name, version: manifest.version, kinds: manifest.kinds });
   return {
     workerId: id,
@@ -179,7 +239,9 @@ export async function listWorkers(): Promise<WorkerView[]> {
  */
 export async function revokeWorker(workerId: string): Promise<WorkerView | null> {
   if (!isJobId(workerId)) return null;
+  const liveBefore = await liveKinds();
   await prisma.pipelineWorker.updateMany({ where: { id: workerId, revokedAt: null }, data: { revokedAt: new Date() } });
+  await announceKindLiveness(changedKinds(liveBefore, await liveKinds()));
   const row = await prisma.pipelineWorker.findUnique({ where: { id: workerId }, select: WORKER_SELECT });
   if (row) log.info('worker revoked', { workerId });
   return row ? workerView(row) : null;
@@ -192,6 +254,7 @@ export async function revokeWorker(workerId: string): Promise<WorkerView | null>
  */
 export async function heartbeat(worker: WorkerPrincipal, manifest: ParsedManifest, activeJobIds: string[]): Promise<HeartbeatResponse> {
   await addKinds(manifest.kinds);
+  const liveBefore = await liveKinds();
   await prisma.pipelineWorker.update({
     where: { id: worker.id },
     // The name is the identity of the row (set at registration); a heartbeat updates version and kinds only.
@@ -205,6 +268,8 @@ export async function heartbeat(worker: WorkerPrincipal, manifest: ParsedManifes
       RETURNING id`;
     held = rows.map((r) => r.id);
   }
+  // A worker back after its lease (or with a new kind) makes waiting jobs queued again.
+  await announceKindLiveness(changedKinds(liveBefore, await liveKinds()));
   return { contract: PIPELINE_CONTRACT_VERSION, lostJobIds: activeJobIds.filter((id) => !held.includes(id)) };
 }
 
@@ -325,7 +390,7 @@ export async function reportProgress(worker: WorkerPrincipal, jobId: string, cla
     WHERE id = ${jobId} AND claimed_by = ${worker.id} AND claim_token = ${claimToken} AND status IN ('claimed', 'running')
     RETURNING progress, seq`;
   if (!rows[0]) throw await refusal(worker, jobId, claimToken);
-  await announceJobs([jobId]);
+  await announceProgress(jobId);
   return { status: 'running', progress: Number(rows[0].progress), seq: Number(rows[0].seq) };
 }
 
@@ -668,6 +733,10 @@ export async function sweepExpiredClaims(): Promise<{ requeued: number; failed: 
   const failed = rows.filter((r) => r.status === 'failed').length;
   const cancelled = await cancelJobsOfTrashedFiles();
   const pruned = await pruneWorkers();
+  // The last live worker of a kind may have gone quiet (or been pruned): its queued jobs now wait.
+  const liveNow = await liveKinds();
+  if (sweptLiveKinds) await announceKindLiveness(changedKinds(sweptLiveKinds, liveNow));
+  sweptLiveKinds = liveNow;
   return { requeued: rows.length - failed, failed, cancelled, pruned };
 }
 
@@ -854,13 +923,10 @@ export async function jobsForFile(fileId: string, limit = 20): Promise<JobView[]
 }
 
 /** Live workers and queued jobs for the status page. */
-export async function pipelineCounts(): Promise<{ workers: number; queuedJobs: number }> {
+/** Live workers for the status page (queued jobs come from `jobCounts`). */
+export async function pipelineCounts(): Promise<{ workers: number }> {
   const since = new Date(Date.now() - leaseSeconds() * 1000);
-  const [workers, queuedJobs] = await Promise.all([
-    prisma.pipelineWorker.count({ where: { revokedAt: null, lastSeen: { gte: since } } }),
-    prisma.pipelineJob.count({ where: { status: 'queued' } }),
-  ]);
-  return { workers, queuedJobs };
+  return { workers: await prisma.pipelineWorker.count({ where: { revokedAt: null, lastSeen: { gte: since } } }) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -907,6 +973,8 @@ export type KindOption = {
   /** A worker serving this kind was seen within the lease. */
   live: boolean;
   builtIn: boolean;
+  /** The file already has an unfinished job of this kind. */
+  open: boolean;
 };
 
 /**
@@ -914,14 +982,16 @@ export type KindOption = {
  * built-in kinds, plus kinds a live worker registered. Built-in kinds first,
  * then by name.
  */
-export async function availableKinds(mimeType: string): Promise<KindOption[]> {
-  const [kinds, live] = await Promise.all([
+export async function availableKinds(file: { id: string; mimeType: string }): Promise<KindOption[]> {
+  const [kinds, live, openJobs] = await Promise.all([
     prisma.pipelineKind.findMany({ select: { name: true, label: true, builtIn: true, accepts: true } }),
     liveKinds(),
+    prisma.pipelineJob.findMany({ where: { mediaFileId: file.id, status: { in: [...OPEN_STATUSES] } }, select: { kind: true } }),
   ]);
+  const open = new Set(openJobs.map((j) => j.kind));
   return kinds
-    .filter((k) => kindAccepts(k.accepts, mimeType) && (k.builtIn || live.has(k.name)))
-    .map((k) => ({ kind: k.name, label: k.label, live: live.has(k.name), builtIn: k.builtIn }))
+    .filter((k) => kindAccepts(k.accepts, file.mimeType) && (k.builtIn || live.has(k.name)))
+    .map((k) => ({ kind: k.name, label: k.label, live: live.has(k.name), builtIn: k.builtIn, open: open.has(k.name) }))
     .sort((a, b) => (a.builtIn === b.builtIn ? (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0) : a.builtIn ? -1 : 1));
 }
 
@@ -941,29 +1011,29 @@ export type JobCounts = {
 /** Queue figures by state for the status page. */
 export async function jobCounts(): Promise<JobCounts> {
   const since = new Date(Date.now() - 24 * 3600 * 1000);
-  const [open, finished, live] = await Promise.all([
-    prisma.pipelineJob.groupBy({ by: ['status', 'kind'], where: { status: { in: [...OPEN_STATUSES] } }, _count: { _all: true } }),
-    prisma.pipelineJob.groupBy({
-      by: ['status'],
-      where: { status: { in: ['done', 'failed', 'cancelled'] }, finishedAt: { gte: since } },
-      _count: { _all: true },
-    }),
-    liveKinds(),
-  ]);
-  const counts: JobCounts = { queued: 0, waitingForWorker: 0, claimed: 0, running: 0, done24h: 0, failed24h: 0, cancelled24h: 0 };
-  for (const g of open) {
-    const n = g._count._all;
-    if (g.status === 'queued') {
-      if (live.has(g.kind)) counts.queued += n;
-      else counts.waitingForWorker += n;
-    } else if (g.status === 'claimed') counts.claimed += n;
-    else if (g.status === 'running') counts.running += n;
-  }
-  for (const g of finished) {
-    const n = g._count._all;
-    if (g.status === 'done') counts.done24h += n;
-    else if (g.status === 'failed') counts.failed24h += n;
-    else if (g.status === 'cancelled') counts.cancelled24h += n;
-  }
-  return counts;
+  const liveSince = new Date(Date.now() - leaseSeconds() * 1000);
+  const rows = await prisma.$queryRaw<Record<keyof JobCounts, number>[]>`
+    WITH live AS (
+      SELECT DISTINCT unnest(kinds) AS kind FROM pipeline_workers WHERE revoked_at IS NULL AND last_seen >= ${liveSince}
+    )
+    SELECT
+      count(*) FILTER (WHERE status = 'queued' AND kind IN (SELECT kind FROM live))::int AS "queued",
+      count(*) FILTER (WHERE status = 'queued' AND kind NOT IN (SELECT kind FROM live))::int AS "waitingForWorker",
+      count(*) FILTER (WHERE status = 'claimed')::int AS "claimed",
+      count(*) FILTER (WHERE status = 'running')::int AS "running",
+      count(*) FILTER (WHERE status = 'done' AND finished_at >= ${since})::int AS "done24h",
+      count(*) FILTER (WHERE status = 'failed' AND finished_at >= ${since})::int AS "failed24h",
+      count(*) FILTER (WHERE status = 'cancelled' AND finished_at >= ${since})::int AS "cancelled24h"
+    FROM pipeline_jobs
+    WHERE status IN ('queued', 'claimed', 'running') OR finished_at >= ${since}`;
+  const r = rows[0];
+  return {
+    queued: Number(r?.queued ?? 0),
+    waitingForWorker: Number(r?.waitingForWorker ?? 0),
+    claimed: Number(r?.claimed ?? 0),
+    running: Number(r?.running ?? 0),
+    done24h: Number(r?.done24h ?? 0),
+    failed24h: Number(r?.failed24h ?? 0),
+    cancelled24h: Number(r?.cancelled24h ?? 0),
+  };
 }

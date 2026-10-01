@@ -407,9 +407,35 @@
   outline: none;
 }
 
-.processItem:disabled {
+.processItem[aria-disabled='true'] {
   color: var(--app-spine-muted);
   cursor: default;
+}
+
+.processItem[aria-disabled='true']:hover {
+  background: transparent;
+}
+
+/* The Processing heading reads like the PROJECT and SECTION labels (.dl dt). */
+.infoLabel {
+  margin: 0;
+  font-size: 0.71875rem; /* 11,5 px */
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--app-spine-meta);
+}
+
+/* A failed job's worker error: collapsed, truncated. */
+.jobError summary {
+  cursor: pointer;
+  color: var(--app-spine-muted);
+}
+
+.jobError span {
+  display: block;
+  margin-top: 4px;
 }
 
 .processItemLabel {

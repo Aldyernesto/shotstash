@@ -53,11 +53,14 @@ export function createSeqGate(limit = 5000): SeqGate {
 
 type Orderable = { id: string; createdAt: string | number | Date };
 
+/** Milliseconds of a createdAt; an unparseable value counts as 0 (never NaN). */
 function timeOf(v: Orderable['createdAt']): number {
-  if (v instanceof Date) return v.getTime();
-  if (typeof v === 'number') return v;
-  const n = Number(v);
-  return Number.isFinite(n) && /^\d+$/.test(v) ? n : Date.parse(v);
+  let t: number;
+  if (v instanceof Date) t = v.getTime();
+  else if (typeof v === 'number') t = v;
+  else if (/^\d+$/.test(v)) t = Number(v);
+  else t = Date.parse(v);
+  return Number.isFinite(t) ? t : 0;
 }
 
 /** History order of chat messages: (createdAt, id), the same order the server reads. */

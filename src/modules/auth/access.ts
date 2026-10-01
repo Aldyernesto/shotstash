@@ -24,15 +24,27 @@ export type ProjectMember = {
   readOnly: boolean;
 };
 
-/** Active accounts that may view the Project (none when it does not exist), by name. */
-export async function listActorsWithAccess(projectId: string): Promise<ProjectMember[]> {
+/**
+ * Active accounts that may view the Project (none when it does not exist),
+ * by name. `query` filters by name or email (contains, case-insensitive)
+ * and `take` limits the rows, both in the database.
+ */
+export async function listActorsWithAccess(projectId: string, opts: { query?: string; take?: number } = {}): Promise<ProjectMember[]> {
   const prisma = await db();
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
   if (!project) return [];
+  const q = (opts.query ?? '').trim();
   const users = await prisma.user.findMany({
-    where: { active: true, accountStatus: 'ACTIVE' },
+    where: {
+      active: true,
+      accountStatus: 'ACTIVE',
+      ...(q
+        ? { OR: [{ name: { contains: q, mode: 'insensitive' as const } }, { email: { contains: q, mode: 'insensitive' as const } }] }
+        : {}),
+    },
     select: { id: true, name: true, email: true, role: true, active: true, accountStatus: true, readOnly: true },
     orderBy: [{ name: 'asc' }, { id: 'asc' }],
+    ...(opts.take ? { take: opts.take } : {}),
   });
   return users.filter((u) => can(u, 'project.view'));
 }

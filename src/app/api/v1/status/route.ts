@@ -40,7 +40,8 @@ export const GET = defineRoute({
         cache,
         search: c.features.search,
         workers: pipeline?.workers ?? null,
-        queuedJobs: pipeline?.queuedJobs ?? null,
+        // Kept for older clients: every queued job (with or without a live worker).
+        queuedJobs: jobs ? jobs.queued + jobs.waitingForWorker : null,
         jobs,
       },
       { headers: { 'Cache-Control': 'no-store' } },

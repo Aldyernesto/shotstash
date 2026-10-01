@@ -1495,6 +1495,8 @@
     "short": {
       "running": "{progress, number}%",
       "waiting_for_worker": "Waiting"
-    }
+    },
+    "alreadyOpen": "Already queued or running for this file.",
+    "errorDetails": "Show the error"
   }
 }

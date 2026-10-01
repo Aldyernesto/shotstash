@@ -42,7 +42,7 @@ import FileViewer from "@/components/media/FileViewer";
 import { JobChip } from "@/components/media/JobChip";
 import { ViewerProcess } from "@/components/media/ViewerProcess";
 import { useKindLabel } from "@/components/media/ViewerInfo";
-import { useProjectEvents, useRealtimeReconnect } from "@/components/realtime/useProjectEvents";
+import { noteProjectSeq, useProjectEvents, useRealtimeReconnect } from "@/components/realtime/useProjectEvents";
 import { JOB_FIELDS, type UiJob } from "@/components/realtime/fields";
 import { newerJob } from "@/lib/jobChip";
 // Story 3.1: konfirmasi bergaya (`dialog` desktop / `confirm-sheet` HP)
@@ -1656,7 +1656,33 @@ export default function DashboardPage() {
     });
   }, []);
   React.useEffect(() => setLiveJobs({}), [currentProjectId]);
+  // A refetched folder is the truth for its files: seed the seq gate with
+  // its jobs and drop live overrides it supersedes (a different job, or the
+  // same job at the same or a newer seq), so a stale chip cannot stick.
+  React.useEffect(() => {
+    const list = (folderData?.folder?.files ?? []) as { id: string; currentJob?: UiJob | null }[];
+    for (const f of list) if (f.currentJob) noteProjectSeq(currentProjectId, "job.updated", f.currentJob.id, f.currentJob.seq);
+    // After this render (the folder result is already on screen).
+    queueMicrotask(() => setLiveJobs((prev) => {
+      let next: Record<string, UiJob> | null = null;
+      for (const f of list) {
+        const live = prev[f.id];
+        if (!live) continue;
+        const fetched = f.currentJob ?? null;
+        if (!fetched || fetched.id !== live.id || fetched.seq >= live.seq) {
+          next ??= { ...prev };
+          delete next[f.id];
+        }
+      }
+      return next ?? prev;
+    }));
+  }, [folderData, currentProjectId]);
   useProjectEvents(currentProjectId, (event) => {
+    if (event.type === "resync") {
+      if (currentFolderId) void refetchFolder();
+      if (previewFile?.id) void refetchVersions();
+      return;
+    }
     if (event.type !== "job.updated" || !event.job) return;
     applyJob(event.job);
     if (event.job.state === "done" && previewFile?.id === event.job.fileId) void refetchVersions();

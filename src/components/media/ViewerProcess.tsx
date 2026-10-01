@@ -16,7 +16,7 @@
  * API refuses anyway). Results go up through `onJob`, the same path the
  * project event stream uses, so the chip never jumps back.
  */
-import React, { useId, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { gql, useMutation, useQuery } from "@apollo/client";
 import { useTranslations } from "next-intl";
 import styles from "./viewerInfo.module.css";
@@ -32,6 +32,7 @@ const AVAILABLE_KINDS = gql`
       kind
       label
       live
+      open
     }
   }
 `;
@@ -52,7 +53,10 @@ const CANCEL = gql`
   }
 `;
 
-type KindOption = { kind: string; label?: string | null; live: boolean };
+type KindOption = { kind: string; label?: string | null; live: boolean; open?: boolean };
+
+/** Longest worker error shown (in the collapsed details). */
+const MAX_ERROR_CHARS = 300;
 
 export type ViewerProcessProps = {
   fileId: string;
@@ -75,6 +79,8 @@ export function ViewerProcess({ fileId, job, canTrigger, kindLabel, onJob }: Vie
   const titleId = useId();
   const menuId = useId();
   const [menuOpen, setMenuOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   const { pushToast } = useToast();
   const humanizeError = useHumanizeError();
@@ -87,8 +93,34 @@ export function ViewerProcess({ fileId, job, canTrigger, kindLabel, onJob }: Vie
   const [enqueue] = useMutation(ENQUEUE);
   const [cancel] = useMutation(CANCEL);
 
-  // Esc closes the menu first (a non-modal layer above the viewer).
-  useModalLayer(() => setMenuOpen(false), { modal: false, enabled: menuOpen });
+  const closeMenu = () => {
+    setMenuOpen(false);
+    triggerRef.current?.focus({ preventScroll: true });
+  };
+  // Esc closes the menu first (a non-modal layer above the viewer) and focus goes back to "Process".
+  useModalLayer(closeMenu, { modal: false, enabled: menuOpen });
+  const items = () => [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
+  // On open, focus moves to the first entry.
+  useEffect(() => {
+    if (menuOpen) items()[0]?.focus({ preventScroll: true });
+  }, [menuOpen, kindData]);
+  const onMenuKey = (e: React.KeyboardEvent) => {
+    const list = items();
+    if (!list.length) return;
+    const at = list.indexOf(document.activeElement as HTMLButtonElement);
+    let next = -1;
+    if (e.key === "ArrowDown") next = (at + 1) % list.length;
+    else if (e.key === "ArrowUp") next = (at - 1 + list.length) % list.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = list.length - 1;
+    else if (e.key === "Tab") {
+      setMenuOpen(false);
+      return;
+    }
+    if (next < 0) return;
+    e.preventDefault();
+    list[next].focus();
+  };
 
   const kinds: KindOption[] = (kindData?.availableKinds as KindOption[] | undefined) ?? [];
   // Known kinds have a written action ("Create proxy (720p)"); others read "Run {label}".
@@ -112,7 +144,7 @@ export function ViewerProcess({ fileId, job, canTrigger, kindLabel, onJob }: Vie
   };
 
   const start = (kind: string, label: string) => {
-    setMenuOpen(false);
+    closeMenu();
     void run(label, async () => (await enqueue({ variables: { fileId, kind } })).data?.enqueueJob, "queueFailed");
   };
 
@@ -120,7 +152,7 @@ export function ViewerProcess({ fileId, job, canTrigger, kindLabel, onJob }: Vie
 
   return (
     <section aria-labelledby={titleId} className={styles.versions}>
-      <p id={titleId} className={`spine-label ${styles.versionsTitle}`}>
+      <p id={titleId} className={styles.infoLabel}>
         {t("title")}
       </p>
 
@@ -130,7 +162,12 @@ export function ViewerProcess({ fileId, job, canTrigger, kindLabel, onJob }: Vie
             <span className={`spine-body-sm ${styles.jobKind}`}>{jobLabel}</span>
             <JobChip job={job} kindLabel={jobLabel} announce />
             {chip.labelKey === "failed" && job.error ? (
-              <span className={`spine-footnote ${styles.versionMeta}`}>{job.error}</span>
+              <details className={styles.jobError}>
+                <summary className="spine-footnote">{t("errorDetails")}</summary>
+                <span className={`spine-footnote ${styles.versionMeta}`}>
+                  {job.error.length > MAX_ERROR_CHARS ? `${job.error.slice(0, MAX_ERROR_CHARS)}…` : job.error}
+                </span>
+              </details>
             ) : null}
           </div>
           {canTrigger && chip.open ? (
@@ -161,6 +198,7 @@ export function ViewerProcess({ fileId, job, canTrigger, kindLabel, onJob }: Vie
       {canTrigger ? (
         <div className={styles.processWrap}>
           <button
+            ref={triggerRef}
             type="button"
             className={`spine-focus-ring ${styles.processButton}`}
             aria-haspopup="menu"
@@ -172,7 +210,7 @@ export function ViewerProcess({ fileId, job, canTrigger, kindLabel, onJob }: Vie
             {t("process")}
           </button>
           {menuOpen ? (
-            <div id={menuId} role="menu" aria-label={t("process")} className={styles.processMenu}>
+            <div id={menuId} ref={menuRef} role="menu" aria-label={t("process")} className={styles.processMenu} onKeyDown={onMenuKey}>
               {kindsLoading && !kinds.length ? (
                 <p className={`spine-footnote ${styles.processEmpty}`}>{t("loadingKinds")}</p>
               ) : kinds.length === 0 ? (
@@ -180,18 +218,27 @@ export function ViewerProcess({ fileId, job, canTrigger, kindLabel, onJob }: Vie
               ) : (
                 kinds.map((k) => {
                   const label = kindLabel({ kind: k.kind, kindLabel: k.label });
-                  const busyKind = !!job && chip?.open && job.kind === k.kind;
+                  // An unfinished job of this kind already runs for the file: no second one.
+                  const running = !!k.open || (!!job && !!chip?.open && job.kind === k.kind);
+                  const off = busy || running;
                   return (
                     <button
                       key={k.kind}
                       type="button"
                       role="menuitem"
+                      tabIndex={-1}
                       className={styles.processItem}
-                      disabled={busy || busyKind}
-                      onClick={() => start(k.kind, label)}
+                      aria-disabled={off || undefined}
+                      onClick={() => {
+                        if (!off) start(k.kind, label);
+                      }}
                     >
                       <span className={styles.processItemLabel}>{actionLabel(k.kind, label)}</span>
-                      {!k.live ? <span className={`spine-footnote ${styles.processItemNote}`}>{t("noWorker")}</span> : null}
+                      {running ? (
+                        <span className={`spine-footnote ${styles.processItemNote}`}>{t("alreadyOpen")}</span>
+                      ) : !k.live ? (
+                        <span className={`spine-footnote ${styles.processItemNote}`}>{t("noWorker")}</span>
+                      ) : null}
                     </button>
                   );
                 })
