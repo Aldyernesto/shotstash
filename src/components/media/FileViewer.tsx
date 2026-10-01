@@ -12,6 +12,11 @@
  * daftar: pemanggil mengoper `files` yang sudah terurut dan sudah
  * disaring ke foto + video saja (dokumen tidak pernah masuk urutan ini
  * dan tidak dibuka di viewer).
+ *
+ * Story 5.4: `renderInfoExtra` adds the Processing section to the info
+ * panel / sheet, `renderTopExtra` a job chip next to the title; a video or
+ * image version opened from the info panel plays instead of the original
+ * until "Show original" (or another file).
  */
 
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -22,7 +27,7 @@ import VideoPlayer, { type VideoPlayerHandle } from "./VideoPlayer";
 import { formatClock } from "@/lib/format";
 import { useFocusTrap, useModalLayer } from "@/components/overlay/modalStack";
 import { ErrorBox } from "@/components/dashboard/states";
-import { ViewerInfo, type ViewerInfoFile } from "./ViewerInfo";
+import { ViewerInfo, useKindLabel, type ViewerInfoFile, type ViewerVersion } from "./ViewerInfo";
 
 export type ViewerFile = ViewerInfoFile & {
   id: string;
@@ -53,6 +58,10 @@ export type FileViewerProps = {
   renderDownload?: (file: ViewerFile) => React.ReactNode;
   /** Kalimat bantuan di bawah aksi (Story 3.7: kalimat perisai Agen). */
   actionNote?: React.ReactNode;
+  /** Story 5.4: the Processing section of the info panel / sheet. */
+  renderInfoExtra?: (file: ViewerFile) => React.ReactNode;
+  /** Story 5.4: a chip next to the title (the file's job). */
+  renderTopExtra?: (file: ViewerFile) => React.ReactNode;
 };
 
 function useIsDesktop() {
@@ -127,8 +136,13 @@ export default function FileViewer({
   onDownload,
   renderDownload,
   actionNote,
+  renderInfoExtra,
+  renderTopExtra,
 }: FileViewerProps) {
   const t = useTranslations("viewer");
+  const kindLabel = useKindLabel();
+  /** Story 5.4: a processed version shown instead of the original (this file only). */
+  const [shown, setShown] = useState<{ fileId: string; version: ViewerVersion } | null>(null);
   const desktop = useIsDesktop();
   const overlayRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<VideoPlayerHandle>(null);
@@ -170,7 +184,8 @@ export default function FileViewer({
 
   const file = files[index];
   const total = files.length;
-  const mediaKey = `${file?.id ?? ""}-${retryKey}`;
+  const version = shown && file && shown.fileId === file.id ? shown.version : null;
+  const mediaKey = `${file?.id ?? ""}-${version?.id ?? "o"}-${retryKey}`;
 
   /* Esc BERURUTAN: keluar layar penuh → tutup lembar/panel info →
      tutup viewer. Satu tingkat per tekan, tidak pernah melompat. */
@@ -202,7 +217,7 @@ export default function FileViewer({
   useEffect(() => {
     setFailed(false);
     setLoading(true);
-  }, [file?.id, retryKey]);
+  }, [file?.id, version?.id, retryKey]);
 
   /* ← → di mana pun di viewer = pindah file. Aturan "kecuali saat
      scrubber memegang fokus" ditegakkan di sini juga, supaya foto dan
@@ -222,7 +237,7 @@ export default function FileViewer({
   /* Geser kiri/kanan di HP (foto; video diurus `VideoPlayer`). */
   const touch = useRef<{ x: number; y: number } | null>(null);
 
-  const kind = file ? kindOf(file.mimeType) : "photo";
+  const kind = file ? kindOf(version?.mimeType ?? file.mimeType) : "photo";
   const counter = useMemo(
     () => t("counter", { kind, index: index + 1, total }),
     [t, kind, index, total],
@@ -278,9 +293,9 @@ export default function FileViewer({
     <div className={`${styles.media} ${styles.videoBox}`} style={videoBoxStyle}>
       <VideoPlayer
         ref={playerRef}
-        key={`${file.id}-${retryKey}`}
+        key={mediaKey}
         className={styles.player}
-        src={srcOf(file)}
+        src={version ? version.downloadUrl : srcOf(file)}
         poster={posterOf?.(file)}
         label={file.originalName}
         autoPlay
@@ -293,10 +308,10 @@ export default function FileViewer({
     <div className={styles.media}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        key={`${file.id}-${retryKey}`}
+        key={mediaKey}
         className={styles.photo}
         style={photoStyle}
-        src={srcOf(file)}
+        src={version ? version.downloadUrl : srcOf(file)}
         alt={file.originalName}
         onLoad={(e) => {
           setLoading(false);
@@ -383,6 +398,15 @@ export default function FileViewer({
               {counter}
             </span>
           </div>
+          {renderTopExtra && desktop ? <div className={styles.topExtra}>{renderTopExtra(file)}</div> : null}
+          {version ? (
+            <div className={styles.showing}>
+              <span className={styles.showingLabel}>{t("showingVersion", { kind: kindLabel(version) })}</span>
+              <button type="button" className={styles.showingButton} onClick={() => setShown(null)}>
+                {t("showOriginal")}
+              </button>
+            </div>
+          ) : null}
           {!desktop ? (
             <span className={styles.counterChip} aria-live="polite">
               {index + 1} / {total}
@@ -441,6 +465,9 @@ export default function FileViewer({
             file={infoFile}
             projectTitle={projectTitle}
             sectionName={sectionName}
+            extra={renderInfoExtra?.(file)}
+            onOpenVersion={(v) => setShown({ fileId: file.id, version: v })}
+            openVersionId={version?.id ?? null}
             onClose={() => {
               setInfoOpen(false);
               infoButtonRef.current?.focus({ preventScroll: true });
@@ -474,6 +501,7 @@ export default function FileViewer({
             </button>
           </div>
           <div className={styles.mobileActions}>
+            {renderTopExtra ? <div className={styles.topExtra}>{renderTopExtra(file)}</div> : null}
             {downloadNode}
             {shareNode}
           </div>
@@ -500,6 +528,9 @@ export default function FileViewer({
           file={infoFile}
           projectTitle={projectTitle}
           sectionName={sectionName}
+          extra={renderInfoExtra?.(file)}
+          onOpenVersion={(v) => setShown({ fileId: file.id, version: v })}
+          openVersionId={version?.id ?? null}
           onClose={() => {
             setInfoOpen(false);
             infoButtonRef.current?.focus({ preventScroll: true });

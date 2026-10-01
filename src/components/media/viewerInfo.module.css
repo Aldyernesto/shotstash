@@ -313,3 +313,125 @@
 .versionDownload:hover {
   border-color: var(--app-spine-accent);
 }
+
+/* Story 5.4: processing (job chip, cancel / retry, the Process menu). */
+.jobKind {
+  color: var(--app-spine-text);
+  font-weight: 700;
+}
+
+.jobAction {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.jobAction:hover {
+  border-color: var(--app-spine-accent);
+}
+
+.jobActionAccent {
+  border-color: var(--app-spine-accent);
+  background: var(--app-spine-accent);
+  color: var(--app-spine-on-accent);
+}
+
+.processWrap {
+  position: relative;
+  display: grid;
+  gap: 8px;
+}
+
+.processButton {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 16px 0 12px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.processButton svg {
+  width: 18px;
+  height: 18px;
+}
+
+.processButton[aria-expanded='true'],
+.processButton:hover {
+  border-color: var(--app-spine-accent);
+}
+
+.processMenu {
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-surface-2);
+}
+
+.processItem {
+  display: grid;
+  gap: 2px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--spine-radius-md);
+  background: transparent;
+  color: var(--app-spine-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.processItem:hover:not(:disabled),
+.processItem:focus-visible {
+  background: var(--app-spine-accent-14);
+  outline: none;
+}
+
+.processItem:disabled {
+  color: var(--app-spine-muted);
+  cursor: default;
+}
+
+.processItemLabel {
+  font-weight: 700;
+}
+
+.processItemNote,
+.processEmpty {
+  margin: 0;
+  color: var(--app-spine-muted);
+}
+
+.processEmpty {
+  padding: 8px 12px;
+}
+
+.versionActions {
+  flex: none;
+  display: flex;
+  gap: 8px;
+}
+
+.versionOpen {
+  min-height: 48px;
+}

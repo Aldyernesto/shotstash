@@ -151,15 +151,16 @@ test('naming rule: SHOTSTASH_* for product settings, plain names for infrastruct
 
 test('features are derived from the environment', () => {
   const off = cfg.loadConfig(GOOD).config.features;
-  assert.deepEqual(off, { signup: true, google: false, search: false, passwordResetEmail: false });
+  assert.deepEqual(off, { signup: true, google: false, search: false, passwordResetEmail: false, discussion: true });
   const on = cfg.loadConfig({
     ...GOOD,
     SHOTSTASH_FEATURE_SIGNUP: 'false',
     GOOGLE_CLIENT_ID: 'id.apps.googleusercontent.com',
     ELASTICSEARCH_NODE_URL: 'http://elasticsearch:9200',
     EMAIL_TRANSPORT: 'log',
+    SHOTSTASH_FEATURE_DISCUSSION: 'false',
   }).config.features;
-  assert.deepEqual(on, { signup: false, google: true, search: true, passwordResetEmail: true });
+  assert.deepEqual(on, { signup: false, google: true, search: true, passwordResetEmail: true, discussion: false });
   assert.equal(cfg.loadConfig({ ...GOOD, RESEND_API_KEY: 're_x' }).config.features.passwordResetEmail, true);
   assert.equal(cfg.loadConfig({ ...GOOD, EMAIL_TRANSPORT: 'resend' }).config.features.passwordResetEmail, false);
 });

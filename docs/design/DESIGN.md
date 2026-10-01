@@ -181,3 +181,39 @@ To rebrand: edit `src/lib/brand.ts` (including `mark`), replace the SVG sources 
 (copies the favicon to `src/app/icon.svg` and renders `logo.png`, `og.png` and
 `src/app/apple-icon.png`), then `npm run brand:css`. `scripts/brand-assets.test.mjs` checks that
 the mark fill in every SVG equals `brand.mark`.
+
+## Components
+
+### status-chip
+
+A pill that says what state something is in (`src/components/form/StatusChip.tsx`). 28 px high,
+a 7 px dot that is only decoration (`aria-hidden`), and a label that is always written: color is
+never the only carrier of the meaning.
+
+| Tone | Fill / border / text | Meaning |
+|---|---|---|
+| `ok` | `ok-bg` / `ok-border` / `ok-text` (light: the `-light` variants) | done, ready, live |
+| `danger` | `danger-bg` / `danger-border` / `danger-text` | failed, revoked |
+| `warning` | `warning-bg` / `warning-border` / `warning-text` | needs something outside the user's hands |
+| `neutral` | `surface-2` / `line` / `muted` | waiting or stopped, no judgement |
+| `accent` | `accent-14` / `accent-35` / `--app-accent` text, `accent` dot | in progress (brand blue) |
+
+`onDark` keeps the dark-theme colors on the always-dark viewer layer in both themes (`neutral`
+then uses `label-pill` / `white-16` / `object-text`).
+
+Pipeline jobs (Story 5.4) read the same way everywhere (viewer header, viewer info panel, file
+cards, list rows; `src/lib/jobChip.ts`):
+
+| Job state | Tone | Label |
+|---|---|---|
+| `queued` | neutral | Queued |
+| `waiting_for_worker` | warning | Waiting for worker |
+| `claimed` | accent | Starting |
+| `running` | accent | Processing 42% |
+| `done` | ok | Ready |
+| `failed` | danger | Failed (with Retry where the user may trigger jobs) |
+| `cancelled` | neutral | Cancelled |
+
+On a file card the chip sits bottom-right of the photo on an opaque `surface` backing (the video
+marker keeps bottom-left); cards and list rows show only an unfinished job or one that failed in
+the last 24 hours. Progress is announced per stage (`role="status"`), never per percent.

@@ -6,6 +6,9 @@ import { useTranslations } from "next-intl";
 import { useFormat } from "@/i18n/useFormat";
 import SelectCheck from "./SelectCheck";
 import MoreButton from "./MoreButton";
+import { useJobStateLabel } from "@/components/media/JobChip";
+import { StatusChip } from "@/components/form/StatusChip";
+import { jobChip, showsOnCard, type JobLike } from "@/lib/jobChip";
 
 export type FileKind = "image" | "video" | "audio" | "document";
 
@@ -34,6 +37,8 @@ export type FileCardProps = {
   draggable?: boolean;
   onDragStart?: (e: React.DragEvent, id: string) => void;
   onDragEnd?: (e: React.DragEvent) => void;
+  /** Story 5.4: the file's current job (unfinished, or failed recently); finished jobs are not shown. */
+  job?: (JobLike & { error?: string | null }) | null;
 };
 
 function extensionOf(name: string): string {
@@ -69,6 +74,7 @@ export default function FileCard({
   draggable = true,
   onDragStart,
   onDragEnd,
+  job = null,
 }: FileCardProps) {
   const isDoc = kind === "document";
   const isVideo = kind === "video";
@@ -78,10 +84,15 @@ export default function FileCard({
   const ext = extensionOf(name);
   // "{nama file}, {jenis}, {ukuran}" (+ durasi untuk video)
   const kindText = t(`kind.${kind}`);
-  const accessibleName =
+  const jobState = useJobStateLabel();
+  const tJobs = useTranslations("jobs.short");
+  const visibleJob = showsOnCard(job) ? job : null;
+  const baseName =
     isVideo && duration
       ? t("fileNameDuration", { name, kind: kindText, size: sizeText, duration })
       : t("fileName", { name, kind: kindText, size: sizeText });
+  // The chip sits on the decorative photo, so its words join the card's name.
+  const accessibleName = visibleJob ? t("withJob", { name: baseName, state: jobState(visibleJob) ?? "" }) : baseName;
 
   return (
     <article
@@ -125,6 +136,26 @@ export default function FileCard({
             {duration}
           </span>
         ) : null}
+
+        {visibleJob ? (() => {
+          const chip = jobChip(visibleJob)!;
+          // A narrow card (phones) shows the short words ("42%", "Waiting");
+          // the full words are in the card's accessible name either way.
+          const short =
+            chip.labelKey === "running"
+              ? tJobs("running", { progress: chip.progress ?? 0 })
+              : chip.labelKey === "waiting_for_worker"
+                ? tJobs("waiting_for_worker")
+                : jobState(visibleJob);
+          return (
+            <span className={styles.jobChip}>
+              <StatusChip tone={chip.tone} className={styles.jobChipInner}>
+                <span className={styles.jobFull}>{jobState(visibleJob)}</span>
+                <span className={styles.jobShort}>{short}</span>
+              </StatusChip>
+            </span>
+          );
+        })() : null}
       </div>
 
       {/* Tepat SATU kontrol pembuka, direntangkan seluas kartu. Di mode

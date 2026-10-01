@@ -17,6 +17,8 @@
 
 .photo {
   position: relative;
+  /* Story 5.4: the job chip picks its words from the photo's width. */
+  container: card-photo / inline-size;
   aspect-ratio: 3 / 4;
   overflow: hidden;
   border-radius: var(--spine-radius-md);
@@ -275,5 +277,47 @@
   .cell:focus-within .shareButton {
     opacity: 1;
     pointer-events: auto;
+  }
+}
+
+/* ---------- Story 5.4: job chip, bottom-right of the photo ---------- */
+/* An opaque surface under the tinted chip keeps it readable on any photo. */
+.jobChip {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  /* Room for the video marker on the left. */
+  max-width: calc(100% - 50px);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-surface);
+  box-shadow: 0 6px 14px -6px rgba(0, 0, 0, 0.8);
+}
+
+/* Compact on cards: 24 px high, tighter padding. */
+.jobChip .jobChipInner {
+  height: 24px;
+  max-width: 100%;
+  padding: 0 8px;
+  gap: 5px;
+}
+
+.jobChip :global(.spine-chip) {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.jobShort {
+  display: none;
+}
+
+/* The photo is the size container: below 170 px the short words show. */
+@container card-photo (max-width: 169px) {
+  .jobFull {
+    display: none;
+  }
+  .jobShort {
+    display: inline;
   }
 }

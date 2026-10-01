@@ -49,7 +49,11 @@ export type {
   ReleaseResponse,
 } from './contract.ts';
 export {
+  FAILED_VISIBLE_HOURS,
   FILE_TRASHED_ERROR,
+  availableKinds,
+  currentJobsFor,
+  jobCounts,
   JobRequestError,
   LEASE_EXPIRED_ERROR,
   WORKER_PRUNE_DAYS,
@@ -76,5 +80,5 @@ export {
   storeOutput,
   sweepExpiredClaims,
 } from './service.ts';
-export type { JobRequestCode, JobView, WorkerView } from './service.ts';
+export type { JobCounts, JobRequestCode, JobView, KindOption, WorkerView } from './service.ts';
 export { pipelineErrorResponse, readJsonBody } from './http.ts';

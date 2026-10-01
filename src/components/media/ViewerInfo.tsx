@@ -27,6 +27,10 @@
  * with Epic 5) are listed under "Versions" with kind, type, size and date,
  * each with a download link (`/media/p/<id>`, same permission as the file).
  * The original never changes.
+ *
+ * Story 5.4: video and image versions also get "Open" (the viewer plays
+ * them instead of the original); `extra` is the Processing section (job
+ * chip, cancel / retry, the Process menu) placed before the versions.
  */
 
 import React, { useEffect, useId, useRef, useState } from "react";
@@ -73,6 +77,12 @@ export type ViewerInfoProps = {
   projectTitle?: string | null;
   sectionName?: string | null;
   onClose: () => void;
+  /** Story 5.4: the Processing section. */
+  extra?: React.ReactNode;
+  /** Story 5.4: plays a video or image version in the viewer. */
+  onOpenVersion?: (version: ViewerVersion) => void;
+  /** Id of the version the viewer shows now (its Open button reads "Showing"). */
+  openVersionId?: string | null;
 };
 
 const CloseIcon = (
@@ -122,14 +132,28 @@ const DownloadIcon = (
  * as `shotstash/proxy-720p` contain characters that are not key paths);
  * other kinds use their stored label, then the kind itself.
  */
-function useKindLabel() {
+export function useKindLabel() {
   const t = useTranslations("viewer.info.versions");
   const labels = t.raw("kind" as never) as Record<string, string>;
   return (v: Pick<ViewerVersion, "kind" | "kindLabel">) =>
     (Object.prototype.hasOwnProperty.call(labels, v.kind) ? labels[v.kind] : null) || v.kindLabel || v.kind;
 }
 
-function VersionsList({ versions }: { versions: ViewerVersion[] }) {
+const PlayIcon = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M8 5.5v13l10.5-6.5z" />
+  </svg>
+);
+
+function VersionsList({
+  versions,
+  onOpen,
+  openId,
+}: {
+  versions: ViewerVersion[];
+  onOpen?: (version: ViewerVersion) => void;
+  openId?: string | null;
+}) {
   const t = useTranslations("viewer.info.versions");
   const f = useFormat();
   const kindLabel = useKindLabel();
@@ -153,15 +177,29 @@ function VersionsList({ versions }: { versions: ViewerVersion[] }) {
                     .join(" · ")}
                 </span>
               </div>
-              <a
-                className={`spine-focus-ring ${styles.versionDownload}`}
-                href={v.downloadUrl}
-                download
-                aria-label={t("download", { kind: label })}
-                title={t("download", { kind: label })}
-              >
-                {DownloadIcon}
-              </a>
+              <span className={styles.versionActions}>
+                {onOpen && /^(video|image)\//.test(v.mimeType) ? (
+                  <button
+                    type="button"
+                    className={`spine-focus-ring ${styles.versionDownload}`}
+                    aria-label={t("open", { kind: label })}
+                    title={t("open", { kind: label })}
+                    aria-pressed={openId === v.id}
+                    onClick={() => onOpen(v)}
+                  >
+                    {PlayIcon}
+                  </button>
+                ) : null}
+                <a
+                  className={`spine-focus-ring ${styles.versionDownload}`}
+                  href={v.downloadUrl}
+                  download
+                  aria-label={t("download", { kind: label })}
+                  title={t("download", { kind: label })}
+                >
+                  {DownloadIcon}
+                </a>
+              </span>
             </li>
           );
         })}
@@ -194,7 +232,7 @@ function capturedValue(raw: string | null | undefined, cameraTime: (raw: string)
   return cameraTime(text);
 }
 
-export function ViewerInfo({ variant, file, projectTitle, sectionName, onClose }: ViewerInfoProps) {
+export function ViewerInfo({ variant, file, projectTitle, sectionName, onClose, extra, onOpenVersion, openVersionId }: ViewerInfoProps) {
   const t = useTranslations("viewer.info");
   const tc = useTranslations("common");
   const f = useFormat();
@@ -264,10 +302,16 @@ export function ViewerInfo({ variant, file, projectTitle, sectionName, onClose }
           )}
         </dd>
       </dl>
+      {extra ? (
+        <>
+          <hr className={styles.rule} />
+          {extra}
+        </>
+      ) : null}
       {file.processedVersions?.length ? (
         <>
           <hr className={styles.rule} />
-          <VersionsList versions={file.processedVersions} />
+          <VersionsList versions={file.processedVersions} onOpen={onOpenVersion} openId={openVersionId} />
         </>
       ) : null}
     </>

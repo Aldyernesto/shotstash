@@ -27,8 +27,11 @@ import type { MentionTargetType } from "./chips";
 
 export type MentionOption = {
   id: string;
-  type: MentionTargetType;
+  /** Story 5.5: PERSON is a person who may view the Project (mentioned by "@handle"). */
+  type: MentionTargetType | "PERSON";
   name: string;
+  /** PERSON only: the handle inserted after "@". */
+  handle?: string;
   /** Keterangan singkat di kanan baris ("72 file", "Video · 02:47"). */
   meta?: string;
 };

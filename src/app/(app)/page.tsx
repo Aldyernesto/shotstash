@@ -331,6 +331,9 @@ const LOGIN_MUTATION = gql`
         onboardedAt
         permissions
         locale
+        features {
+          discussion
+        }
       }
     }
   }
@@ -707,7 +710,7 @@ export default function LandingPage() {
                 try {
                   const res = await fetch('/api/graphql', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: 'mutation GoogleAuth($idToken:String!){googleAuth(idToken:$idToken){token user{id name email role avatarUrl accountStatus onboardedAt permissions locale}}}', variables: { idToken: token } }),
+                    body: JSON.stringify({ query: 'mutation GoogleAuth($idToken:String!){googleAuth(idToken:$idToken){token user{id name email role avatarUrl accountStatus onboardedAt permissions locale features{discussion}}}}', variables: { idToken: token } }),
                   });
                   const json = await res.json();
                   if (json.data?.googleAuth?.token) {

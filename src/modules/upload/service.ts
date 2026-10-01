@@ -21,11 +21,11 @@
 import type { Readable } from 'stream';
 import { v7 as uuidv7 } from 'uuid';
 import prisma from '@/lib/prisma';
-import { pubsub } from '@/lib/pubsub';
 import { bigIntToNumber } from '@/lib/bigint';
 import { errMessage, logger } from '@/lib/logger';
 import { codedError } from '@/modules/errors';
-import { can, type Actor } from '@/modules/auth';
+import { can, listActorsWithAccess, type Actor } from '@/modules/auth';
+import { channels, publishAfterCommit } from '@/modules/realtime';
 import { createHeicPreview, generateThumbnail, isHeicMime } from '@/modules/media';
 import { syncSearchLater } from '@/modules/library';
 import {
@@ -43,6 +43,7 @@ import {
   storageKeys,
 } from '@/modules/storage';
 import { createNotification } from '@/services/notification.service';
+import { insertChat } from '@/services/chat.service';
 import { findOriginal, isDedupViolation } from './dedup';
 
 const log = logger('upload');
@@ -276,17 +277,12 @@ export async function putPart(input: PartInput) {
     update: { size: stored.size, etag: stored.etag, md5, createdAt: new Date() },
   });
   const confirmed = await prisma.uploadPart.count({ where: { sessionId: session.id } });
-  pubsub
-    .publish(`UPLOAD_PROGRESS_${session.id}`, {
-      uploadProgress: {
-        sessionId: session.id,
-        filename: session.filename,
-        partCount: session.totalChunks,
-        confirmedParts: confirmed,
-        percentage: (confirmed / session.totalChunks) * 100,
-      },
-    })
-    .catch(() => {});
+  // Story 5.5: the part row is committed; the uploader's channel learns it
+  // (the subscription loads the session and recounts the parts itself).
+  void publishAfterCommit({
+    channels: [channels.user(session.uploadedById)],
+    event: { type: 'upload.progress', id: session.id, seq: confirmed },
+  });
   return { partNumber: n, size: stored.size, confirmedParts: confirmed, partCount: session.totalChunks };
 }
 
@@ -573,27 +569,25 @@ async function announce(
   uploadedById: string,
 ) {
   try {
-    const chat = await prisma.projectChat.create({
-      data: {
-        kind: 'upload',
-        message: `Uploaded ${file.originalName}.`,
-        projectId: file.projectId,
-        senderId: uploadedById,
-        referencedFileId: file.id,
-      },
-      include: { sender: true, project: true, referencedFile: true },
+    await insertChat({
+      kind: 'upload',
+      message: `Uploaded ${file.originalName}.`,
+      projectId: file.projectId,
+      senderId: uploadedById,
+      referencedFileId: file.id,
     });
-    pubsub.publish(`CHAT_MESSAGES_${file.projectId}`, { chatMessages: bigIntToNumber(chat) }).catch(() => {});
   } catch (err) {
     log.error('chat line failed', { err: errMessage(err) });
   }
   const projectTitle = file.project?.title ?? '';
-  const members = await prisma.user.findMany({ select: { id: true } });
+  // Story 5.5: only accounts that may view the Project.
+  const members = await listActorsWithAccess(file.projectId);
   for (const member of members) {
     try {
       await createNotification({
         userId: member.id,
         type: 'upload_complete',
+        projectId: file.projectId,
         title: 'File uploaded',
         body: `${file.originalName} was added to ${projectTitle || 'the project'}`,
         data: { projectId: file.projectId, fileId: file.id, fileName: file.originalName, projectTitle },

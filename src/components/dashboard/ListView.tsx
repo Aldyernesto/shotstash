@@ -12,6 +12,8 @@ import { useFormat } from "@/i18n/useFormat";
 import { parseSectionName } from "@/lib/sectionNumber";
 import type { RepFile } from "./ProjectCard";
 import { VIRTUALIZE_ABOVE, useMediaQuery, useWindowRows } from "./virtualRows";
+import { JobChip } from "@/components/media/JobChip";
+import { showsOnCard, type JobLike } from "@/lib/jobChip";
 
 export type SortField = "name" | "date" | "size" | "type";
 export type ListLevel = "projects" | "sections" | "files";
@@ -283,6 +285,10 @@ export type ListViewProps = {
   onDragEnd?: (e: React.DragEvent) => void;
 
   determineType: (mimeType: string) => string;
+
+  /** Story 5.4: the current job of a file row (unfinished, or failed recently). */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  jobOf?: (file: any) => (JobLike & { error?: string | null }) | null | undefined;
 };
 
 /**
@@ -338,6 +344,7 @@ export default function ListView(props: ListViewProps) {
     onFileDragStart,
     onDragEnd,
     determineType,
+    jobOf,
     state = "ready",
     searchTerm,
     onRetry,
@@ -707,6 +714,10 @@ export default function ListView(props: ListViewProps) {
                     <b className={`${styles.rowTitle} ${styles.fileTitle}`} title={file.originalName}>
                       {file.originalName}
                     </b>
+                    {/* Story 5.4: the file's current job next to the title. */}
+                    {showsOnCard(jobOf?.(file)) ? (
+                      <JobChip job={jobOf?.(file)} className={styles.jobChip} />
+                    ) : null}
                   </span>
                   {/* Story 2.16: di HP kolom Tipe & Ukuran menyatu menjadi
                       satu baris meta; Tanggal dan "Diunggah oleh" PINDAH ke

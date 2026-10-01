@@ -6,12 +6,18 @@
 // pemakai termasuk pairing-slot di gelombang ini, Epic 2/3 menyusul.)
 // Story 1.24: ikon opsional (mis. pairing-slot) menggantikan titik — tetap
 // aria-hidden, label tetap sumber arti; tanpa prop, perilaku lama persis.
+// Story 5.4: `accent` (brand blue) means "in progress" (a job starting or
+// processing); the status tones keep their meaning.
 import styles from './StatusChip.module.css';
 
 export type StatusChipProps = {
-  tone?: 'ok' | 'danger' | 'warning' | 'neutral';
+  tone?: 'ok' | 'danger' | 'warning' | 'neutral' | 'accent';
   icon?: React.ReactNode;
   className?: string;
+  /** Tooltip (for example a failed job's error). */
+  title?: string;
+  /** Story 5.4: on the always-dark viewer layer: dark-theme colors in both themes. */
+  onDark?: boolean;
   children: React.ReactNode;
 };
 
@@ -20,11 +26,12 @@ const TONE_CLASS: Record<NonNullable<StatusChipProps['tone']>, string> = {
   danger: styles.danger,
   warning: styles.warning,
   neutral: styles.neutral,
+  accent: styles.accent,
 };
 
-export function StatusChip({ tone = 'neutral', icon, className, children }: StatusChipProps) {
+export function StatusChip({ tone = 'neutral', icon, className, children, title, onDark = false }: StatusChipProps) {
   return (
-    <span className={`${styles.chip} ${TONE_CLASS[tone]} ${className ?? ''}`}>
+    <span className={`${styles.chip} ${TONE_CLASS[tone]} ${onDark ? styles.onDark : ''} ${className ?? ''}`} title={title}>
       {icon ? (
         <span className={styles.iconBox} aria-hidden="true">
           {icon}

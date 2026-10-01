@@ -1,14 +1,19 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { useQuery, useMutation, gql } from "@apollo/client";
+import { useQuery, useMutation, useSubscription, gql } from "@apollo/client";
 import { useTranslations } from "next-intl";
 import { useAuth } from "./AuthContext";
 import { useFormat } from "@/i18n/useFormat";
 import { notificationText, type NotificationTranslate } from "@/lib/notificationText";
+import { useRealtimeReconnect } from "@/components/realtime/useProjectEvents";
 
 const ALL_NOTIFS = gql`query AllNotifs { notifications { id type title body data read createdAt } unreadNotificationCount }`;
 const MARK_READ_MUT = gql`mutation MarkRead { markNotificationsRead }`;
+// Story 5.5: a new notification arrives through the subscription (within
+// seconds); the poll stays as a slow fallback (a dropped connection).
+const NOTIF_RECEIVED = gql`subscription NotificationReceived { notificationReceived { id } }`;
+const FALLBACK_POLL_MS = 60_000;
 
 export default function NotificationBell({ large = false }: { large?: boolean } = {}) {
   const { isAuthenticated } = useAuth();
@@ -17,16 +22,25 @@ export default function NotificationBell({ large = false }: { large?: boolean } 
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const { data, startPolling } = useQuery(ALL_NOTIFS, {
+  const { data, startPolling, refetch } = useQuery(ALL_NOTIFS, {
     skip: !isAuthenticated,
     fetchPolicy: "network-only",
+  });
+  useSubscription(NOTIF_RECEIVED, {
+    skip: !isAuthenticated,
+    onData: () => {
+      refetch().catch(() => undefined);
+    },
+  });
+  useRealtimeReconnect(() => {
+    if (isAuthenticated) refetch().catch(() => undefined);
   });
   const [markRead] = useMutation(MARK_READ_MUT);
 
   const items = (data?.notifications as any[]) || [];
   const count = data?.unreadNotificationCount || 0;
 
-  useEffect(() => { startPolling(10000); }, [startPolling]);
+  useEffect(() => { startPolling(FALLBACK_POLL_MS); }, [startPolling]);
 
   useEffect(() => {
     const close = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };

@@ -14,15 +14,18 @@ import * as PasswordReset from '../services/password-reset.service';
 import prisma from '../lib/prisma';
 import { config } from '../lib/config';
 import { publicSignupRefusal } from '../lib/signupGuard';
-import { pubsub } from '../lib/pubsub';
+import { validateSessionToken } from '../lib/sessionStore';
+import { mentionHandleFor } from '../lib/mentions';
 import { isRenderableImageUrl, mediaUrl } from '../lib/mediaUrls';
 import {
   assertCan,
   assertCanWriteSelf,
   can,
   canManageUser,
+  canViewProject,
   forbidden,
   isAdminRole,
+  listActorsWithAccess,
   permissionsFor,
   type Actor,
   type UserChange,
@@ -34,12 +37,13 @@ import * as Trash from '@/modules/trash';
 import * as Upload from '@/modules/upload';
 import * as Library from '@/modules/library';
 import * as Pipeline from '@/modules/pipeline';
+import { authorizedStream, channelMessages, channels, type RealtimeEvent } from '@/modules/realtime';
 import { storage, storageKeys } from '@/modules/storage';
 import { isSupportedLocale } from '@/modules/i18n';
 import { previewOf } from '@/modules/media';
 import { LOGIN_INTERNAL_ERROR } from '../lib/authMessages';
 import { GraphQLError } from 'graphql';
-import { codedError } from '@/modules/errors';
+import { assertDiscussionEnabled, codedError } from '@/modules/errors';
 import { errMessage, logger } from '../lib/logger';
 
 const log = logger('graphql');
@@ -431,6 +435,95 @@ async function processedVersionsOf(parent: { id: string; processedVersions?: unk
   return loadVersions(context, parent.id);
 }
 
+/**
+ * Story 5.4: per-request loader of `MediaFile.currentJob`: every file of one
+ * GraphQL request (a 10,000-file Section) is answered by one query.
+ */
+type CurrentJobLoader = { cache: Map<string, Promise<Pipeline.JobView | null>>; queue: Map<string, (job: Pipeline.JobView | null) => void> };
+const currentJobLoaders = new WeakMap<object, CurrentJobLoader>();
+
+function loadCurrentJob(context: object | undefined, fileId: string): Promise<Pipeline.JobView | null> {
+  const key = context ?? {};
+  let loader = currentJobLoaders.get(key);
+  if (!loader) {
+    loader = { cache: new Map(), queue: new Map() };
+    currentJobLoaders.set(key, loader);
+  }
+  const l = loader;
+  const hit = l.cache.get(fileId);
+  if (hit) return hit;
+  const p = new Promise<Pipeline.JobView | null>((resolve) => {
+    if (!l.queue.size) {
+      setImmediate(async () => {
+        const batch = new Map(l.queue);
+        l.queue.clear();
+        const jobs = await Pipeline.currentJobsFor([...batch.keys()]).catch(() => new Map<string, Pipeline.JobView>());
+        for (const [id, done] of batch) done(jobs.get(id) ?? null);
+      });
+    }
+    l.queue.set(fileId, resolve);
+  });
+  l.cache.set(fileId, p);
+  return p;
+}
+
+/* ------------------------------------------------------------------ */
+/* Story 5.5: subscriptions                                            */
+/* ------------------------------------------------------------------ */
+
+/** Without events, a subscriber's session is re-checked this often (the stream ends when it is gone). */
+const SUBSCRIPTION_RECHECK_MS = 30_000;
+
+/**
+ * The subscriber as it is NOW: its session still exists and its account is
+ * active. Null ends the stream (revoked session, deactivated account).
+ */
+function currentSubscriber(context: GraphQLContext): () => Promise<Actor | null> {
+  return async () => {
+    if (!context?.sessionToken) return null;
+    const session = await validateSessionToken(context.sessionToken);
+    if (!session || !session.actor.active || (session.actor.accountStatus ?? 'ACTIVE') !== 'ACTIVE') return null;
+    return session.actor;
+  };
+}
+
+/** A channel stream where every event is re-authorised and loaded by `deliver`. */
+function guardedStream<T>(context: GraphQLContext, channel: string, deliver: (event: RealtimeEvent, actor: Actor) => Promise<T | null>) {
+  return authorizedStream<Actor, T>({
+    source: channelMessages(channel),
+    authorize: currentSubscriber(context),
+    deliver: async (event, actor) => {
+      try {
+        return await deliver(event, actor);
+      } catch (err) {
+        // Skipped, never half-delivered; the client catches up on its next refetch.
+        log.warn('subscription event skipped', { type: event.type, err: errMessage(err) });
+        return null;
+      }
+    },
+    recheckMs: SUBSCRIPTION_RECHECK_MS,
+  });
+}
+
+/** A chat message of `projectId` for this actor, or null (discussion off, no access, gone). */
+async function chatForSubscriber(actor: Actor, projectId: string, chatId: string) {
+  if (!config().features.discussion) return null;
+  if (!can(actor, 'discussion.use') || !(await canViewProject(actor, projectId))) return null;
+  const chat = await prisma.projectChat.findUnique({ where: { id: chatId }, include: { sender: true, referencedFile: true } });
+  return chat && chat.projectId === projectId ? chat : null;
+}
+
+/** A job for this actor, or null when its file is gone, trashed, elsewhere or not viewable. */
+async function jobForSubscriber(actor: Actor, jobId: string, projectId?: string) {
+  const job = await Pipeline.jobById(jobId);
+  if (!job) return null;
+  const file = await prisma.mediaFile.findUnique({ where: { id: job.fileId }, select: { projectId: true, status: true, trashedAt: true, folderId: true } });
+  if (!file || file.status !== 'ready' || file.trashedAt || (await folderChainTrashed(file.folderId))) return null;
+  if (projectId && file.projectId !== projectId) return null;
+  if (!(await canViewProject(actor, file.projectId))) return null;
+  return job;
+}
+
 // Story 4.7: `includeTrashed` hanya untuk Section yang SUDAH di Trash
 // (`Folder.trashedAt` terisi) — baris Trash tetap punya kandidat walau
 // file di dalamnya ikut ter-`trashedAt`. Untuk Section aktif (dipakai
@@ -547,11 +640,15 @@ const rawResolvers = {
 
     project: async (_: any, { id }: { id: string }, context: GraphQLContext) => {
       assertCan(context.actor, 'project.view');
+      // Story 5.5: history in (createdAt, id) order, the order every reader
+      // and the live stream share; no chats at all while discussion is off.
       return prisma.project.findUnique({
         where: { id },
         include: {
           folders: { where: { parentId: null, trashedAt: null } },
-          chats: { include: { sender: true, referencedFile: true }, orderBy: { createdAt: 'asc' } },
+          ...(config().features.discussion
+            ? { chats: { include: { sender: true, referencedFile: true }, orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }] } }
+            : {}),
         },
       });
     },
@@ -588,6 +685,26 @@ const rawResolvers = {
     pipelineWorkers: async (_: unknown, __: unknown, context: GraphQLContext) => {
       assertCan(context.actor, 'instance.configure');
       return Pipeline.listWorkers();
+    },
+
+    availableKinds: async (_: unknown, { fileId }: { fileId: string }, context: GraphQLContext) => {
+      assertCan(context.actor, 'pipeline.trigger');
+      const file = await assertLiveFile(fileId);
+      return Pipeline.availableKinds(file.mimeType);
+    },
+
+    mentionPeople: async (_: unknown, { projectId, query }: { projectId: string; query?: string | null }, context: GraphQLContext) => {
+      const actor = actorOf(context);
+      assertDiscussionEnabled(config().features);
+      assertCan(actor, 'discussion.use');
+      assertCan(actor, 'project.view');
+      await assertProject(projectId);
+      const q = (query ?? '').trim().toLowerCase();
+      return (await listActorsWithAccess(projectId))
+        .filter((p) => p.id !== actor.id)
+        .map((p) => ({ id: p.id, name: p.name, role: p.role, handle: mentionHandleFor(p) }))
+        .filter((p) => !q || p.name.toLowerCase().includes(q) || p.handle.toLowerCase().includes(q))
+        .slice(0, 20);
     },
 
     // Story 4.5: one query shape with or without Elasticsearch (library module).
@@ -702,14 +819,13 @@ const rawResolvers = {
       return Upload.checkDuplicates(projectId, list);
     },
 
+    // Story 5.5: notifications of a Project the reader can no longer view are dropped at read.
     notifications: async (_: any, { unreadOnly }: any, context: GraphQLContext) => {
-      if (!context.userId) throw codedError('UNAUTHENTICATED', 'Unauthorized');
-      return NotifService.getNotifications(context.userId, unreadOnly);
+      return NotifService.getNotifications(actorOf(context), unreadOnly);
     },
 
     unreadNotificationCount: async (_: any, __: any, context: GraphQLContext) => {
-      if (!context.userId) throw codedError('UNAUTHENTICATED', 'Unauthorized');
-      return NotifService.unreadCount(context.userId);
+      return NotifService.unreadCount(actorOf(context));
     },
 
     allTrashedFiles: async (_: any, __: any, context: GraphQLContext) => {
@@ -1008,6 +1124,7 @@ const rawResolvers = {
 
     sendMessage: async (_: any, { projectId, message, referencedFileId }: any, context: GraphQLContext) => {
       const actor = actorOf(context);
+      assertDiscussionEnabled(config().features);
       assertCan(actor, 'discussion.use');
       assertCan(actor, 'project.view');
       // Story 2.5: a real project only (no auto-created "Community" project),
@@ -1442,6 +1559,16 @@ const rawResolvers = {
     repFiles: async (parent: any, { limit }: { limit: number }) => {
       return projectRepFiles(parent, limit);
     },
+    // Story 5.5: FEATURE_DISABLED while discussion is off (the schema stays the same).
+    chats: async (parent: any) => {
+      assertDiscussionEnabled(config().features);
+      if (Array.isArray(parent.chats)) return parent.chats;
+      return prisma.projectChat.findMany({
+        where: { projectId: parent.id },
+        include: { sender: true, referencedFile: true },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      });
+    },
   },
 
   Folder: {
@@ -1496,6 +1623,7 @@ const rawResolvers = {
       return preview ? mediaUrl.processed(preview.id) : null;
     },
     jobs: async (parent: { id: string }) => Pipeline.jobsForFile(parent.id),
+    currentJob: async (parent: { id: string }, _: unknown, context: GraphQLContext) => loadCurrentJob(context, parent.id),
     uploadedBy: async (parent: any) => {
       if (parent.uploadedBy) return parent.uploadedBy;
       if (!parent.uploadedById) return null;
@@ -1509,6 +1637,7 @@ const rawResolvers = {
   },
 
   PipelineJob: {
+    kindLabel: (parent: { kind: string }) => Pipeline.kindLabel(parent.kind).catch(() => null),
     outputVersion: async (parent: { outputVersionId: string | null }) =>
       parent.outputVersionId ? prisma.processedVersion.findUnique({ where: { id: parent.outputVersionId } }) : null,
   },
@@ -1575,6 +1704,7 @@ const rawResolvers = {
   // `referencedFile` mendapat perlakuan yang sama: `Query.projects` tidak
   // meng-`include`-nya, jadi Chat Monitor tidak pernah melihat lampiran.
   ProjectChat: {
+    seq: (parent: { seq?: bigint | number | null }) => Number(parent.seq ?? 0),
     sender: async (parent: any) => {
       if (parent.sender) return parent.sender;
       if (!parent.senderId) return null;
@@ -1602,38 +1732,95 @@ const rawResolvers = {
     },
   },
 
+  // Story 5.5: every subscription checks can() when it opens and again for
+  // EVERY event (guardedStream): the session and account are re-read, the
+  // entity the thin event names is loaded and checked for this subscriber.
   Subscription: {
     uploadProgress: {
       // Only the uploader may follow an upload session.
       subscribe: async (_: any, { sessionId }: { sessionId: string }, context: GraphQLContext) => {
         await assertUploadOwner(context, sessionId);
-        return pubsub.asyncIterator(`UPLOAD_PROGRESS_${sessionId}`);
+        const actor = actorOf(context);
+        return guardedStream(context, channels.user(actor.id), async (event, current) => {
+          if (event.type !== 'upload.progress' || event.id !== sessionId) return null;
+          const session = await prisma.uploadSession.findUnique({
+            where: { id: sessionId },
+            select: { id: true, filename: true, totalChunks: true, uploadedById: true, _count: { select: { parts: true } } },
+          });
+          if (!session || !can(current, 'upload', { ownerId: session.uploadedById })) return null;
+          const confirmed = session._count.parts;
+          return {
+            sessionId: session.id,
+            filename: session.filename,
+            partCount: session.totalChunks,
+            confirmedParts: confirmed,
+            percentage: session.totalChunks ? (confirmed / session.totalChunks) * 100 : 0,
+          };
+        });
       },
+      resolve: (payload: unknown) => payload,
     },
     chatMessages: {
-      // Story 4.1: langganan divalidasi seperti query/mutasi — `userId`
-      // diisi `server.ts` dari `connectionParams.authorization` yang dicek
-      // terhadap tabel `Session` (AuthService.validateSession). Tanpa sesi
-      // valid tidak satu pun pesan, nama, atau role mengalir lewat WS.
+      // Story 4.1: the WebSocket context carries the Bearer session
+      // (server.ts); Story 5.5: discussion can be switched off.
       subscribe: async (_: any, { projectId }: { projectId: string }, context: GraphQLContext) => {
+        assertDiscussionEnabled(config().features);
+        assertCan(context?.actor, 'discussion.use');
         assertCan(context?.actor, 'project.view');
         // Story 2.5: only an existing project (projects themselves are never trashed).
         await assertProject(projectId);
-        return pubsub.asyncIterator(`CHAT_MESSAGES_${projectId}`);
+        return guardedStream(context, channels.project(projectId), async (event, actor) =>
+          event.type === 'chat.created' ? chatForSubscriber(actor, projectId, event.id) : null,
+        );
       },
+      resolve: (payload: unknown) => payload,
     },
     notificationReceived: {
       subscribe: (_: any, __: any, context: GraphQLContext) => {
         const actor = actorOf(context);
-        return pubsub.asyncIterator(`NOTIFICATIONS_${actor.id}`);
+        return guardedStream(context, channels.user(actor.id), async (event, current) =>
+          event.type === 'notification.created' && current.id === actor.id ? NotifService.notificationFor(current, event.id) : null,
+        );
       },
-      resolve: (payload: any) => payload?.newNotification ?? payload?.notificationReceived,
+      resolve: (payload: unknown) => payload,
+    },
+    jobUpdated: {
+      subscribe: async (_: unknown, { jobId }: { jobId: string }, context: GraphQLContext) => {
+        const actor = actorOf(context);
+        assertCan(actor, 'project.view');
+        if (!(await jobForSubscriber(actor, jobId))) throw notFound('Job not found');
+        return guardedStream(context, channels.job(jobId), async (event, current) =>
+          event.type === 'job.updated' && event.id === jobId ? jobForSubscriber(current, jobId) : null,
+        );
+      },
+      resolve: (payload: unknown) => payload,
+    },
+    projectEvents: {
+      subscribe: async (_: unknown, { projectId }: { projectId: string }, context: GraphQLContext) => {
+        const actor = actorOf(context);
+        assertCan(actor, 'project.view');
+        await assertProject(projectId);
+        return guardedStream(context, channels.project(projectId), async (event, current) => {
+          if (event.type === 'chat.created') {
+            const chat = await chatForSubscriber(current, projectId, event.id);
+            return chat ? { type: event.type, id: chat.id, seq: Number(chat.seq), chat, job: null } : null;
+          }
+          if (event.type === 'job.updated') {
+            const job = await jobForSubscriber(current, event.id, projectId);
+            return job ? { type: event.type, id: job.id, seq: job.seq, chat: null, job } : null;
+          }
+          return null;
+        });
+      },
+      resolve: (payload: unknown) => payload,
     },
   },
 };
 
 // Story 2.5: the project list type shares every Project resolver (it has no chats).
-const withSummary = { ...rawResolvers, ProjectSummary: rawResolvers.Project };
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const { chats: _projectChats, ...summaryResolvers } = rawResolvers.Project;
+const withSummary = { ...rawResolvers, ProjectSummary: summaryResolvers };
 
 // Story 2.1: every root field passes the auth mode declared in auth-map.ts.
 export const resolvers = applyAuthMap(withSummary);

@@ -93,6 +93,7 @@ client id, enabled features, version, default language) from
 | `SHOTSTASH_DEFAULT_LOCALE` | `en` |  | Language for visitors and new accounts until they pick one. Unknown values fall back to en. |
 | `SHOTSTASH_DEFAULT_TIMEZONE` | `UTC` |  | Time zone for server-written text (emails, share pages). Browsers show times in the viewer's own zone. |
 | `SHOTSTASH_TRASH_RETENTION_DAYS` | `30` |  | Days an item stays in the Trash before the hourly sweeper deletes it for good. |
+| `SHOTSTASH_FEATURE_DISCUSSION` | `true` |  | Project discussion (chat and @mentions). Set to false to hide it: its API answers FEATURE_DISABLED and the UI hides it; no data is removed. |
 | `SHOTSTASH_VERSION` |  |  | Set by the Docker image. Leave unset; the version in package.json is used otherwise. |
 
 ## Pipeline

@@ -86,3 +86,73 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* Story 5.4: registered workers (name, version, kinds, live, last seen) with revoke. */
+.workers {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.worker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-surface-2);
+}
+
+.workerMain {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.workerName {
+  color: var(--app-spine-text);
+  overflow-wrap: anywhere;
+}
+
+.workerMeta {
+  color: var(--app-spine-muted);
+}
+
+.workerKinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.kind {
+  padding: 2px 8px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-full);
+  color: var(--app-spine-text-soft);
+  overflow-wrap: anywhere;
+}
+
+.workerSide {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+}
+
+@media (max-width: 899px) {
+  .worker {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 14px 16px;
+  }
+
+  .workerSide {
+    justify-content: space-between;
+  }
+}

@@ -39,6 +39,12 @@ import { MenuIcon } from "@/components/dashboard/menuIcons";
 import VideoPlayer from "@/components/media/VideoPlayer";
 // Story 3.5: `file-viewer` satu lapisan menggantikan modal pratinjau lama.
 import FileViewer from "@/components/media/FileViewer";
+import { JobChip } from "@/components/media/JobChip";
+import { ViewerProcess } from "@/components/media/ViewerProcess";
+import { useKindLabel } from "@/components/media/ViewerInfo";
+import { useProjectEvents, useRealtimeReconnect } from "@/components/realtime/useProjectEvents";
+import { JOB_FIELDS, type UiJob } from "@/components/realtime/fields";
+import { newerJob } from "@/lib/jobChip";
 // Story 3.1: konfirmasi bergaya (`dialog` desktop / `confirm-sheet` HP)
 // menggantikan ConfirmModal warisan dan modal hapus project berinline style.
 import { ConfirmDialog, Dialog } from "@/components/overlay/Dialog";
@@ -187,6 +193,10 @@ const GET_FOLDER = gql`
         # Story 4.4: the viewer shows the preview version of a HEIC original;
         # the full version list loads when the viewer opens a file.
         previewUrl
+        # Story 5.4: the chip on cards and list rows (one batched query).
+        currentJob {
+          ${JOB_FIELDS}
+        }
         # Story 2.15 (aditif): kolom "Diunggah oleh" — HANYA ada di tingkat
         # isi Section karena skema hanya menyimpan MediaFile.uploadedBy.
         uploadedBy {
@@ -567,6 +577,10 @@ export default function DashboardPage() {
   const canMove = perm.canMove(user);
   const canManageTrash = perm.canManageTrash(user);
   const canShare = perm.canShare(user);
+  // Story 5.4: the viewer's Process menu, cancel and retry.
+  const canTrigger = perm.canTriggerPipeline(user);
+  // Story 5.5: project discussion can be switched off per instance.
+  const canDiscuss = perm.canUseDiscussion(user);
   const canPurge = perm.canPurgeTrash(user);
 
   // Story 3.2: satu host `toast` (dipasang di dashboard/layout.tsx).
@@ -1622,11 +1636,37 @@ export default function DashboardPage() {
     [files],
   );
   // Story 4.4: processed versions of the file open in the viewer.
-  const { data: versionData } = useQuery(FILE_VERSIONS, {
+  const { data: versionData, refetch: refetchVersions } = useQuery(FILE_VERSIONS, {
     skip: !previewFile?.id,
     variables: { fileId: previewFile?.id ?? "" },
     fetchPolicy: "cache-and-network",
   });
+
+  /* Story 5.4-5.5: jobs live. Job changes of this Project arrive through the
+     shared `projectEvents` stream (already permission-checked per event and
+     ordered by seq); the newest view of each file's job wins over the
+     folder query's `currentJob`. A finished proxy refreshes the viewer's
+     version list. */
+  const [liveJobs, setLiveJobs] = useState<Record<string, UiJob>>({});
+  const applyJob = React.useCallback((job: UiJob) => {
+    setLiveJobs((prev) => {
+      const current = prev[job.fileId];
+      const next = newerJob(current, job);
+      return next === current || !next ? prev : { ...prev, [job.fileId]: next };
+    });
+  }, []);
+  React.useEffect(() => setLiveJobs({}), [currentProjectId]);
+  useProjectEvents(currentProjectId, (event) => {
+    if (event.type !== "job.updated" || !event.job) return;
+    applyJob(event.job);
+    if (event.job.state === "done" && previewFile?.id === event.job.fileId) void refetchVersions();
+  });
+  useRealtimeReconnect(() => {
+    if (currentFolderId) void refetchFolder();
+  });
+  const jobOfFile = (f: { id?: string; currentJob?: UiJob | null } | null | undefined): UiJob | null =>
+    newerJob(f?.currentJob ?? null, (f?.id && liveJobs[f.id]) || null);
+  const versionKindLabel = useKindLabel();
   const viewerFilesWithVersions = React.useMemo(() => {
     const versions = versionData?.processedVersions;
     if (!previewFile || !versions) return viewerFiles;
@@ -2266,7 +2306,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {currentProjectId !== null && (
+        {currentProjectId !== null && canDiscuss && (
           <button
             type="button"
             className={`${styles.iconBtn} ${isChatOpen ? styles.iconBtnOn : ""} spine-hit-area spine-focus-ring`}
@@ -2525,6 +2565,7 @@ export default function DashboardPage() {
                   onContextMenu={(e) => handleFileContextMenu(e as unknown as React.MouseEvent, file)}
                   menuOpen={actionMenu?.id === file.id}
                   onOpenMenu={(anchor) => openFileMenu(file.id, file, anchor)}
+                  job={jobOfFile(file)}
                 />
                   )}
                 />
@@ -2625,6 +2666,7 @@ export default function DashboardPage() {
               onFileMenu={(file, anchor) =>
                 openFileMenu(file.id, file, anchor)
               }
+              jobOf={jobOfFile}
               menuOpenId={actionMenu?.id ?? null}
               canUpload={canUpload}
               onUploadFirst={(projectId, title) => {
@@ -2696,7 +2738,7 @@ export default function DashboardPage() {
         <ShareModal {...shareData} onClose={() => setShareData(null)} />
       )}
 
-      {currentProjectId !== null && (
+      {currentProjectId !== null && canDiscuss && (
         <ChatPanel
           projectId={currentProjectId}
           projectTitle={currentProjectTitle}
@@ -2890,6 +2932,20 @@ export default function DashboardPage() {
               : undefined
           }
           onDownload={(f) => openDirectDownload(f.id)}
+          renderTopExtra={(f) => {
+            const job = jobOfFile(f);
+            return job ? <JobChip job={job} onDark /> : null;
+          }}
+          renderInfoExtra={(f) => (
+            <ViewerProcess
+              key={f.id}
+              fileId={f.id}
+              job={jobOfFile(f)}
+              canTrigger={canTrigger}
+              kindLabel={versionKindLabel}
+              onJob={applyJob}
+            />
+          )}
         />
       )}
 

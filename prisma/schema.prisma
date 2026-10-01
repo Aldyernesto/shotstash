@@ -111,10 +111,15 @@ model Notification {
   body      String
   data      Json?    // { projectId, fileId, chatId, etc }
   read      Boolean  @default(false)
+  // Story 5.5: the Project the notification is about (also in data); reads
+  // drop notifications of a Project the reader can no longer view. No
+  // foreign key: a deleted Project simply makes them unreadable.
+  projectId String?  @map("project_id")
   createdAt DateTime @default(now())
 
   @@index([userId, read])
   @@index([createdAt])
+  @@index([projectId])
   @@map("notifications")
 }
 
@@ -142,6 +147,9 @@ model Project {
   folders     Folder[]
   chats       ProjectChat[]
   shareLinks  ShareLink[]
+  // Story 5.5: last chat sequence number of this Project (bumped in the
+  // transaction that inserts a message).
+  chatSeq     BigInt        @default(0) @map("chat_seq")
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -329,9 +337,12 @@ model ProjectChat {
   referencedFile   MediaFile?  @relation(fields: [referencedFileId], references: [id], onDelete: SetNull)
   /// Null for a message a person wrote; "upload" for the system line added when a file finishes uploading.
   kind             String?
+  /// Story 5.5: per-Project sequence (projects.chat_seq at insert); history is ordered by (createdAt, id).
+  seq              BigInt      @default(0)
   createdAt        DateTime    @default(now())
 
-  @@index([projectId])
+  @@index([projectId, createdAt, id])
+  @@index([projectId, seq])
   @@map("project_chats")
 }
 

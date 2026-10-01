@@ -365,6 +365,15 @@ export const VARIABLES = {
     example: '30',
     description: 'Days an item stays in the Trash before the hourly sweeper deletes it for good.',
   }),
+  SHOTSTASH_FEATURE_DISCUSSION: withDefault({
+    group: 'Product',
+    kind: 'product',
+    schema: bool,
+    default: true,
+    example: 'true',
+    description:
+      'Project discussion (chat and @mentions). Set to false to hide it: its API answers FEATURE_DISABLED and the UI hides it; no data is removed.',
+  }),
   SHOTSTASH_VERSION: opt({
     group: 'Product',
     kind: 'product',
@@ -477,6 +486,8 @@ export type Features = {
   search: boolean;
   /** Password reset by email: a transport that can send is set. */
   passwordResetEmail: boolean;
+  /** Project discussion and mentions (SHOTSTASH_FEATURE_DISCUSSION). */
+  discussion: boolean;
 };
 
 export type Config = ConfigValues & {
@@ -569,6 +580,7 @@ export function loadConfig(env: Env): { config: Config; problems: string[] } {
       google: Boolean(v.GOOGLE_CLIENT_ID),
       search: Boolean(v.ELASTICSEARCH_NODE_URL),
       passwordResetEmail: v.EMAIL_TRANSPORT === 'log' || Boolean(v.RESEND_API_KEY),
+      discussion: v.SHOTSTASH_FEATURE_DISCUSSION,
     },
     appUrl: (v.APP_URL || `http://localhost:${v.PORT}`).replace(/\/+$/, ''),
     version: v.SHOTSTASH_VERSION || readPackageVersion(),

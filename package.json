@@ -43,6 +43,7 @@
     "env:example:check": "node scripts/gen-env-example.mjs --check",
     "test": "node --test \"scripts/**/*.test.mjs\" \"worker/test/*.test.mjs\"",
     "e2e:pipeline": "node scripts/e2e-pipeline.mjs",
+    "e2e:realtime": "node scripts/e2e-realtime.mjs",
     "test:s3": "node --import tsx --test scripts/storage-s3.contract.mjs",
     "e2e:upload": "node scripts/e2e-upload-resume.mjs",
     "e2e:search": "tsx scripts/e2e-search-parity.ts",

@@ -55,9 +55,11 @@ on `worker` routes they name the credential (`bootstrap token`, `registered work
 | --- | --- | --- |
 | `Query.allTrashedFiles` | session | trash.view |
 | `Query.allTrashedFolders` | session | trash.view |
+| `Query.availableKinds` | session | pipeline.trigger |
 | `Query.checkDuplicates` | session | upload |
 | `Query.folder` | session | project.view |
 | `Query.me` | public |  |
+| `Query.mentionPeople` | session | discussion.use |
 | `Query.notifications` | session | self |
 | `Query.passwordResetAvailable` | public |  |
 | `Query.pendingUsers` | session | users.manage |
@@ -115,5 +117,7 @@ on `worker` routes they name the credential (`bootstrap token`, `registered work
 | `Mutation.updateUserRole` | session | users.manage |
 | `Mutation.verifyPasswordResetCode` | public |  |
 | `Subscription.chatMessages` | session | project.view |
+| `Subscription.jobUpdated` | session | project.view |
 | `Subscription.notificationReceived` | session | self |
+| `Subscription.projectEvents` | session | project.view |
 | `Subscription.uploadProgress` | session | upload |

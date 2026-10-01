@@ -14,6 +14,7 @@
  *   Delete Forever (purge) .................. trash.purge
  *   Share ................................... share.manage
  *   Admin tools and Admin Panel ............. users.manage
+ *   Process menu, cancel and retry jobs ..... pipeline.trigger
  *
  * Contract kept from Story 2.18: a denied action is NOT rendered (no
  * disabled twin, no hidden Tab stop). This is a display layer; the server
@@ -86,6 +87,19 @@ export function canPurgeTrash(subject: PermissionSubject): boolean {
 /** Create and revoke share links. */
 export function canShare(subject: PermissionSubject): boolean {
   return hasPermission(subject, "share.manage");
+}
+
+/** Story 5.4: the viewer's Process menu, and cancelling or retrying a job. */
+export function canTriggerPipeline(subject: PermissionSubject): boolean {
+  return hasPermission(subject, "pipeline.trigger");
+}
+
+/**
+ * Story 5.5: project discussion (button, panel, mentions): `discussion.use`
+ * and the instance toggle `me.features.discussion` (absent counts as on).
+ */
+export function canUseDiscussion(subject: (PermissionSubject & { features?: { discussion?: boolean } | null }) | null | undefined): boolean {
+  return hasPermission(subject, "discussion.use") && subject?.features?.discussion !== false;
 }
 
 /** Admin tools in the nav. */

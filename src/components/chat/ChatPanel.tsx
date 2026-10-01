@@ -28,7 +28,14 @@
  *     di atas lapisan panel — `modalStack` menangkap Esc di fase capture,
  *     jadi `stopPropagation` di komposer saja tidak cukup).
  *   Langganan realtime dinyalakan di server (`server.ts`, Story 4.1):
- *   pesan pengguna lain masuk lewat `subscribeToMore` tanpa muat ulang.
+ *   pesan pengguna lain masuk tanpa muat ulang (Story 5.5: lewat `projectEvents`).
+ *
+ * Story 5.5: messages arrive through the shared `projectEvents` stream
+ * (permission-checked per event on the server, deduplicated by seq here)
+ * and the list is kept in (createdAt, id) order, the order the history
+ * query uses, so every reader sees the same order live and after a reload.
+ * The mention dropdown also lists people who may view the Project
+ * (`mentionPeople`); picking one inserts "@handle", which notifies them.
  *
  * CATATAN perbaikan: `ProjectChat.tsx` lama meminta `referencedFile.category`,
  * padahal `MediaFile` di `src/graphql/schema.ts` TIDAK punya field itu —
@@ -48,26 +55,17 @@ import { useTranslations } from "next-intl";
 import { useToast, useHumanizeError } from "@/components/feedback/ToastProvider";
 import { useFormat } from "@/i18n/useFormat";
 import { encodeMentionTag, type MentionTagType } from "@/lib/mentions";
+import { compareChat, insertOrdered } from "@/lib/realtimeSeq";
+import { useProjectEvents, useRealtimeReconnect } from "@/components/realtime/useProjectEvents";
+import { CHAT_FIELDS } from "@/components/realtime/fields";
+import type { MentionTargetType } from "./chips";
 
 const GET_PROJECT_CHATS = gql`
   query GetProjectChats($projectId: ID!) {
     project(id: $projectId) {
       id
       chats {
-        id
-        message
-        kind
-        createdAt
-        sender {
-          id
-          name
-          role
-          avatarUrl
-        }
-        referencedFile {
-          id
-          originalName
-        }
+        ${CHAT_FIELDS}
       }
     }
   }
@@ -76,41 +74,7 @@ const GET_PROJECT_CHATS = gql`
 const SEND_MESSAGE = gql`
   mutation SendMessage($projectId: ID!, $message: String!, $referencedFileId: ID) {
     sendMessage(projectId: $projectId, message: $message, referencedFileId: $referencedFileId) {
-      id
-      message
-      kind
-      createdAt
-      sender {
-        id
-        name
-        role
-        avatarUrl
-      }
-      referencedFile {
-        id
-        originalName
-      }
-    }
-  }
-`;
-
-const CHAT_SUBSCRIPTION = gql`
-  subscription OnMessageSent($projectId: ID!) {
-    chatMessages(projectId: $projectId) {
-      id
-      message
-      kind
-      createdAt
-      sender {
-        id
-        name
-        role
-        avatarUrl
-      }
-      referencedFile {
-        id
-        originalName
-      }
+      ${CHAT_FIELDS}
     }
   }
 `;
@@ -119,6 +83,12 @@ const CHAT_SUBSCRIPTION = gql`
    dibatasi ke project yang sedang dibuka. Satu dokumen = satu permintaan. */
 const MENTION_SEARCH = gql`
   query ProjectMentionSearch($q: String!, $projectId: ID!) {
+    mentionPeople(projectId: $projectId, query: $q) {
+      id
+      name
+      handle
+      role
+    }
     searchFolders(query: $q, projectId: $projectId) {
       id
       name
@@ -134,6 +104,7 @@ const MENTION_SEARCH = gql`
 
 type ChatMessage = {
   id: string;
+  seq?: number;
   message: string;
   /** Null for a person's message; "upload" for the system line of a finished upload. */
   kind?: string | null;
@@ -162,7 +133,7 @@ function fileKind(mimeType?: string | null): "video" | "photo" | "audio" | "docu
   return "document";
 }
 
-const CHIP_TO_TAG: Record<MentionOption["type"], MentionTagType> = {
+const CHIP_TO_TAG: Record<MentionTargetType, MentionTagType> = {
   PROJECT: "project",
   SECTION: "folder",
   FILE: "file",
@@ -196,7 +167,7 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
   const { pushToast } = useToast();
   const client = useApolloClient();
 
-  const { data, loading, error, refetch, subscribeToMore } = useQuery(GET_PROJECT_CHATS, {
+  const { data, loading, error, refetch } = useQuery(GET_PROJECT_CHATS, {
     variables: { projectId },
     skip: !isOpen,
   });
@@ -220,23 +191,24 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
   // "Diskusi project" yang membukanya.
   useFocusTrap(panelRef, { active: isOpen });
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const unsubscribe = subscribeToMore({
-      document: CHAT_SUBSCRIPTION,
-      variables: { projectId },
-      updateQuery: (prev: any, { subscriptionData }: any) => {
-        if (!subscriptionData.data) return prev;
-        const newChat = subscriptionData.data.chatMessages;
-        if (prev?.project?.chats?.find((c: ChatMessage) => c.id === newChat.id)) return prev;
-        return {
-          ...prev,
-          project: { ...prev.project, chats: [...(prev.project?.chats ?? []), newChat] },
-        };
-      },
-    });
-    return () => unsubscribe();
-  }, [isOpen, projectId, subscribeToMore]);
+  // Story 5.5: live messages from the Project's event stream, merged in
+  // (createdAt, id) order; a message already in the list is replaced, never doubled.
+  useProjectEvents(
+    projectId,
+    (event) => {
+      if (event.type !== "chat.created" || !event.chat) return;
+      const fresh = event.chat as ChatMessage;
+      client.cache.updateQuery({ query: GET_PROJECT_CHATS, variables: { projectId } }, (prev: any) => {
+        if (!prev?.project) return prev;
+        return { ...prev, project: { ...prev.project, chats: insertOrdered(prev.project.chats ?? [], fresh) } };
+      });
+    },
+    isOpen,
+  );
+  // After a reconnect the stream may have missed messages: reload the history.
+  useRealtimeReconnect(() => {
+    if (isOpen) refetch().catch(() => undefined);
+  });
 
   // Feed tergulir otomatis ke pesan terbaru.
   useEffect(() => {
@@ -311,6 +283,10 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
         if (seq !== lookupSeq.current) return; // balasan basi
         const needle = term.toLowerCase();
         const options: MentionOption[] = [];
+        for (const person of (res?.mentionPeople ?? []) as { id: string; name: string; handle: string }[]) {
+          // The meta shows what will be written: "@handle".
+          options.push({ id: person.id, type: "PERSON", name: person.name, handle: person.handle, meta: `@${person.handle}` });
+        }
         if (projectTitle && projectTitle.toLowerCase().includes(needle)) {
           options.push({ id: projectId, type: "PROJECT", name: projectTitle });
         }
@@ -359,8 +335,12 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
   };
 
   const pickMention = (option: MentionOption) => {
-    // Bentuk tag SAMA dengan Chat Monitor: parentId = project yang dibuka.
-    const encoded = encodeMentionTag(CHIP_TO_TAG[option.type], option.id, projectId, option.name);
+    // Story 5.5: a person is mentioned by "@handle" (plain text the server
+    // matches); Projects, Sections and files by a tag, as Chat Monitor writes it.
+    const encoded =
+      option.type === "PERSON"
+        ? `@${option.handle ?? option.name}`
+        : encodeMentionTag(CHIP_TO_TAG[option.type], option.id, projectId, option.name);
     const at = message.lastIndexOf("@");
     setMessage((at >= 0 ? message.slice(0, at) : message) + encoded + " ");
     if (option.type === "FILE") setAttachment({ id: option.id, name: option.name });
@@ -370,7 +350,8 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
 
   if (!isOpen) return null;
 
-  const chats: ChatMessage[] = data?.project?.chats ?? [];
+  // Story 5.5: always in (createdAt, id) order, whatever arrived when.
+  const chats: ChatMessage[] = [...((data?.project?.chats ?? []) as ChatMessage[])].sort(compareChat);
   const count = chats.length + (pending ? 1 : 0);
   const failedToLoad = Boolean(error) && !data;
 
@@ -400,7 +381,7 @@ export default function ChatPanel({ projectId, projectTitle, isOpen, onClose }: 
           cache.writeQuery({
             query: GET_PROJECT_CHATS,
             variables: { projectId },
-            data: { ...prev, project: { ...prev.project, chats: [...list, fresh] } },
+            data: { ...prev, project: { ...prev.project, chats: insertOrdered(list, fresh) } },
           });
         },
       });

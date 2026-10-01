@@ -24,6 +24,8 @@ export interface User {
   permissions?: string[];
   /** Story 3.1: UI locale; null = instance default. */
   locale?: string | null;
+  /** Story 5.5: instance feature toggles (`me.features`); absent = defaults (discussion on). */
+  features?: { discussion?: boolean } | null;
 }
 
 interface AuthContextType {
@@ -53,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const res = await fetch('/api/graphql', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ['Authori'+'zation']: 'Bearer ' + storedToken },
-            body: JSON.stringify({ query: '{ me { id email role name avatarUrl accountStatus permissions locale } }' }),
+            body: JSON.stringify({ query: '{ me { id email role name avatarUrl accountStatus permissions locale features { discussion } } }' }),
           });
           const data = await res.json();
           if (data?.data?.me) {

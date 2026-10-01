@@ -543,3 +543,8 @@
 .virtualRows {
   display: block;
 }
+
+/* Story 5.4: the file's job chip next to its title. */
+.jobChip {
+  flex: none;
+}

@@ -28,6 +28,7 @@ import { HEARTBEAT_SECONDS, PIPELINE_CONTRACT_VERSION } from '@/lib/pipelineCont
 import { hashWorkerToken, newWorkerToken, secretsEqual, type WorkerPrincipal } from '@/lib/workerStore';
 import { isStorageError, storage, storageKeys } from '@/modules/storage';
 import { fileResponse } from '@/modules/media';
+import { channels, publishAfterCommit } from '@/modules/realtime';
 import {
   CLAIMED_STATUSES,
   MAX_ATTEMPTS,
@@ -59,6 +60,31 @@ export function leaseSeconds(): number {
 
 export function maxOutputBytes(): number {
   return config().SHOTSTASH_PIPELINE_MAX_OUTPUT_MB * 1024 * 1024;
+}
+
+/**
+ * Story 5.5: announces job changes on `job:<id>` and `project:<id>` AFTER
+ * the write committed (every caller awaits its statement or transaction
+ * first). The event carries the committed `seq`; subscribers load the job.
+ * Never throws.
+ */
+async function announceJobs(ids: readonly (string | null | undefined)[]) {
+  const list = [...new Set(ids.filter((id): id is string => !!id))];
+  if (!list.length) return;
+  try {
+    const rows = await prisma.pipelineJob.findMany({
+      where: { id: { in: list } },
+      select: { id: true, seq: true, mediaFile: { select: { projectId: true } } },
+    });
+    await publishAfterCommit(
+      rows.map((r) => ({
+        channels: [channels.job(r.id), channels.project(r.mediaFile.projectId)],
+        event: { type: 'job.updated' as const, id: r.id, seq: Number(r.seq) },
+      })),
+    );
+  } catch (err) {
+    log.warn('job event failed', { err: errMessage(err) });
+  }
 }
 
 /** Best effort: a key the job no longer owns. Failures are logged, never thrown. */
@@ -225,6 +251,7 @@ export async function claimNext(worker: WorkerPrincipal): Promise<ClaimedJob | n
     where: { id: row.media_file_id },
     select: { originalName: true, mimeType: true, size: true },
   });
+  await announceJobs([row.id]);
   log.info('job claimed', { jobId: row.id, kind: row.kind, workerId: worker.id, attempt: row.attempts });
   const params = row.params && typeof row.params === 'object' && !Array.isArray(row.params) ? (row.params as Record<string, unknown>) : {};
   return {
@@ -298,6 +325,7 @@ export async function reportProgress(worker: WorkerPrincipal, jobId: string, cla
     WHERE id = ${jobId} AND claimed_by = ${worker.id} AND claim_token = ${claimToken} AND status IN ('claimed', 'running')
     RETURNING progress, seq`;
   if (!rows[0]) throw await refusal(worker, jobId, claimToken);
+  await announceJobs([jobId]);
   return { status: 'running', progress: Number(rows[0].progress), seq: Number(rows[0].seq) };
 }
 
@@ -370,7 +398,7 @@ export async function storeOutput(
     )
     UPDATE pipeline_jobs p
     SET output_version_id = ${versionId}, output_key = ${key}, output_mime_type = ${mimeType}, output_size = ${size}::bigint,
-        heartbeat_at = now(), updated_at = now()
+        heartbeat_at = now(), updated_at = now(), seq = p.seq + 1
     FROM cur WHERE p.id = cur.id
     RETURNING cur.output_key AS previous_key`;
   if (!rows[0]) {
@@ -378,6 +406,7 @@ export async function storeOutput(
     throw await refusal(worker, jobId, claimToken!);
   }
   if (rows[0].previous_key && rows[0].previous_key !== key) await dropObject(rows[0].previous_key);
+  await announceJobs([jobId]);
   log.info('job output stored', { jobId, size, mimeType });
   return { versionId, size, mimeType };
 }
@@ -492,6 +521,9 @@ export async function completeJob(worker: WorkerPrincipal, jobId: string, claimT
     }
     throw err;
   }
+  // Committed (done, or cancelled because the file went away); an unchanged
+  // job keeps its seq and subscribers drop the repeat.
+  await announceJobs([jobId]);
   if ('refused' in outcome) {
     await dropObject(outcome.drop);
     throw outcome.refused;
@@ -520,6 +552,7 @@ export async function releaseJob(worker: WorkerPrincipal, jobId: string, claimTo
     RETURNING p.attempts, cur.output_key AS previous_key`;
   const row = rows[0];
   if (!row) throw await refusal(worker, jobId, claimToken);
+  await announceJobs([jobId]);
   await dropObject(row.previous_key);
   log.info('job released', { jobId, attempts: Number(row.attempts) });
   return { status: 'queued', attempts: Number(row.attempts) };
@@ -531,7 +564,7 @@ export async function releaseJob(worker: WorkerPrincipal, jobId: string, claimTo
  * it moves files and by the sweeper. Answers the count.
  */
 export async function cancelJobsOfTrashedFiles(): Promise<number> {
-  const rows = await prisma.$queryRaw<{ previous_key: string | null }[]>`
+  const rows = await prisma.$queryRaw<{ id: string; previous_key: string | null }[]>`
     WITH cur AS (
       SELECT j.id, j.output_key FROM pipeline_jobs j
       JOIN media_files m ON m.id = j.media_file_id
@@ -542,7 +575,8 @@ export async function cancelJobsOfTrashedFiles(): Promise<number> {
     SET status = 'cancelled', error = ${FILE_TRASHED_ERROR}, seq = p.seq + 1, heartbeat_at = NULL, finished_at = now(), updated_at = now(),
         run_after = NULL, output_version_id = NULL, output_key = NULL, output_mime_type = NULL, output_size = NULL
     FROM cur WHERE p.id = cur.id
-    RETURNING cur.output_key AS previous_key`;
+    RETURNING p.id, cur.output_key AS previous_key`;
+  await announceJobs(rows.map((r) => r.id));
   for (const r of rows) await dropObject(r.previous_key);
   if (rows.length) log.info('jobs cancelled: file trashed', { jobs: rows.length });
   return rows.length;
@@ -590,6 +624,7 @@ export async function failJob(
     RETURNING p.status::text AS status, p.attempts, p.max_attempts, cur.output_key AS previous_key`;
   const row = rows[0];
   if (!row) throw await refusal(worker, jobId, claimToken);
+  await announceJobs([jobId]);
   await dropObject(row.previous_key);
   log.info(row.status === 'queued' ? 'job requeued after a failure' : 'job failed', { jobId, attempts: Number(row.attempts) });
   return { status: row.status as 'queued' | 'failed', attempts: Number(row.attempts), maxAttempts: Number(row.max_attempts) };
@@ -628,6 +663,7 @@ export async function sweepExpiredClaims(): Promise<{ requeued: number; failed: 
         output_version_id = NULL, output_key = NULL, output_mime_type = NULL, output_size = NULL
     FROM expired e WHERE p.id = e.id
     RETURNING p.id, p.status::text AS status, e.output_key AS previous_key`;
+  await announceJobs(rows.map((r) => r.id));
   for (const r of rows) await dropObject(r.previous_key);
   const failed = rows.filter((r) => r.status === 'failed').length;
   const cancelled = await cancelJobsOfTrashedFiles();
@@ -756,7 +792,10 @@ export async function enqueueJob(input: { fileId: string; kind: string; createdB
     });
     // The open job may have finished between the conflict and the read: try again.
     if (!row) continue;
-    if (inserted[0]) log.info('job queued', { jobId: row.id, kind: row.kind, fileId: file.id });
+    if (inserted[0]) {
+      await announceJobs([row.id]);
+      log.info('job queued', { jobId: row.id, kind: row.kind, fileId: file.id });
+    }
     return view(row, await liveKinds());
   }
   throw new Error('enqueueJob: could not queue or find the open job');
@@ -789,6 +828,7 @@ export async function cancelJob(jobId: string): Promise<JobView> {
   const job = await prisma.pipelineJob.findUnique({ where: { id: jobId }, select: JOB_SELECT });
   if (!job) throw new JobRequestError('NOT_FOUND', 'Job not found');
   if (!rows[0]) throw new JobRequestError('JOB_TERMINAL', `The job is already ${job.status}`);
+  await announceJobs([jobId]);
   await dropObject(rows[0].previous_key);
   log.info('job cancelled', { jobId });
   return view(job, await liveKinds());
@@ -821,4 +861,109 @@ export async function pipelineCounts(): Promise<{ workers: number; queuedJobs: n
     prisma.pipelineJob.count({ where: { status: 'queued' } }),
   ]);
   return { workers, queuedJobs };
+}
+
+/* ------------------------------------------------------------------ */
+/* Jobs in the UI (Story 5.4)                                          */
+/* ------------------------------------------------------------------ */
+
+/** A failed job stays on cards and list rows this long (then only the viewer lists results). */
+export const FAILED_VISIBLE_HOURS = 24;
+
+const OPEN_STATUSES = ['queued', 'claimed', 'running'] as const;
+
+/**
+ * The current job of each file, in one query: the newest open job, else a
+ * job that failed within the last 24 hours, else none. Done and cancelled
+ * jobs are not current (finished results live in the viewer).
+ */
+export async function currentJobsFor(fileIds: readonly string[]): Promise<Map<string, JobView>> {
+  const out = new Map<string, JobView>();
+  const ids = [...new Set(fileIds)];
+  if (!ids.length) return out;
+  const since = new Date(Date.now() - FAILED_VISIBLE_HOURS * 3600 * 1000);
+  const rows = await prisma.pipelineJob.findMany({
+    where: {
+      mediaFileId: { in: ids },
+      OR: [{ status: { in: [...OPEN_STATUSES] } }, { status: 'failed', finishedAt: { gte: since } }],
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: JOB_SELECT,
+  });
+  if (!rows.length) return out;
+  const live = await liveKinds();
+  for (const row of rows) {
+    const prev = out.get(row.mediaFileId);
+    const open = (OPEN_STATUSES as readonly string[]).includes(row.status);
+    if (!prev || (open && !(OPEN_STATUSES as readonly string[]).includes(prev.status))) out.set(row.mediaFileId, view(row, live));
+  }
+  return out;
+}
+
+export type KindOption = {
+  kind: string;
+  /** Stored label (`pipeline_kinds.label`); clients prefer their own translation of known kinds. */
+  label: string | null;
+  /** A worker serving this kind was seen within the lease. */
+  live: boolean;
+  builtIn: boolean;
+};
+
+/**
+ * The kinds that apply to a file of `mimeType` (`accepts` prefixes): the
+ * built-in kinds, plus kinds a live worker registered. Built-in kinds first,
+ * then by name.
+ */
+export async function availableKinds(mimeType: string): Promise<KindOption[]> {
+  const [kinds, live] = await Promise.all([
+    prisma.pipelineKind.findMany({ select: { name: true, label: true, builtIn: true, accepts: true } }),
+    liveKinds(),
+  ]);
+  return kinds
+    .filter((k) => kindAccepts(k.accepts, mimeType) && (k.builtIn || live.has(k.name)))
+    .map((k) => ({ kind: k.name, label: k.label, live: live.has(k.name), builtIn: k.builtIn }))
+    .sort((a, b) => (a.builtIn === b.builtIn ? (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0) : a.builtIn ? -1 : 1));
+}
+
+export type JobCounts = {
+  /** Queued with a live worker for the kind. */
+  queued: number;
+  /** Queued without a live worker for the kind. */
+  waitingForWorker: number;
+  claimed: number;
+  running: number;
+  /** Finished within the last 24 hours. */
+  done24h: number;
+  failed24h: number;
+  cancelled24h: number;
+};
+
+/** Queue figures by state for the status page. */
+export async function jobCounts(): Promise<JobCounts> {
+  const since = new Date(Date.now() - 24 * 3600 * 1000);
+  const [open, finished, live] = await Promise.all([
+    prisma.pipelineJob.groupBy({ by: ['status', 'kind'], where: { status: { in: [...OPEN_STATUSES] } }, _count: { _all: true } }),
+    prisma.pipelineJob.groupBy({
+      by: ['status'],
+      where: { status: { in: ['done', 'failed', 'cancelled'] }, finishedAt: { gte: since } },
+      _count: { _all: true },
+    }),
+    liveKinds(),
+  ]);
+  const counts: JobCounts = { queued: 0, waitingForWorker: 0, claimed: 0, running: 0, done24h: 0, failed24h: 0, cancelled24h: 0 };
+  for (const g of open) {
+    const n = g._count._all;
+    if (g.status === 'queued') {
+      if (live.has(g.kind)) counts.queued += n;
+      else counts.waitingForWorker += n;
+    } else if (g.status === 'claimed') counts.claimed += n;
+    else if (g.status === 'running') counts.running += n;
+  }
+  for (const g of finished) {
+    const n = g._count._all;
+    if (g.status === 'done') counts.done24h += n;
+    else if (g.status === 'failed') counts.failed24h += n;
+    else if (g.status === 'cancelled') counts.cancelled24h += n;
+  }
+  return counts;
 }

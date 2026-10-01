@@ -7,3 +7,6 @@ import { GraphQLError } from 'graphql';
 export function codedError(code: string, message: string, details: Record<string, string | number> = {}) {
   return new GraphQLError(message, { extensions: { ...details, code } });
 }
+
+// Story 5.5: the discussion toggle (FEATURE_DISABLED).
+export { assertDiscussionEnabled, discussionDisabledError } from './discussion.ts';

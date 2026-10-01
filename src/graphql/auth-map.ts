@@ -34,6 +34,8 @@ export const AUTH_MAP: Record<'Query' | 'Mutation' | 'Subscription', Record<stri
     processedVersions: { auth: 'session', action: 'project.view' },
     pipelineJob: { auth: 'session', action: 'project.view' },
     pipelineWorkers: { auth: 'session', action: 'instance.configure' },
+    availableKinds: { auth: 'session', action: 'pipeline.trigger' },
+    mentionPeople: { auth: 'session', action: 'discussion.use' },
     shareLinks: { auth: 'session', action: 'share.manage' },
     shareLinksForTarget: { auth: 'session', action: 'share.manage' },
     uploadSession: { auth: 'session', action: 'upload' },
@@ -89,6 +91,8 @@ export const AUTH_MAP: Record<'Query' | 'Mutation' | 'Subscription', Record<stri
     uploadProgress: { auth: 'session', action: 'upload' },
     chatMessages: { auth: 'session', action: 'project.view' },
     notificationReceived: { auth: 'session', action: 'self' },
+    jobUpdated: { auth: 'session', action: 'project.view' },
+    projectEvents: { auth: 'session', action: 'project.view' },
   },
 };
 

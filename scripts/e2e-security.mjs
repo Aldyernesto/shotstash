@@ -635,7 +635,13 @@ await new Promise((res) => setTimeout(res, 500));
   // Read from the database: a fresh viewer login here would spend the login limit.
   const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await db.connect();
-  const n = (await db.query('SELECT count(*)::int AS n FROM notifications WHERE "userId" = $1 AND read = false', [viewer.user.id])).rows[0].n;
+  // Story 5.5: unreadNotificationCount leaves out notifications of a Project that no longer exists.
+  const n = (
+    await db.query(
+      'SELECT count(*)::int AS n FROM notifications n WHERE n."userId" = $1 AND n.read = false AND (n.project_id IS NULL OR EXISTS (SELECT 1 FROM projects p WHERE p.id = n.project_id))',
+      [viewer.user.id],
+    )
+  ).rows[0].n;
   await db.end();
   ok(n === before.viewer + 1, 'inactive mentioned user not notified', n);
 }

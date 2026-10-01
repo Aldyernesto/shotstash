@@ -67,6 +67,8 @@ export const typeDefs = `#graphql
     search: Boolean!
     # Password reset by email (an email transport that can send).
     passwordResetEmail: Boolean!
+    # Story 5.5: project discussion and mentions (SHOTSTASH_FEATURE_DISCUSSION).
+    discussion: Boolean!
   }
 
   type Project {
@@ -165,6 +167,9 @@ export const typeDefs = `#graphql
     previewUrl: String
     # Story 5.1: processing jobs on this file, newest first (at most 20).
     jobs: [PipelineJob!]!
+    # Story 5.4: the job a card shows: the newest unfinished job, else one
+    # that failed within 24 hours, else null. Batched per request.
+    currentJob: PipelineJob
     folder: Folder!
     uploadedBy: User!
     project: Project!
@@ -194,6 +199,8 @@ export const typeDefs = `#graphql
     id: ID!
     # <namespace>/<name>, such as shotstash/proxy-720p.
     kind: String!
+    # Story 5.4: the kind's stored label, null when none.
+    kindLabel: String
     fileId: ID!
     status: String!
     state: String!
@@ -224,8 +231,40 @@ export const typeDefs = `#graphql
     createdAt: DateTime!
   }
 
+  # Story 5.4: a kind the Process menu offers for one file.
+  type PipelineKindOption {
+    kind: String!
+    # Stored label; clients prefer their own translation of known kinds.
+    label: String
+    # A worker serving this kind was seen within the lease (else the job
+    # waits for one).
+    live: Boolean!
+  }
+
+  # Story 5.5: a person the mention dropdown offers (an account that may
+  # view the Project). Typing @handle notifies them.
+  type MentionPerson {
+    id: ID!
+    name: String!
+    handle: String!
+    role: Role!
+  }
+
+  # Story 5.5: one change in a Project, delivered after the commit and after
+  # a per-event permission check. type is chat.created (chat set) or
+  # job.updated (job set); seq orders the events of one entity (drop lower).
+  type ProjectEvent {
+    type: String!
+    id: ID!
+    seq: Int!
+    chat: ProjectChat
+    job: PipelineJob
+  }
+
   type ProjectChat {
     id: ID!
+    # Story 5.5: per-Project sequence; history is ordered by (createdAt, id).
+    seq: Int!
     message: String!
     # Null for a message a person wrote; "upload" for the system line added
     # when a file finishes uploading (the client renders it from messages).
@@ -433,6 +472,11 @@ export const typeDefs = `#graphql
     pipelineJob(id: ID!): PipelineJob
     # Story 5.2: registered workers, most recently seen first (super admin).
     pipelineWorkers: [PipelineWorker!]!
+    # Story 5.4: kinds that apply to one live file (pipeline.trigger).
+    availableKinds(fileId: ID!): [PipelineKindOption!]!
+    # Story 5.5: people who may view the Project, for the mention dropdown
+    # (name contains query; at most 20). FEATURE_DISABLED when discussion is off.
+    mentionPeople(projectId: ID!, query: String): [MentionPerson!]!
 
     # Shares
     shareLinks: [ShareLink!]!
@@ -548,9 +592,15 @@ export const typeDefs = `#graphql
   # SUBSCRIPTIONS (WebSocket)
   # ============================================
 
+  # Story 5.5: every stream re-checks the session and can() on each event and
+  # ends when the session is revoked or the account deactivated.
   type Subscription {
     uploadProgress(sessionId: ID!): UploadProgress!
     chatMessages(projectId: ID!): ProjectChat!
     notificationReceived: Notification!
+    # One job (the viewer of the file may follow it).
+    jobUpdated(jobId: ID!): PipelineJob!
+    # Chat messages (while discussion is on) and job changes of one Project.
+    projectEvents(projectId: ID!): ProjectEvent!
   }
 `;

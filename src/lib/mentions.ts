@@ -102,3 +102,14 @@ export function handleMatchesUser(handle: string, user: { name: string; email: s
   const local = user.email.split("@")[0]?.toLowerCase() ?? "";
   return h === name || h === local;
 }
+
+/* "@handle" a person can be mentioned with: the display name without spaces
+   when it is a valid handle, else the local part of the email. Both are
+   what `handleMatchesUser` accepts. */
+const PERSON_HANDLE_RE = /^[\p{L}\p{N}][\p{L}\p{N}._-]{0,63}$/u;
+
+export function mentionHandleFor(user: { name: string; email: string }): string {
+  const compact = user.name.replace(/\s+/g, "");
+  if (PERSON_HANDLE_RE.test(compact) && !/[._-]$/.test(compact)) return compact;
+  return user.email.split("@")[0] || compact;
+}

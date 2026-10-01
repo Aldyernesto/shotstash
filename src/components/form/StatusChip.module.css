@@ -89,3 +89,50 @@
 .neutral .dot {
   background: var(--app-spine-muted);
 }
+
+/* Story 5.4: in progress (a job starting or processing). Brand blue tint,
+   accent text per theme (--app-accent: accent-2 dark, accent-text-light
+   light), filled accent dot. */
+.accent {
+  background: var(--app-spine-accent-14);
+  border-color: var(--app-spine-accent-35);
+  color: var(--app-accent);
+}
+
+.accent .dot {
+  background: var(--app-spine-accent);
+}
+
+/* Story 5.4: chips on the always-dark viewer layer keep the dark-theme
+   colors in the light theme too. */
+:global([data-theme='light']) .onDark.ok {
+  background: var(--app-spine-ok-bg);
+  border-color: var(--app-spine-ok-border);
+  color: var(--app-spine-ok-text);
+}
+
+:global([data-theme='light']) .onDark.danger {
+  background: var(--app-spine-danger-bg);
+  border-color: var(--app-spine-danger-border);
+  color: var(--app-spine-danger-text);
+}
+
+:global([data-theme='light']) .onDark.warning {
+  background: var(--app-spine-warning-bg);
+  border-color: var(--app-spine-warning-border);
+  color: var(--app-spine-warning-text);
+}
+
+.onDark.accent {
+  color: var(--app-spine-accent-2);
+}
+
+.onDark.neutral {
+  background: var(--app-spine-label-pill);
+  border-color: var(--app-spine-white-16);
+  color: var(--app-spine-object-text);
+}
+
+.onDark.neutral .dot {
+  background: var(--app-spine-object-meta);
+}

@@ -445,6 +445,18 @@ jobs:
           done
           curl -fsS http://127.0.0.1:3005/api/health
 
+      # Story 5.5: a second app process on the same database and Dragonfly;
+      # e2e:realtime proves an event published by one process reaches the
+      # subscribers of the other.
+      - name: Start a second app process
+        run: |
+          PORT=3006 NODE_ENV=production nohup node dist/server.js > /tmp/app2.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3006/api/health >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:3006/api/health
+
       # The harness runs first; the rate limit counters are reset before
       # e2e:security (login limit 10 per 15 minutes per IP).
       - name: Interrupted upload resumes (256 MiB)
@@ -474,6 +486,21 @@ jobs:
           E2E_SWEEP_WAIT_SECONDS: "45"
         run: npm run e2e:pipeline
 
+      # Story 5.5: realtime over graphql-ws (mention within 2 s, ordered job
+      # events, nothing published for a rolled-back write, per-event auth
+      # ends a stream, delivery across the two app processes).
+      - name: Reset rate limit counters (realtime)
+        run: docker exec "$(docker ps -q --filter ancestor=docker.dragonflydb.io/dragonflydb/dragonfly:v2.0.0)" redis-cli FLUSHALL
+
+      - name: e2e:realtime (ordered events through Dragonfly, two app processes)
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3005
+          E2E_BASE_URL_2: http://127.0.0.1:3006
+        run: npm run e2e:realtime
+
       - name: App log on failure
         if: failure()
-        run: tail -n 300 /tmp/app.log
+        run: |
+          tail -n 300 /tmp/app.log
+          echo "---- second app process ----"
+          tail -n 100 /tmp/app2.log || true

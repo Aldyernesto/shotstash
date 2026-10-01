@@ -607,6 +607,14 @@ let doneVersionId = null;
   const jpeg = await upload(`photo-${RUN}.jpg`, 'jpeg');
   const na = await enqueue(jpeg.id, 'shotstash/proxy-720p');
   ok(code(na) === 'KIND_NOT_APPLICABLE', 'a video kind on a JPEG KIND_NOT_APPLICABLE', JSON.stringify(na.errors ?? na.data));
+
+  // Story 5.4: the Process menu lists only the kinds that apply.
+  const KINDS = 'query($f: ID!){ availableKinds(fileId:$f){ kind label live } }';
+  const forVideo = (await gql(editor.token, KINDS, { f: file.id })).data?.availableKinds ?? [];
+  ok(forVideo[0]?.kind === 'shotstash/proxy-720p', 'availableKinds: the proxy comes first for a video', forVideo.map((k) => k.kind).join(','));
+  const forPhoto = (await gql(editor.token, KINDS, { f: jpeg.id })).data?.availableKinds ?? [];
+  ok(!forPhoto.some((k) => k.kind === 'shotstash/proxy-720p'), 'availableKinds: no proxy entry on a photo', forPhoto.map((k) => k.kind).join(','));
+  ok(code(await gql(viewer.token, KINDS, { f: file.id })) === 'FORBIDDEN', 'availableKinds for a viewer FORBIDDEN');
 }
 
 /* ---------------- trash cancels jobs; complete answers FILE_GONE; purge cleans up ---------------- */
@@ -616,6 +624,15 @@ let doneVersionId = null;
   const doomed = await upload(`trash-${RUN}.mp4`);
   const q = await enqueue(doomed.id, k);
   const queuedToo = await enqueue(doomed.id, kind('trash-queued'));
+  // Story 5.4 deferred rows: MediaFile.jobs newest first; currentJob is the newest open job.
+  const listed = await gql(editor.token, `query($id: ID!){ folder(id:$id){ files { id jobs { id createdAt } currentJob { id state } } } }`, { id: folder.id });
+  const mine = listed.data?.folder?.files?.find((f) => f.id === doomed.id);
+  ok(
+    mine?.jobs?.length === 2 && mine.jobs[0].id === queuedToo.data?.enqueueJob?.id && mine.jobs[1].id === q.data?.enqueueJob?.id,
+    'MediaFile.jobs lists the newest job first',
+    JSON.stringify(mine?.jobs?.map((j) => j.id) ?? listed.errors),
+  );
+  ok(mine?.currentJob?.id === queuedToo.data?.enqueueJob?.id, 'MediaFile.currentJob is the newest unfinished job', JSON.stringify(mine?.currentJob));
   const job = await claimOne(w);
   ok((await output(w, job, randomBytes(800))).status === 200, 'output before the trash');
   const key = (await jobRow(job.id)).output_key;
@@ -631,6 +648,8 @@ let doneVersionId = null;
   ok((await sql('SELECT 1 FROM processed_versions WHERE job_id = $1', [job.id])).length === 0, 'no processed version for a trashed file');
   const c = await gql(editor.token, 'mutation($id: ID!){ cancelJob(id:$id){ id } }', { id: job.id });
   ok(code(c) === 'NOT_FOUND', 'cancelJob on a trashed file answers NOT_FOUND', JSON.stringify(c.errors ?? c.data));
+  const trashedJob = await gql(editor.token, JOB, { id: job.id });
+  ok(trashedJob.data && trashedJob.data.pipelineJob === null && !trashedJob.errors, 'pipelineJob of a trashed file is null', JSON.stringify(trashedJob));
 
   // Purge of a file whose job holds an uploaded output: object and job row go.
   const gone = await upload(`purge-${RUN}.mp4`);
@@ -655,6 +674,12 @@ let doneVersionId = null;
   const r = await fetch(`${B}/api/v1/status`, { headers: { authorization: `Bearer ${sa.token}` } });
   const body = await r.json().catch(() => ({}));
   ok(r.status === 200 && Number.isInteger(body.workers) && body.workers >= 1 && Number.isInteger(body.queuedJobs), 'status reports live workers and queued jobs', JSON.stringify({ workers: body.workers, queuedJobs: body.queuedJobs }));
+  const states = ['queued', 'waitingForWorker', 'claimed', 'running', 'done24h', 'failed24h', 'cancelled24h'];
+  ok(body.jobs && states.every((k) => Number.isInteger(body.jobs[k])) && body.jobs.cancelled24h >= 1, 'status reports queue figures by state', JSON.stringify(body.jobs));
+  const ws = await gql(sa.token, '{ pipelineWorkers { id name version kinds live lastSeen } }');
+  ok(ws.data?.pipelineWorkers?.some((x) => x.live && x.kinds.length), 'the status page lists workers (name, version, kinds, live, last seen)');
+  const r2 = await fetch(`${B}/api/v1/status`, { headers: { authorization: `Bearer ${editor.token}` } });
+  ok(r2.status === 404, 'status for anyone but a super admin 404', r2.status);
 }
 
 console.log(fails ? `${fails} FAILED` : 'ALL PASS');

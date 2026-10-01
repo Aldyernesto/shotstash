@@ -343,7 +343,8 @@
       "video": "video",
       "audio": "audio",
       "document": "document"
-    }
+    },
+    "withJob": "{name}, {state}"
   },
   "menu": {
     "actionsFor": "Actions for {name}"
@@ -855,7 +856,8 @@
           "preview": "Preview",
           "shotstash/proxy-720p": "Proxy (720p)",
           "shotstash/heic-to-jpeg": "Full-size JPEG"
-        }
+        },
+        "open": "Open the {kind} version in the viewer"
       }
     },
     "video": {
@@ -868,7 +870,9 @@
       "unmute": "Unmute",
       "fullscreen": "Full screen",
       "exitFullscreen": "Exit full screen"
-    }
+    },
+    "showingVersion": "Showing {kind}",
+    "showOriginal": "Show original"
   },
   "share": {
     "metaDescription": "{count, plural, one {# footage file} other {# footage files}} from {source}.",
@@ -1236,11 +1240,11 @@
     "retry": "Try again",
     "loading": "Loading the discussion…",
     "emptyTitle": "No messages yet",
-    "emptyText": "Start talking about this Project's footage. Type @ to mention a Section or file, and your team will see it here.",
+    "emptyText": "Start talking about this Project's footage. Type @ to mention a person, a Section or a file, and your team will see it here.",
     "you": "You",
     "sending": "sending…",
     "sendFailed": "Your message wasn't sent. Try again.",
-    "placeholder": "Write a message… type @ to tag",
+    "placeholder": "Write a message… type @ to mention",
     "files": "{count, plural, one {# file} other {# files}}",
     "fileKind": {
       "video": "Video",
@@ -1255,14 +1259,14 @@
     },
     "chips": {
       "openProject": "Open Project {name}",
-      "mentionType": ", {type, select, PROJECT {Project} SECTION {Section} other {File}}",
+      "mentionType": ", {type, select, PROJECT {Project} SECTION {Section} PERSON {Person} other {File}}",
       "attachment": "Attachment: {name}",
       "removeAttachment": "Remove attachment {name}"
     },
     "mention": {
       "results": "Search results for @{query}",
       "head": "Insert tag · {count, plural, one {# result} other {# results}}",
-      "typeSticker": "{type, select, PROJECT {PROJECT} SECTION {SECTION} other {FILE}}"
+      "typeSticker": "{type, select, PROJECT {PROJECT} SECTION {SECTION} PERSON {PERSON} other {FILE}}"
     },
     "system": {
       "upload": "{name} uploaded {fileName}",
@@ -1436,6 +1440,61 @@
     "unreachable": "Unreachable",
     "workers": "Active workers",
     "queuedJobs": "Queued jobs",
-    "notAvailable": "Unavailable"
+    "notAvailable": "Unavailable",
+    "queue": {
+      "title": "Processing queue",
+      "queued": "Queued",
+      "waitingForWorker": "Waiting for worker",
+      "claimed": "Starting",
+      "running": "Processing",
+      "done24h": "Ready (24 h)",
+      "failed24h": "Failed (24 h)",
+      "cancelled24h": "Cancelled (24 h)"
+    },
+    "workerList": {
+      "title": "Workers",
+      "loadFailed": "Couldn't load the workers.",
+      "empty": "No worker has registered yet. Start one with the bootstrap token (see the processing guide).",
+      "version": "Version {version}",
+      "lastSeen": "Last seen {time}",
+      "live": "Live",
+      "offline": "Offline",
+      "revoked": "Revoked",
+      "revoke": "Revoke",
+      "revokeName": "Revoke worker {name}",
+      "confirmTitle": "Revoke {name}?",
+      "confirmLead": "Its token stops working at once and its name cannot register again. Jobs it holds go back to the queue when their lease expires.",
+      "revokeFailed": "The worker could not be revoked. Try again."
+    }
+  },
+  "jobs": {
+    "title": "Processing",
+    "process": "Process",
+    "loadingKinds": "Loading…",
+    "noKinds": "Nothing to process for this file.",
+    "noWorker": "No worker is running for this yet; the job waits for one.",
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "queueFailed": "Couldn't start {kind}.",
+    "cancelFailed": "Couldn't cancel {kind}.",
+    "action": "Run {label}",
+    "actions": {
+      "shotstash/proxy-720p": "Create proxy (720p)",
+      "shotstash/heic-to-jpeg": "Create full-size JPEG"
+    },
+    "announce": "{stage, select, queued {{kind} is queued} running {{kind} is processing} ready {{kind} is ready} failed {{kind} failed} other {{kind} was cancelled}}",
+    "state": {
+      "queued": "Queued",
+      "waiting_for_worker": "Waiting for worker",
+      "claimed": "Starting",
+      "running": "Processing {progress, number}%",
+      "done": "Ready",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "short": {
+      "running": "{progress, number}%",
+      "waiting_for_worker": "Waiting"
+    }
   }
 }

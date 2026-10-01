@@ -395,3 +395,53 @@
 .noteRow p {
   margin: 0;
 }
+
+/* Story 5.4: the file's job chip next to the title, and the "showing a
+   processed version" note with its way back to the original. */
+.topExtra {
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+
+.showing {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 4px 0 14px;
+  border: 1px solid var(--app-spine-white-16);
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-label-pill);
+  color: var(--app-spine-object-text);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.showingLabel {
+  white-space: nowrap;
+}
+
+.showingButton {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--spine-radius-full);
+  background: var(--app-spine-white-16);
+  color: var(--app-spine-object-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.showingButton:hover,
+.showingButton:focus-visible {
+  outline: 2px solid var(--app-spine-accent-2);
+  outline-offset: 1px;
+}
+
+@media (max-width: 899px) {
+  .showingLabel {
+    display: none;
+  }
+}

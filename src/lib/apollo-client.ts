@@ -56,12 +56,23 @@ export function makeApolloClient() {
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${wsProtocol}//${window.location.host}/api/graphql`;
 
+  // Story 5.5: keep reconnecting (subscriptions resume), and tell listeners
+  // after a reconnect so they refetch what they may have missed.
+  let connectedOnce = false;
   const wsLink = new GraphQLWsLink(
     createClient({
       url: wsUrl,
       connectionParams: () => {
         const token = localStorage.getItem('shotstash_token');
         return { authorization: token ? `Bearer ${token}` : '' };
+      },
+      retryAttempts: Infinity,
+      shouldRetry: () => true,
+      on: {
+        connected: () => {
+          if (connectedOnce) window.dispatchEvent(new Event('shotstash:realtime-reconnected'));
+          connectedOnce = true;
+        },
       },
     })
   );
