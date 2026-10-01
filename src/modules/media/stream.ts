@@ -17,10 +17,14 @@ export const CACHE_SIGNED = 'private, max-age=300';
 /** A thumbnail addressed by its current version (`?v=<thumb_version>`) never changes. */
 export const CACHE_IMMUTABLE = 'private, max-age=31536000, immutable';
 
-/** `immutable` is for cookie-authorised, versioned URLs only. */
-export type CachePolicy = 'cookie' | 'signed' | 'immutable';
+/** Pipeline input (Story 5.2): bytes for one worker's claim, never stored by any cache. */
+export const CACHE_NO_STORE = 'no-store';
+
+/** `immutable` is for cookie-authorised, versioned URLs only; `no-store` for the pipeline input stream. */
+export type CachePolicy = 'cookie' | 'signed' | 'immutable' | 'no-store';
 
 function cacheHeaders(policy: CachePolicy): Record<string, string> {
+  if (policy === 'no-store') return { 'Cache-Control': CACHE_NO_STORE };
   if (policy === 'cookie') return { 'Cache-Control': CACHE_COOKIE, Vary: 'Cookie' };
   if (policy === 'immutable') return { 'Cache-Control': CACHE_IMMUTABLE, Vary: 'Cookie' };
   return { 'Cache-Control': CACHE_SIGNED };

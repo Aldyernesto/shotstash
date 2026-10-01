@@ -107,7 +107,8 @@ jobs:
 
   # Stories 6.1-6.3: the image builds, the compose quick start boots on a
   # fresh machine, migrations run, the app runs as non-root and survives a
-  # restart, and first-run setup works against the container. CI generates
+  # restart, and first-run setup works against the container. Story 5.3:
+  # the reference worker image builds, runs in compose and makes a proxy. CI generates
   # its own throwaway secrets; nothing here is a real secret.
   docker:
     name: Docker image and compose quick start
@@ -130,12 +131,13 @@ jobs:
           sed -i "s/^SESSION_SECRET=.*/SESSION_SECRET=$(openssl rand -hex 32)/" .env
           sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 32)/" .env
           sed -i "s/^SETUP_TOKEN=.*/SETUP_TOKEN=$(openssl rand -hex 32)/" .env
+          sed -i "s/^WORKER_BOOTSTRAP_TOKEN=.*/WORKER_BOOTSTRAP_TOKEN=$(openssl rand -hex 32)/" .env
 
       - name: Preflight
         run: sh docker/preflight.sh
 
-      - name: Build the app image
-        run: docker compose build --build-arg VERSION="$VERSION" app
+      - name: Build the app and worker images
+        run: docker compose build --build-arg VERSION="$VERSION" app worker
 
       - name: Start the stack
         run: docker compose up -d --wait --wait-timeout 300
@@ -211,6 +213,37 @@ jobs:
             -e E2E_PASSWORD=owner-password-1 \
             -e E2E_UPLOAD_MB=1024 \
             node:24-bookworm-slim node scripts/e2e-upload-resume.mjs
+
+      # Story 5.3: the reference worker (compose service) turns a generated
+      # 10 s 1080p sample into a 720p H.264 proxy through the contract.
+      - name: Reference worker makes a proxy
+        run: |
+          docker compose exec -T cache redis-cli FLUSHALL
+          mkdir -p ci-out && chmod 777 ci-out
+          docker run --rm -v "$PWD/ci-out:/out" shotstash-worker:local             ffmpeg -v error -y -f lavfi -i testsrc2=size=1920x1080:rate=30 -f lavfi -i sine=frequency=440             -t 10 -c:v libx264 -preset veryfast -pix_fmt yuv420p -c:a aac -shortest /out/sample.mp4
+          docker run --rm --network "container:$(docker compose ps -q app)"             -v "$PWD:/w" -w /w             -e E2E_BASE_URL=http://127.0.0.1:3005             -e E2E_EMAIL=owner@example.com             -e E2E_PASSWORD=owner-password-1             -e E2E_SAMPLE=ci-out/sample.mp4             -e E2E_OUT=ci-out/proxy.mp4             -e E2E_TIMEOUT_SECONDS=300             node:24-bookworm-slim node scripts/e2e-worker.mjs
+          probe=$(docker run --rm -v "$PWD/ci-out:/out" shotstash-worker:local             ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,height -of json /out/proxy.mp4)
+          echo "$probe"
+          echo "$probe" | jq -e '.streams[0].codec_name == "h264" and .streams[0].height <= 720'
+
+      - name: The worker survives an app restart (heartbeat resumes)
+        run: |
+          before=$(date -u +%s)
+          docker compose restart app
+          for i in $(seq 1 60); do
+            if curl -fsS "$BASE/api/health" >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          last=0
+          for i in $(seq 1 60); do
+            last=$(docker compose exec -T db psql -U shotstash -d shotstash -tAc               "select coalesce(max(extract(epoch from last_seen)), 0)::bigint from pipeline_workers where revoked_at is null")
+            if [ "$last" -gt "$before" ]; then break; fi
+            sleep 3
+          done
+          echo "restart=$before last_seen=$last"
+          test "$last" -gt "$before"
+          test "$(docker inspect -f '{{.RestartCount}}' "$(docker compose ps -q worker)")" = "0"
+          docker compose logs worker | tail -n 20
 
       - name: Logs on failure
         if: failure()
@@ -324,6 +357,9 @@ jobs:
       S3_ACCESS_KEY_ID: ${{ matrix.backend == 's3' && 'shotstash' || '' }}
       S3_SECRET_ACCESS_KEY: ${{ matrix.backend == 's3' && 'shotstash-secret' || '' }}
       S3_FORCE_PATH_STYLE: "true"
+      # Story 5.1: the shortest sweep allowed in production, so e2e:pipeline
+      # sees expired claims requeued within seconds.
+      SHOTSTASH_PIPELINE_SWEEP_SECONDS: "5"
     steps:
       - uses: actions/checkout@v4
 
@@ -340,8 +376,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Session secret
-        run: echo "SESSION_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - name: Session secret and worker bootstrap token
+        run: |
+          echo "SESSION_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "WORKER_BOOTSTRAP_TOKEN=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
 
       - name: Generate Prisma client
         run: npx prisma generate
@@ -410,6 +448,17 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:3005
         run: npm run e2e:security
+
+      # Stories 5.1-5.2: queue and worker contract (claims, kind filter,
+      # requeue, late completion, cancel race, Range input, output, fail).
+      - name: Reset rate limit counters (pipeline)
+        run: docker exec "$(docker ps -q --filter ancestor=docker.dragonflydb.io/dragonflydb/dragonfly:v2.0.0)" redis-cli FLUSHALL
+
+      - name: e2e:pipeline (job queue and worker contract)
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3005
+          E2E_SWEEP_WAIT_SECONDS: "45"
+        run: npm run e2e:pipeline
 
       - name: App log on failure
         if: failure()

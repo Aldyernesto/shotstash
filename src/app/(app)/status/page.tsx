@@ -1,6 +1,6 @@
 /**
  * Instance status (Story 6.1): version, storage backend and reachability,
- * database, cache, and the pipeline figures once workers exist (Epic 5).
+ * database, cache, live processing workers and queued jobs (Story 5.1).
  * Super admin only: the data comes from `GET /api/v1/status`, which answers
  * 404 to everyone else, and this page then renders the not-found page.
  *

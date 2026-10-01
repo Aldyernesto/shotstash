@@ -163,6 +163,8 @@ export const typeDefs = `#graphql
     # /media/p/{id} of the image preview the viewer shows instead of the
     # original (HEIC), null when the original is shown as is.
     previewUrl: String
+    # Story 5.1: processing jobs on this file, newest first (at most 20).
+    jobs: [PipelineJob!]!
     folder: Folder!
     uploadedBy: User!
     project: Project!
@@ -179,6 +181,31 @@ export const typeDefs = `#graphql
     # /media/p/{id}: attachment, cookie session, same permission as the file.
     downloadUrl: String!
     createdAt: DateTime!
+  }
+
+  # Story 5.1: a processing job on one file. status is stored: queued,
+  # claimed, running, done, failed or cancelled (the last three are final).
+  # state is status plus the derived waiting_for_worker (queued while no live
+  # worker serves its kind). seq grows with every state or progress change.
+  type PipelineJob {
+    id: ID!
+    # <namespace>/<name>, such as shotstash/proxy-720p.
+    kind: String!
+    fileId: ID!
+    status: String!
+    state: String!
+    # Percent done, 0 to 100.
+    progress: Int!
+    attempts: Int!
+    maxAttempts: Int!
+    # Last error (failed jobs, and queued jobs retried after one).
+    error: String
+    seq: Int!
+    # The processed version the job produced (done jobs only).
+    outputVersion: ProcessedVersion
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    finishedAt: DateTime
   }
 
   type ProjectChat {
@@ -386,6 +413,8 @@ export const typeDefs = `#graphql
     # Story 4.4: processed versions of one live file, newest first (the
     # viewer loads them when it opens a file; large Section lists skip them).
     processedVersions(fileId: ID!): [ProcessedVersion!]!
+    # Story 5.1: one processing job (null when it or its file is gone).
+    pipelineJob(id: ID!): PipelineJob
 
     # Shares
     shareLinks: [ShareLink!]!
@@ -452,6 +481,13 @@ export const typeDefs = `#graphql
       convertHeic: Boolean @deprecated(reason: "Ignored: HEIC originals are kept and get a preview version.")
     ): MediaFile!
     cancelUpload(sessionId: ID!): Boolean!
+
+    # Processing jobs (Story 5.1). enqueueJob answers the unfinished job of
+    # the same kind on the file instead of queueing a second one; an unknown
+    # kind is KIND_UNKNOWN. cancelJob stops a queued, claimed or running job
+    # (JOB_TERMINAL when it already finished).
+    enqueueJob(fileId: ID!, kind: String!): PipelineJob!
+    cancelJob(id: ID!): PipelineJob!
 
     # Share
     createShareLink(input: ShareLinkInput!): ShareLink!

@@ -54,11 +54,12 @@ cd shotstash
 cp .env.example .env
 ```
 
-Open `.env` and fill in the two secrets, each with its own random value:
+Open `.env` and fill in the three secrets, each with its own random value:
 
 ```bash
 openssl rand -hex 32   # paste as SESSION_SECRET
 openssl rand -hex 32   # paste as POSTGRES_PASSWORD
+openssl rand -hex 32   # paste as WORKER_BOOTSTRAP_TOKEN (the processing worker registers with it)
 ```
 
 `POSTGRES_PASSWORD` is fixed when the database is first created: changing it in `.env` later does not change the database, and the app can no longer connect (keep the first value, or start over with `docker compose down -v`).
@@ -74,9 +75,11 @@ docker compose up -d
 
 Open `http://localhost:3005` (or `http://<server-ip>:3005`). You land on `/setup`, which creates the owner account; whoever submits it first becomes the super admin, so finish it before the instance is reachable by others, or set `SETUP_TOKEN` in `.env` first. `docker compose ps` shows the services; the app is ready when it reports `healthy`.
 
-What runs: `app` (Shotstash with ffmpeg), `db` (PostgreSQL 17) and `cache` (Dragonfly). Only the app is published on the host; the database and cache are reachable only inside the compose network. Media files live in `./data/media` next to the compose file; the database lives in the `db-data` volume. Database migrations run automatically every time the app starts.
+What runs: `app` (Shotstash with ffmpeg), `db` (PostgreSQL 17), `cache` (Dragonfly) and `worker` (the reference processing worker, which makes 720p proxies of videos). Only the app is published on the host; the database, cache and worker are reachable only inside the compose network. Media files live in `./data/media` next to the compose file; the database lives in the `db-data` volume. Database migrations run automatically every time the app starts.
 
 **Configuration.** Every setting is an environment variable in `.env`, read when the app starts: change it and run `docker compose up -d` again, no rebuild. The full list, with defaults: [docs/configuration.md](docs/configuration.md). The app refuses to start when a value is wrong and names each bad variable in `docker compose logs app`.
+
+**Processing workers.** The bundled `worker` registers with `WORKER_BOOTSTRAP_TOKEN` and makes 720p H.264/AAC proxies (`shotstash/proxy-720p`) through the worker contract; it never touches storage or the database. Writing your own worker (transcription, scene detection, anything) in any language: [docs/byo-ai.md](docs/byo-ai.md).
 
 **Storage.** Media goes to `./data/media` by default. To use an S3-compatible bucket instead (AWS S3, Cloudflare R2, MinIO, RustFS, SeaweedFS), set `STORAGE_BACKEND=s3` and the `S3_*` variables: [docs/storage.md](docs/storage.md).
 
@@ -95,7 +98,7 @@ What runs: `app` (Shotstash with ffmpeg), `db` (PostgreSQL 17) and `cache` (Drag
 ### Logs, upgrades and backups
 
 - **Logs:** `docker compose logs -f app`. The app writes one JSON line per event.
-- **Status:** a super admin can open `/status` for the version, storage, database and cache. `GET /api/health` answers `{ ok, setupRequired, version }` for monitoring.
+- **Status:** a super admin can open `/status` for the version, storage, database, cache, live workers and queued jobs. `GET /api/health` answers `{ ok, setupRequired, version }` for monitoring.
 - **Upgrade:** `git pull && docker compose up -d --build`. Once images are published, upgrading becomes `docker compose pull && docker compose up -d`.
 - **Rollback:** check out the previous release tag and run `docker compose up -d --build` (with published images: pin the previous image tag). Every migration stays compatible with the previous release, so the older version still runs on the upgraded database. Before v1.0.0 databases are throwaway: a pre-release upgrade may ask you to start with an empty database. **Upgrade note (storage keys):** from migration `0006_storage_keys_uploads` on, files live under hierarchy-free keys and old bytes are not moved; reset pre-1.0 development data after upgrading (empty database and `./data/media`, see [docs/storage.md](docs/storage.md)).
 - **Backup:** stop the app first so files and database match (`docker compose stop app`), dump the database with `docker compose exec -T db pg_dump -U shotstash shotstash > shotstash.sql`, copy `./data/media`, then `docker compose start app`.
@@ -144,7 +147,7 @@ npm run build                         # next build plus the compiled server (dis
 
 Configuration lives in one place, `src/lib/config.ts`: add a variable to its table, run `npm run env:example`, and read it with `config()`. Lint rejects `process.env` anywhere else in `src/` and `server.ts` (`process.env.NODE_ENV` excepted). `npm start` runs the compiled server after `npm run build`.
 
-Local end-to-end checks (not in CI). First-run setup on an empty database: `npm run dev:db:reset`, `npm run dev:db`, `npx prisma migrate deploy`, `npm run dev`, then `npm run e2e:setup` (gate redirect and 503, setup, concurrent 409, redirect after setup). Security: with `npm run dev:db`, `npx prisma migrate deploy`, `npx tsx prisma/seed.ts` and `npm run dev` running, `npm run e2e:security` exercises login, cookie media, signed shares, access codes, role checks, rate limits, security headers, health and the trash lifecycle (start the server with `EMAIL_TRANSPORT=log` to include the reset-limit rows; login limits mean a second run needs 15 minutes or a server restart) against `http://localhost:3005` (override with `E2E_BASE_URL`). `e2e:security` also covers uploads: parts, resume, wrong checksums, duplicates, cancel and expiry. `npm run e2e:upload` uploads a 256 MiB synthetic file through a proxy that cuts the connection twice and checks it resumes and arrives intact (`E2E_UPLOAD_MB` changes the size). `npm run test:s3` runs the storage contract against an S3-compatible server (see [docs/storage.md](docs/storage.md)). They refuse to run unless the base URL and `DATABASE_URL` point at localhost, and they write test data into that database.
+Local end-to-end checks (not in CI). First-run setup on an empty database: `npm run dev:db:reset`, `npm run dev:db`, `npx prisma migrate deploy`, `npm run dev`, then `npm run e2e:setup` (gate redirect and 503, setup, concurrent 409, redirect after setup). Security: with `npm run dev:db`, `npx prisma migrate deploy`, `npx tsx prisma/seed.ts` and `npm run dev` running, `npm run e2e:security` exercises login, cookie media, signed shares, access codes, role checks, rate limits, security headers, health and the trash lifecycle (start the server with `EMAIL_TRANSPORT=log` to include the reset-limit rows; login limits mean a second run needs 15 minutes or a server restart) against `http://localhost:3005` (override with `E2E_BASE_URL`). `e2e:security` also covers uploads: parts, resume, wrong checksums, duplicates, cancel and expiry. `npm run e2e:upload` uploads a 256 MiB synthetic file through a proxy that cuts the connection twice and checks it resumes and arrives intact (`E2E_UPLOAD_MB` changes the size). `npm run e2e:pipeline` exercises the job queue and the worker contract (concurrent claims, kind filter, requeue after missed heartbeats, late completion, cancel race, Range input, output and complete, failures); start the server with `WORKER_BOOTSTRAP_TOKEN` set and `SHOTSTASH_PIPELINE_SWEEP_SECONDS=2`, and run the script with the same token. `npm run test:s3` runs the storage contract against an S3-compatible server (see [docs/storage.md](docs/storage.md)). They refuse to run unless the base URL and `DATABASE_URL` point at localhost, and they write test data into that database.
 
 Every route handler is wrapped in `defineRoute({ auth })` and every GraphQL root field has an entry in `src/graphql/auth-map.ts`; the generated table lives in [docs/security/route-matrix.md](docs/security/route-matrix.md). Media bytes are served only under `/media/*` with an HttpOnly session cookie or a signed share URL; `MEDIA_SIGNING_SECRET` signs those URLs.
 

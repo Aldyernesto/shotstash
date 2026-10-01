@@ -1,4 +1,69 @@
-// Public surface of the pipeline module. Epic 5 adds the queue and worker;
-// Story 4.4 only registers the kinds.
-export { PIPELINE_KINDS, PIPELINE_KIND_HEIC_TO_JPEG, isPipelineKind } from './kinds.ts';
-export type { PipelineKind } from './kinds.ts';
+// Public surface of the pipeline module (Stories 5.1-5.3): the job queue,
+// the versioned worker contract and the job API for people.
+export {
+  PIPELINE_KINDS,
+  PIPELINE_KIND_HEIC_TO_JPEG,
+  PIPELINE_KIND_PROXY_720P,
+  KIND_RE,
+  isBuiltInKind,
+  isKindName,
+} from './kinds.ts';
+export type { BuiltInKind } from './kinds.ts';
+export {
+  JOB_STATUSES,
+  MAX_ATTEMPTS,
+  PipelineFailure,
+  contractMajor,
+  isTerminal,
+  jobState,
+  parseFail,
+  parseHeartbeat,
+  parseManifest,
+  parseOutputHeaders,
+  parseProgress,
+  parseRegister,
+} from './contract.ts';
+export type {
+  ClaimResponse,
+  ClaimedJob,
+  CompleteResponse,
+  EmptyBody,
+  ErrorBody,
+  FailRequest,
+  FailResponse,
+  HeartbeatRequest,
+  HeartbeatResponse,
+  JobPathParams,
+  JobState,
+  JobStatus,
+  Manifest,
+  OutputResponse,
+  PipelineErrorCode,
+  ProgressRequest,
+  ProgressResponse,
+  RegisterRequest,
+  RegisterResponse,
+} from './contract.ts';
+export {
+  JobRequestError,
+  LEASE_EXPIRED_ERROR,
+  cancelJob,
+  claimNext,
+  completeJob,
+  enqueueJob,
+  failJob,
+  heartbeat,
+  inputResponse,
+  jobById,
+  jobsForFile,
+  leaseSeconds,
+  liveKinds,
+  pipelineCounts,
+  registerWorker,
+  reportProgress,
+  revokeWorker,
+  storeOutput,
+  sweepExpiredClaims,
+} from './service.ts';
+export type { JobView } from './service.ts';
+export { pipelineErrorResponse, readJsonBody } from './http.ts';

@@ -79,7 +79,6 @@ export default function StatusView() {
             ))}
           </div>
         )}
-        {state.kind === 'ready' && <p className={`spine-footnote ${styles.note}`}>{t('pipelineNote')}</p>}
       </section>
     </main>
   );

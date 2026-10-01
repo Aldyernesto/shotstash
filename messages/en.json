@@ -735,7 +735,20 @@
       "UPLOAD_SESSION_EXPIRED": "This upload expired after 24 hours. Start it again.",
       "MISSING_PARTS": "Some parts of the file didn't arrive. Try the upload again.",
       "CHECKSUM_REQUIRED": "The upload is missing its checksum. Try the upload again.",
-      "INVALID_FILENAME": "This file name can't be used. Rename the file and try again."
+      "INVALID_FILENAME": "This file name can't be used. Rename the file and try again.",
+      "KIND_UNKNOWN": "This kind of processing isn't available on this instance.",
+      "JOB_TERMINAL": "This job has already finished.",
+      "JOB_NOT_FOUND": "That job no longer exists.",
+      "CLAIM_STALE": "This job was handed to another worker.",
+      "CLAIM_TOKEN_REQUIRED": "The worker request is missing its claim token.",
+      "CONTRACT_UNSUPPORTED": "This worker speaks a pipeline version this instance doesn't support.",
+      "INVALID_MANIFEST": "The worker's manifest is incomplete.",
+      "INVALID_BODY": "The request couldn't be read.",
+      "INVALID_OUTPUT": "The worker's output couldn't be read.",
+      "OUTPUT_TOO_LARGE": "The worker's output is too large.",
+      "OUTPUT_MISSING": "The worker finished without sending its output.",
+      "FILE_NOT_FOUND": "The file of this job is gone or in the Trash.",
+      "PIPELINE_DISABLED": "Processing workers aren't set up on this instance."
     },
     "forbidden": "You don't have access to do that."
   },
@@ -836,7 +849,8 @@
         "download": "Download the {kind} version",
         "kind": {
           "preview": "Preview",
-          "heic-to-jpeg": "Full-size JPEG"
+          "shotstash/proxy-720p": "Proxy (720p)",
+          "shotstash/heic-to-jpeg": "Full-size JPEG"
         }
       }
     },
@@ -1418,7 +1432,6 @@
     "unreachable": "Unreachable",
     "workers": "Active workers",
     "queuedJobs": "Queued jobs",
-    "notAvailable": "Not available yet",
-    "pipelineNote": "Workers and queued jobs appear here once the processing pipeline ships."
+    "notAvailable": "Unavailable"
   }
 }

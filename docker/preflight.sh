@@ -1,7 +1,8 @@
 #!/bin/sh
 # Shotstash preflight (Story 6.2): run before `docker compose up -d`.
-# Checks that Docker is available, that .env exists with valid secrets, and
-# that the app's host port is free.
+# Checks that Docker is available, that .env exists with valid secrets
+# (SESSION_SECRET, POSTGRES_PASSWORD, WORKER_BOOTSTRAP_TOKEN), and that the
+# app's host port is free.
 #
 #   sh docker/preflight.sh
 set -u
@@ -41,6 +42,15 @@ if [ -z "$pg" ]; then
   fail=1
 elif ! printf '%s' "$pg" | grep -Eq '^[A-Za-z0-9_-]+$'; then
   echo "POSTGRES_PASSWORD may only contain letters, digits, - and _ (it goes into a database URL). Generate one with: openssl rand -hex 32"
+  fail=1
+fi
+
+worker_token="$(value WORKER_BOOTSTRAP_TOKEN)"
+if [ "${#worker_token}" -lt 32 ]; then
+  echo "WORKER_BOOTSTRAP_TOKEN in .env is missing or shorter than 32 characters (the processing worker registers with it). Generate one with: openssl rand -hex 32"
+  fail=1
+elif [ "$worker_token" = "$session" ]; then
+  echo "WORKER_BOOTSTRAP_TOKEN must differ from SESSION_SECRET. Generate its own with: openssl rand -hex 32"
   fail=1
 fi
 

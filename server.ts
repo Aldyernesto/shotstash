@@ -22,6 +22,8 @@ import { disconnectPrisma } from './src/lib/prisma';
 import { purgeExpired } from './src/modules/trash';
 import { checkSearchIndex } from './src/modules/library';
 import { expireSessions } from './src/modules/upload';
+import { sweepExpiredClaims } from './src/modules/pipeline';
+import { PIPELINE_CONTRACT_VERSION, PIPELINE_HEADER, PIPELINE_PATH_PREFIX } from './src/lib/pipelineContract';
 import { ConfigError, assertConfig, config } from './src/lib/config';
 import { errMessage, logger } from './src/lib/logger';
 import type { Server, ServerResponse } from 'http';
@@ -29,6 +31,7 @@ import type { Server, ServerResponse } from 'http';
 const log = logger('server');
 const sweepLog = logger('trash-sweeper');
 const uploadSweepLog = logger('upload-sweeper');
+const jobSweepLog = logger('job-sweeper');
 const wsLog = logger('websocket');
 
 /* ------------------------------------------------------------------ */
@@ -96,6 +99,8 @@ async function setupGate(res: ServerResponse, pathname: string): Promise<boolean
     return true;
   }
   if (complete) return false;
+  // Workers read the contract major from every pipeline answer, this one too.
+  if (pathname.startsWith(PIPELINE_PATH_PREFIX)) res.setHeader(PIPELINE_HEADER, String(PIPELINE_CONTRACT_VERSION));
   if (isApiPath(pathname)) {
     sendJson(res, 503, { code: 'SETUP_REQUIRED', message: 'First-run setup is required' });
   } else {
@@ -166,6 +171,27 @@ async function sweepUploads() {
     if (expired) uploadSweepLog.info('expired', { sessions: expired });
   } catch (err) {
     uploadSweepLog.error('failed', { err: errMessage(err) });
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Job sweeper (Story 5.1): every SHOTSTASH_PIPELINE_SWEEP_SECONDS     */
+/* (30 s), claims without a heartbeat for the lease go back to the     */
+/* queue or fail after 3 attempts. Singleton through its own lock.     */
+/* ------------------------------------------------------------------ */
+const JOB_SWEEP_LOCK = 'shotstash:lock:job-sweeper';
+
+async function sweepJobs(lockTtlMs: number) {
+  const run = () => sweepExpiredClaims();
+  try {
+    const locked = await withLock(JOB_SWEEP_LOCK, lockTtlMs, run);
+    let result;
+    if (locked.ran) result = locked.value;
+    else if (locked.reason === 'unavailable') result = await run();
+    else return;
+    if (result.requeued || result.failed) jobSweepLog.info('expired claims', result);
+  } catch (err) {
+    jobSweepLog.error('failed', { err: errMessage(err) });
   }
 }
 
@@ -362,5 +388,14 @@ app.prepare().then(() => {
         void sweepUploads();
       }, SWEEP_EVERY_MS).unref();
     }, 60 * 1000).unref();
+    const jobSweepMs = config().SHOTSTASH_PIPELINE_SWEEP_SECONDS * 1000;
+    let jobSweepRunning = false;
+    setInterval(() => {
+      if (jobSweepRunning) return;
+      jobSweepRunning = true;
+      void sweepJobs(Math.max(5_000, jobSweepMs)).finally(() => {
+        jobSweepRunning = false;
+      });
+    }, jobSweepMs).unref();
   });
 });

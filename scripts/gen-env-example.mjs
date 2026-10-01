@@ -50,9 +50,10 @@ export function renderEnvExample() {
     '# placeholder; nothing in this file is a real secret. Empty means "not set".',
     '# Full reference: docs/configuration.md',
     '#',
-    '# docker compose: set SESSION_SECRET and POSTGRES_PASSWORD, then run',
-    '# `docker compose up -d`. The compose file sets DATABASE_URL, DRAGONFLY_HOST,',
-    '# STORAGE_LOCAL_ROOT and PORT for the app container itself.',
+    '# docker compose: set SESSION_SECRET, POSTGRES_PASSWORD and',
+    '# WORKER_BOOTSTRAP_TOKEN, then run `docker compose up -d`. The compose file',
+    '# sets DATABASE_URL, DRAGONFLY_HOST, STORAGE_LOCAL_ROOT and PORT for the app',
+    '# container itself.',
   ];
   for (const group of GROUPS) {
     const vars = entries().filter((v) => v.group === group);

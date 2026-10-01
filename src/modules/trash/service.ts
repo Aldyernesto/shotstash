@@ -172,6 +172,8 @@ type PurgedFile = {
   storageKey: string;
   thumbVersion: number;
   processedVersions: { storageKey: string }[];
+  /** Outputs a pipeline job uploaded but never completed (Story 5.2); the jobs go with the file (cascade). */
+  pipelineJobs?: { outputKey: string | null }[];
 };
 
 const PURGED_FILE_SELECT = {
@@ -179,13 +181,15 @@ const PURGED_FILE_SELECT = {
   storageKey: true,
   thumbVersion: true,
   processedVersions: { select: { storageKey: true } },
+  pipelineJobs: { where: { outputKey: { not: null } }, select: { outputKey: true } },
 } as const;
 
-/** Every storage key a file owns: the original, each thumbnail version and processed versions. */
+/** Every storage key a file owns: the original, each thumbnail version, processed versions and pending job outputs. */
 export function keysOfFile(f: PurgedFile): string[] {
   const keys = [f.storageKey];
   for (let v = 1; v <= f.thumbVersion; v++) keys.push(storageKeys.thumbnail(f.id, v));
   for (const p of f.processedVersions) keys.push(p.storageKey);
+  for (const j of f.pipelineJobs ?? []) if (j.outputKey && !keys.includes(j.outputKey)) keys.push(j.outputKey);
   return keys;
 }
 

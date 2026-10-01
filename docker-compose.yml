@@ -1,12 +1,12 @@
 # Shotstash quick start (Story 6.2). See README.md, "Quick start".
 #
-#   cp .env.example .env        # then set SESSION_SECRET and POSTGRES_PASSWORD
+#   cp .env.example .env        # then set SESSION_SECRET, POSTGRES_PASSWORD and WORKER_BOOTSTRAP_TOKEN
 #   sh docker/preflight.sh
 #   docker compose up -d
 #
 # Only the app is published on the host (SHOTSTASH_PORT, default 3005);
-# PostgreSQL and Dragonfly stay on the compose network. Official images
-# arrive with the first release; until then the app image is built here.
+# PostgreSQL, Dragonfly and the worker stay on the compose network. Official
+# images arrive with the first release; until then both images are built here.
 
 name: shotstash
 
@@ -97,17 +97,26 @@ services:
       timeout: 5s
       retries: 30
 
-  # Reference worker (proxy videos with ffmpeg). It ships with the processing
-  # pipeline (Epic 5) as its own image; until then this block stays commented.
-  # worker:
-  #   image: shotstash-worker:local
-  #   restart: unless-stopped
-  #   environment:
-  #     SHOTSTASH_URL: http://app:3005
-  #     WORKER_BOOTSTRAP_TOKEN: ${WORKER_BOOTSTRAP_TOKEN:?Set WORKER_BOOTSTRAP_TOKEN in .env}
-  #   depends_on:
-  #     app:
-  #       condition: service_healthy
+  # Reference worker (Story 5.3): claims shotstash/proxy-720p jobs and makes
+  # 720p H.264/AAC proxies with ffmpeg through the worker contract. It never
+  # sees storage or the database: everything goes through the app's
+  # /api/v1/pipeline API. It waits (30 s backoff) while the app restarts or
+  # first-run setup is not done. Swap the image for your own worker.
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    image: shotstash-worker:local
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
+    environment:
+      SHOTSTASH_URL: http://app:3005
+      WORKER_BOOTSTRAP_TOKEN: ${WORKER_BOOTSTRAP_TOKEN:?Set WORKER_BOOTSTRAP_TOKEN in .env (openssl rand -hex 32)}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      app:
+        condition: service_healthy
 
 volumes:
   db-data:

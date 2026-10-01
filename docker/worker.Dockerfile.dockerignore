@@ -1,0 +1,5 @@
+# Build context of docker/worker.Dockerfile (the repository root): only the
+# worker's own files. Nothing else of the app, and never a .env.
+*
+!worker/package.json
+!worker/src/**

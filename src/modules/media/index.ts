@@ -25,7 +25,8 @@ export {
 } from './signing';
 export { parseRange } from './range';
 export type { RangeResult } from './range';
-export { CACHE_COOKIE, CACHE_IMMUTABLE, CACHE_SIGNED, contentDisposition, notFoundResponse } from './stream';
+export { CACHE_COOKIE, CACHE_IMMUTABLE, CACHE_NO_STORE, CACHE_SIGNED, contentDisposition, fileResponse, notFoundResponse } from './stream';
+export type { CachePolicy, FileResponseInput } from './stream';
 export { THUMB_LONG_EDGE, generateThumbnail, needsThumbnail, renderThumbnail } from './thumbnail';
 export { HEIC_PREVIEW_LONG_EDGE, MAX_HEIC_BYTES, createHeicPreview, isHeicMime } from './heic';
 export { PROCESSED_KIND_PREVIEW, previewOf, processedFileName } from './processed';

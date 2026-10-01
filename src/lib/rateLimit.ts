@@ -38,8 +38,10 @@ export const LIMITS = {
   shareCreate: { limit: 60, windowMs: HOUR },
   /** First-run setup submissions per IP. */
   setup: { limit: 10, windowMs: 15 * MIN },
-  /** Worker endpoints per token (Epic 5 wires the routes). */
+  /** Worker endpoints per registered worker (Story 5.2). */
   worker: { limit: 600, windowMs: MIN },
+  /** Worker registrations (bootstrap token) per IP. */
+  workerRegister: { limit: 60, windowMs: HOUR },
   /** Upload sessions started per user (Story 4.3). */
   uploadInitiate: { limit: 10000, windowMs: HOUR },
   /** Upload parts per user: 16 MiB parts at 1 Gbit/s are about 480 a minute. */

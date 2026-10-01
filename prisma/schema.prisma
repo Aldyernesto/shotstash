@@ -53,6 +53,18 @@ enum MediaFileStatus {
   ready
 }
 
+// Pipeline job states (Story 5.1), lowercase like MediaFileStatus. done,
+// failed and cancelled are terminal. "waiting for worker" is derived (a
+// queued job whose kind no live worker serves), never stored.
+enum PipelineJobStatus {
+  queued
+  claimed
+  running
+  done
+  failed
+  cancelled
+}
+
 // ============================================
 // MODELS
 // ============================================
@@ -83,6 +95,7 @@ model User {
   chats         ProjectChat[]
   notifications Notification[]
   passwordResetRequests PasswordResetRequest[]
+  pipelineJobs  PipelineJob[]
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
@@ -192,6 +205,7 @@ model MediaFile {
   chatMentions  ProjectChat[]
   uploadSessions UploadSession[]
   processedVersions ProcessedVersion[]
+  pipelineJobs  PipelineJob[]
   trashedAt     DateTime?
   // See Folder.trashRootId.
   trashRootId   String?      @map("trash_root_id")
@@ -205,8 +219,8 @@ model MediaFile {
   @@map("media_files")
 }
 
-// Outputs derived from a file: the upload's HEIC `preview` (Story 4.4) and,
-// with Epic 5, pipeline results. Served by /media/p/:id; purge deletes
+// Outputs derived from a file: the upload's HEIC `preview` (Story 4.4) and
+// pipeline results (Epic 5: created by `complete`, with job_id and attempt). Served by /media/p/:id; purge deletes
 // their keys with the file.
 model ProcessedVersion {
   id          String    @id @default(uuid())
@@ -222,6 +236,78 @@ model ProcessedVersion {
 
   @@index([mediaFileId])
   @@map("processed_versions")
+}
+
+// Pipeline queue (Stories 5.1-5.2). A job runs one kind on one file;
+// workers claim it with one UPDATE ... FOR UPDATE SKIP LOCKED statement and
+// carry its claim_token on every later call. heartbeat_at is the only
+// lease field: the sweeper requeues a claim older than the lease (90 s by
+// default) and fails the job after max_attempts. seq is bumped on every
+// state or progress change (ordering for realtime clients). The output
+// columns describe the one output the current claim uploaded; `complete`
+// turns it into a processed version with the reserved output_version_id.
+// Purging a file deletes its jobs (cascade) and any uploaded output.
+model PipelineJob {
+  id              String            @id
+  kind            String
+  kindRef         PipelineKind      @relation(fields: [kind], references: [name], onDelete: Restrict, onUpdate: Cascade)
+  mediaFileId     String            @map("media_file_id")
+  mediaFile       MediaFile         @relation(fields: [mediaFileId], references: [id], onDelete: Cascade)
+  params          Json              @default("{}")
+  status          PipelineJobStatus @default(queued)
+  attempts        Int               @default(0)
+  maxAttempts     Int               @default(3) @map("max_attempts")
+  claimedBy       String?           @map("claimed_by")
+  worker          PipelineWorker?   @relation(fields: [claimedBy], references: [id], onDelete: SetNull)
+  claimToken      String?           @map("claim_token")
+  heartbeatAt     DateTime?         @map("heartbeat_at")
+  progress        Int               @default(0)
+  seq             BigInt            @default(0)
+  error           String?
+  outputVersionId String?           @map("output_version_id")
+  outputKey       String?           @map("output_key")
+  outputMimeType  String?           @map("output_mime_type")
+  outputSize      BigInt?           @map("output_size")
+  createdById     String?           @map("created_by")
+  createdBy       User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @default(now()) @updatedAt @map("updated_at")
+  finishedAt      DateTime?         @map("finished_at")
+
+  @@index([status, kind, createdAt])
+  @@index([status, heartbeatAt])
+  @@index([mediaFileId])
+  @@map("pipeline_jobs")
+}
+
+// Job kinds, `<namespace>/<name>`. Built-in kinds are seeded by migration
+// 0007; a worker registering a new kind adds it. Rows are never deleted.
+model PipelineKind {
+  name      String        @id
+  label     String?
+  builtIn   Boolean       @default(false) @map("built_in")
+  firstSeen DateTime      @default(now()) @map("first_seen")
+  jobs      PipelineJob[]
+
+  @@map("pipeline_kinds")
+}
+
+// Registered workers. The per-worker token is shown once at registration
+// and stored only as its SHA-256 hash. last_seen moves on every
+// authenticated call; a worker seen within the lease is "live".
+model PipelineWorker {
+  id        String        @id
+  name      String
+  version   String
+  kinds     String[]
+  tokenHash String        @unique @map("token_hash")
+  lastSeen  DateTime      @default(now()) @map("last_seen")
+  revokedAt DateTime?     @map("revoked_at")
+  createdAt DateTime      @default(now()) @map("created_at")
+  jobs      PipelineJob[]
+
+  @@index([lastSeen])
+  @@map("pipeline_workers")
 }
 
 model ProjectChat {

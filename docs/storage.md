@@ -16,7 +16,7 @@ Keys never encode the library's structure. Renaming or moving a Project or Secti
 ```text
 files/<fileId>/original.<ext>      the uploaded file (ext from the sniffed type)
 files/<fileId>/thumb-<n>.jpg       thumbnail version n
-files/<fileId>/proc/<id>.<ext>     processed versions (pipeline, later)
+files/<fileId>/proc/<id>.<ext>     processed versions (HEIC previews, pipeline outputs)
 covers/project/<id>.jpg            project covers (re-encoded JPEG, at most 2048 px)
 covers/user/<id>.jpg               avatars
 ```

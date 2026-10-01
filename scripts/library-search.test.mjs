@@ -51,7 +51,9 @@ test('processed versions: download name and preview pick', () => {
   assert.equal(processed.previewOf([]), null);
 });
 
-test('pipeline: heic-to-jpeg is a registered kind (worker in Epic 5)', () => {
-  assert.ok(kinds.isPipelineKind('heic-to-jpeg'));
-  assert.equal(kinds.isPipelineKind('preview'), false);
+test('pipeline: built-in kinds are namespaced; the HEIC stub is shotstash/heic-to-jpeg', () => {
+  assert.deepEqual([...kinds.PIPELINE_KINDS], ['shotstash/proxy-720p', 'shotstash/heic-to-jpeg']);
+  assert.ok(kinds.isBuiltInKind('shotstash/heic-to-jpeg'));
+  assert.equal(kinds.isBuiltInKind('heic-to-jpeg'), false);
+  assert.equal(kinds.isKindName('preview'), false);
 });

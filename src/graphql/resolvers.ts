@@ -33,6 +33,7 @@ import { folderChainTrashed } from '../lib/shareLink';
 import * as Trash from '@/modules/trash';
 import * as Upload from '@/modules/upload';
 import * as Library from '@/modules/library';
+import * as Pipeline from '@/modules/pipeline';
 import { storage, storageKeys } from '@/modules/storage';
 import { isSupportedLocale } from '@/modules/i18n';
 import { previewOf } from '@/modules/media';
@@ -52,6 +53,16 @@ const MAX_CHAT_MESSAGE_LENGTH = 5000;
 
 function notFound(message: string) {
   return new GraphQLError(message, { extensions: { code: 'NOT_FOUND' } });
+}
+
+/** Story 5.1: job API refusals as coded GraphQL errors. */
+function jobError(err: unknown): unknown {
+  if (err instanceof Pipeline.JobRequestError) {
+    if (err.code === 'KIND_UNKNOWN') return codedError('KIND_UNKNOWN', err.message);
+    if (err.code === 'JOB_TERMINAL') return codedError('JOB_TERMINAL', err.message);
+    return notFound(err.message);
+  }
+  return err;
 }
 
 // Story 2.5: writes that target a Section, file or project require a live
@@ -559,6 +570,18 @@ const rawResolvers = {
       assertCan(context.actor, 'project.view');
       const file = await assertLiveFile(fileId);
       return prisma.processedVersion.findMany({ where: { mediaFileId: file.id }, orderBy: { createdAt: 'desc' } });
+    },
+
+    pipelineJob: async (_: unknown, { id }: { id: string }, context: GraphQLContext) => {
+      assertCan(context.actor, 'project.view');
+      const job = await Pipeline.jobById(id);
+      if (!job) return null;
+      try {
+        await assertLiveFile(job.fileId);
+      } catch {
+        return null;
+      }
+      return job;
     },
 
     // Story 4.5: one query shape with or without Elasticsearch (library module).
@@ -1138,6 +1161,27 @@ const rawResolvers = {
       return true;
     },
 
+    enqueueJob: async (_: unknown, { fileId, kind }: { fileId: string; kind: string }, context: GraphQLContext) => {
+      const actor = actorOf(context);
+      assertCan(actor, 'pipeline.trigger');
+      const file = await assertLiveFile(fileId);
+      try {
+        return await Pipeline.enqueueJob({ fileId: file.id, kind, createdById: actor.id });
+      } catch (err) {
+        throw jobError(err);
+      }
+    },
+
+    cancelJob: async (_: unknown, { id }: { id: string }, context: GraphQLContext) => {
+      const actor = actorOf(context);
+      assertCan(actor, 'pipeline.trigger');
+      try {
+        return await Pipeline.cancelJob(id);
+      } catch (err) {
+        throw jobError(err);
+      }
+    },
+
     cancelUpload: async (_: any, { sessionId }: { sessionId: string }, context: GraphQLContext) => {
       const actor = actorOf(context);
       assertCan(actor, 'upload');
@@ -1436,6 +1480,7 @@ const rawResolvers = {
       const preview = previewOf(await processedVersionsOf(parent, context));
       return preview ? mediaUrl.processed(preview.id) : null;
     },
+    jobs: async (parent: { id: string }) => Pipeline.jobsForFile(parent.id),
     uploadedBy: async (parent: any) => {
       if (parent.uploadedBy) return parent.uploadedBy;
       if (!parent.uploadedById) return null;
@@ -1445,6 +1490,11 @@ const rawResolvers = {
 
   ProcessedVersion: {
     downloadUrl: (parent: { id: string }) => mediaUrl.processed(parent.id),
+  },
+
+  PipelineJob: {
+    outputVersion: async (parent: { outputVersionId: string | null }) =>
+      parent.outputVersionId ? prisma.processedVersion.findUnique({ where: { id: parent.outputVersionId } }) : null,
   },
 
   // Story 4.4 (aditif): `ShareLink.createdBy` dimuat dari createdById bila

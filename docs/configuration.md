@@ -95,6 +95,15 @@ client id, enabled features, version, default language) from
 | `SHOTSTASH_TRASH_RETENTION_DAYS` | `30` |  | Days an item stays in the Trash before the hourly sweeper deletes it for good. |
 | `SHOTSTASH_VERSION` |  |  | Set by the Docker image. Leave unset; the version in package.json is used otherwise. |
 
+## Pipeline
+
+| Variable | Default | Required | Description |
+| --- | --- | --- | --- |
+| `WORKER_BOOTSTRAP_TOKEN` |  |  | Shared token a processing worker presents once to register (POST /api/v1/pipeline/workers/register); each worker then gets its own token. docker compose requires it (the bundled reference worker uses it). Empty: no worker can register. Secret. |
+| `SHOTSTASH_PIPELINE_MAX_OUTPUT_MB` | `20480` |  | Largest output a worker may upload for one job, in megabytes (MiB). |
+| `SHOTSTASH_PIPELINE_LEASE_SECONDS` | `90` |  | A claimed job whose worker sent no heartbeat for this long goes back to the queue (it fails after 3 attempts). Workers heartbeat every 30 s; a worker seen within this time counts as live. |
+| `SHOTSTASH_PIPELINE_SWEEP_SECONDS` | `30` |  | How often the job sweeper looks for expired claims. At least 5 in production; shorter values are for tests. |
+
 ## Demo
 
 | Variable | Default | Required | Description |

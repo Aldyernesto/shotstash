@@ -45,6 +45,7 @@ export const GROUPS = [
   'Sign-in',
   'Email',
   'Product',
+  'Pipeline',
   'Demo',
   'Docker Compose',
 ] as const;
@@ -77,6 +78,8 @@ export type VarDef<T = unknown, Always extends boolean = boolean> = {
 export const SECRET_PLACEHOLDER = 'change-me-before-first-run';
 export const MIN_SECRET_LENGTH = 32;
 export const SECRET_HINT = 'openssl rand -hex 32';
+/** Shortest pipeline sweep interval allowed with NODE_ENV=production (seconds). */
+export const PIPELINE_SWEEP_MIN_PRODUCTION = 5;
 
 const text = z.string().trim().min(1);
 const url = z
@@ -369,6 +372,55 @@ export const VARIABLES = {
     description: 'Set by the Docker image. Leave unset; the version in package.json is used otherwise.',
   }),
 
+  /* ---------- Pipeline ---------- */
+  WORKER_BOOTSTRAP_TOKEN: opt({
+    group: 'Pipeline',
+    kind: 'infra',
+    secret: true,
+    schema: secret,
+    description:
+      'Shared token a processing worker presents once to register (POST /api/v1/pipeline/workers/register); each worker then ' +
+      'gets its own token. docker compose requires it (the bundled reference worker uses it). Empty: no worker can register.',
+  }),
+  SHOTSTASH_PIPELINE_MAX_OUTPUT_MB: withDefault({
+    group: 'Pipeline',
+    kind: 'product',
+    schema: z.coerce
+      .number({ error: 'must be a whole number of megabytes' })
+      .int('must be a whole number of megabytes')
+      .min(1, 'must be at least 1')
+      .max(1048576, 'must be at most 1048576 (1 TiB)'),
+    default: 20480,
+    example: '20480',
+    description: 'Largest output a worker may upload for one job, in megabytes (MiB).',
+  }),
+  SHOTSTASH_PIPELINE_LEASE_SECONDS: withDefault({
+    group: 'Pipeline',
+    kind: 'product',
+    schema: z.coerce
+      .number({ error: 'must be a whole number of seconds' })
+      .int('must be a whole number of seconds')
+      .min(30, 'must be at least 30')
+      .max(3600, 'must be at most 3600'),
+    default: 90,
+    example: '90',
+    description:
+      'A claimed job whose worker sent no heartbeat for this long goes back to the queue (it fails after 3 attempts). ' +
+      'Workers heartbeat every 30 s; a worker seen within this time counts as live.',
+  }),
+  SHOTSTASH_PIPELINE_SWEEP_SECONDS: withDefault({
+    group: 'Pipeline',
+    kind: 'product',
+    schema: z.coerce
+      .number({ error: 'must be a whole number of seconds' })
+      .int('must be a whole number of seconds')
+      .min(1, 'must be at least 1')
+      .max(3600, 'must be at most 3600'),
+    default: 30,
+    example: '30',
+    description: `How often the job sweeper looks for expired claims. At least ${PIPELINE_SWEEP_MIN_PRODUCTION} in production; shorter values are for tests.`,
+  }),
+
   /* ---------- Demo ---------- */
   SHOTSTASH_DEMO_MODE: withDefault({
     group: 'Demo',
@@ -484,6 +536,10 @@ export function loadConfig(env: Env): { config: Config; problems: string[] } {
   // Cross-field rules, after every variable parsed on its own.
   if (values.EMAIL_TRANSPORT === 'resend' && !values.RESEND_API_KEY) {
     problems.push('RESEND_API_KEY: required when EMAIL_TRANSPORT=resend');
+  }
+  if (values.NODE_ENV === 'production' && Number(values.SHOTSTASH_PIPELINE_SWEEP_SECONDS) < PIPELINE_SWEEP_MIN_PRODUCTION) {
+    problems.push(`SHOTSTASH_PIPELINE_SWEEP_SECONDS: must be at least ${PIPELINE_SWEEP_MIN_PRODUCTION} in production`);
+    values.SHOTSTASH_PIPELINE_SWEEP_SECONDS = VARIABLES.SHOTSTASH_PIPELINE_SWEEP_SECONDS.default;
   }
   if (values.STORAGE_BACKEND === 's3') {
     for (const name of ['S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const) {
