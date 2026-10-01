@@ -23,6 +23,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { isValidTimeZone, resolveLocale } from '../i18n/config.ts';
 import { brand } from './brand.ts';
+import { HEARTBEAT_SECONDS } from './pipelineContract.ts';
 
 /* ------------------------------------------------------------------ */
 /* Variable table                                                      */
@@ -540,6 +541,20 @@ export function loadConfig(env: Env): { config: Config; problems: string[] } {
   if (values.NODE_ENV === 'production' && Number(values.SHOTSTASH_PIPELINE_SWEEP_SECONDS) < PIPELINE_SWEEP_MIN_PRODUCTION) {
     problems.push(`SHOTSTASH_PIPELINE_SWEEP_SECONDS: must be at least ${PIPELINE_SWEEP_MIN_PRODUCTION} in production`);
     values.SHOTSTASH_PIPELINE_SWEEP_SECONDS = VARIABLES.SHOTSTASH_PIPELINE_SWEEP_SECONDS.default;
+  }
+  // A lease must survive one lost heartbeat, and the sweeper must look at
+  // least twice per lease.
+  const lease = Number(values.SHOTSTASH_PIPELINE_LEASE_SECONDS);
+  const sweep = Number(values.SHOTSTASH_PIPELINE_SWEEP_SECONDS);
+  if (lease <= 2 * HEARTBEAT_SECONDS) {
+    problems.push(
+      `SHOTSTASH_PIPELINE_LEASE_SECONDS: must be more than twice the worker heartbeat interval (${HEARTBEAT_SECONDS} s), so more than ${2 * HEARTBEAT_SECONDS}`,
+    );
+  }
+  if (sweep > lease / 2) {
+    problems.push(
+      `SHOTSTASH_PIPELINE_SWEEP_SECONDS: must be at most half of SHOTSTASH_PIPELINE_LEASE_SECONDS (${sweep} > ${lease} / 2)`,
+    );
   }
   if (values.STORAGE_BACKEND === 's3') {
     for (const name of ['S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const) {

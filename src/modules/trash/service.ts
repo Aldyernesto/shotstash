@@ -28,6 +28,7 @@ import { coverIdFromUrl, deleteCover } from '@/modules/media';
 import { storage, storageKeys } from '@/modules/storage';
 import { detachDuplicates, detachDuplicatesOfProject, markConflictsAsDuplicates, resettle } from '@/modules/upload';
 import { syncSearch, syncSearchLater } from '@/modules/library';
+import { cancelJobsOfTrashedFiles } from '@/modules/pipeline';
 import { batches, expiredRootWhere, planFolderTrash, retentionCutoff, subtreeFolderIds } from './plan';
 import { errMessage, logger } from '@/lib/logger';
 
@@ -43,12 +44,18 @@ const RESTORE_PARENT_FIRST = 'This item is inside a trashed Section: restore the
 /* Trash                                                               */
 /* ------------------------------------------------------------------ */
 
+/** Story 5.1: unfinished pipeline jobs of trashed files are cancelled ("file trashed"); the sweeper retries a failure. */
+async function cancelTrashedJobs() {
+  await cancelJobsOfTrashedFiles().catch((err) => logger('trash').warn('job cancel failed', { err: errMessage(err) }));
+}
+
 export async function trashFile(fileId: string) {
   const file = await prisma.mediaFile.findUnique({ where: { id: fileId }, select: { id: true, trashedAt: true, status: true } });
   if (!file || file.status !== 'ready') throw trashError('NOT_FOUND', 'File not found');
   if (file.trashedAt) throw trashError('ALREADY_TRASHED', 'File is already in the Trash');
   await prisma.mediaFile.update({ where: { id: fileId }, data: { trashedAt: new Date(), trashRootId: null } });
   syncSearchLater([fileId]);
+  await cancelTrashedJobs();
   return true;
 }
 
@@ -83,6 +90,7 @@ export async function trashFolder(folderId: string) {
     return plan.fileIds;
   });
   syncSearchLater(trashed);
+  if (trashed.length) await cancelTrashedJobs();
   return true;
 }
 

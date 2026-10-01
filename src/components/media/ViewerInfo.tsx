@@ -40,6 +40,8 @@ import { StatusChip } from "@/components/form/StatusChip";
 export type ViewerVersion = {
   id: string;
   kind: string;
+  /** Stored label of a pipeline kind (`pipeline_kinds.label`). */
+  kindLabel?: string | null;
   mimeType: string;
   size?: number | string | null;
   createdAt?: string | number | Date | null;
@@ -115,10 +117,16 @@ const DownloadIcon = (
   </svg>
 );
 
-/** Known kinds read as words; anything else (a future pipeline kind) is shown as is. */
+/**
+ * Known kinds read as translated words, looked up in a plain map (kinds such
+ * as `shotstash/proxy-720p` contain characters that are not key paths);
+ * other kinds use their stored label, then the kind itself.
+ */
 function useKindLabel() {
   const t = useTranslations("viewer.info.versions");
-  return (kind: string) => (t.has(`kind.${kind}` as never) ? t(`kind.${kind}` as never) : kind);
+  const labels = t.raw("kind" as never) as Record<string, string>;
+  return (v: Pick<ViewerVersion, "kind" | "kindLabel">) =>
+    (Object.prototype.hasOwnProperty.call(labels, v.kind) ? labels[v.kind] : null) || v.kindLabel || v.kind;
 }
 
 function VersionsList({ versions }: { versions: ViewerVersion[] }) {
@@ -134,7 +142,7 @@ function VersionsList({ versions }: { versions: ViewerVersion[] }) {
       <ul className={styles.versionList}>
         {versions.map((v) => {
           const type = (v.mimeType.split("/").pop() || "").toUpperCase();
-          const label = kindLabel(v.kind);
+          const label = kindLabel(v);
           return (
             <li key={v.id} className={styles.version}>
               <div className={styles.versionText}>

@@ -7,6 +7,10 @@
 -- worker registering a new kind adds it. Worker tokens are stored only as
 -- SHA-256 hashes. Purging a file deletes its jobs (cascade).
 
+-- One unfinished job per file and kind (enqueue answers the open one), a
+-- run_after delay between retries, MIME prefixes a kind applies to, and one
+-- worker row per name.
+
 -- CreateEnum
 CREATE TYPE "PipelineJobStatus" AS ENUM ('queued', 'claimed', 'running', 'done', 'failed', 'cancelled');
 
@@ -22,6 +26,7 @@ CREATE TABLE "pipeline_jobs" (
     "claimed_by" TEXT,
     "claim_token" TEXT,
     "heartbeat_at" TIMESTAMP(3),
+    "run_after" TIMESTAMPTZ(3),
     "progress" INTEGER NOT NULL DEFAULT 0,
     "seq" BIGINT NOT NULL DEFAULT 0,
     "error" TEXT,
@@ -42,6 +47,7 @@ CREATE TABLE "pipeline_kinds" (
     "name" TEXT NOT NULL,
     "label" TEXT,
     "built_in" BOOLEAN NOT NULL DEFAULT false,
+    "accepts" TEXT[],
     "first_seen" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "pipeline_kinds_pkey" PRIMARY KEY ("name")
@@ -71,6 +77,9 @@ CREATE INDEX "pipeline_jobs_status_heartbeat_at_idx" ON "pipeline_jobs"("status"
 CREATE INDEX "pipeline_jobs_media_file_id_idx" ON "pipeline_jobs"("media_file_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "pipeline_workers_name_key" ON "pipeline_workers"("name");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "pipeline_workers_token_hash_key" ON "pipeline_workers"("token_hash");
 
 -- CreateIndex
@@ -89,9 +98,13 @@ ALTER TABLE "pipeline_jobs" ADD CONSTRAINT "pipeline_jobs_claimed_by_fkey" FOREI
 ALTER TABLE "pipeline_jobs" ADD CONSTRAINT "pipeline_jobs_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 
--- Built-in kinds: the reference worker's proxy and the full-size HEIC
--- conversion (no worker ships for it yet; it waits for one).
-INSERT INTO "pipeline_kinds" ("name", "label", "built_in") VALUES
-  ('shotstash/proxy-720p', 'Proxy (720p)', true),
-  ('shotstash/heic-to-jpeg', 'Full-size JPEG', true)
+-- One unfinished job per file and kind.
+CREATE UNIQUE INDEX "pipeline_jobs_open_file_kind_key" ON "pipeline_jobs"("media_file_id", "kind")
+WHERE "status" IN ('queued', 'claimed', 'running');
+
+-- Built-in kinds: the reference worker's proxy (videos only) and the
+-- full-size HEIC conversion (no worker ships for it yet; it waits for one).
+INSERT INTO "pipeline_kinds" ("name", "label", "built_in", "accepts") VALUES
+  ('shotstash/proxy-720p', 'Proxy (720p)', true, ARRAY['video/']),
+  ('shotstash/heic-to-jpeg', 'Full-size JPEG', true, ARRAY['image/heic', 'image/heif'])
 ON CONFLICT ("name") DO NOTHING;

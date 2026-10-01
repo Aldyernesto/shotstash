@@ -12,7 +12,10 @@ export type { BuiltInKind } from './kinds.ts';
 export {
   JOB_STATUSES,
   MAX_ATTEMPTS,
+  OUTPUT_MIME_TYPES,
   PipelineFailure,
+  RETRY_DELAY_SECONDS,
+  kindAccepts,
   contractMajor,
   isTerminal,
   jobState,
@@ -43,11 +46,15 @@ export type {
   ProgressResponse,
   RegisterRequest,
   RegisterResponse,
+  ReleaseResponse,
 } from './contract.ts';
 export {
+  FILE_TRASHED_ERROR,
   JobRequestError,
   LEASE_EXPIRED_ERROR,
+  WORKER_PRUNE_DAYS,
   cancelJob,
+  cancelJobsOfTrashedFiles,
   claimNext,
   completeJob,
   enqueueJob,
@@ -56,14 +63,18 @@ export {
   inputResponse,
   jobById,
   jobsForFile,
+  kindLabel,
   leaseSeconds,
+  listWorkers,
   liveKinds,
   pipelineCounts,
+  pruneWorkers,
   registerWorker,
+  releaseJob,
   reportProgress,
   revokeWorker,
   storeOutput,
   sweepExpiredClaims,
 } from './service.ts';
-export type { JobView } from './service.ts';
+export type { JobRequestCode, JobView, WorkerView } from './service.ts';
 export { pipelineErrorResponse, readJsonBody } from './http.ts';

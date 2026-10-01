@@ -112,6 +112,9 @@ async function resolveWorker(req: NextRequest, bootstrap: boolean): Promise<{ wo
     if (!bootstrapTokenMatches(req.headers.get(WORKER_BOOTSTRAP_HEADER))) return { refused: unauthenticatedResponse() };
     return { worker: null };
   }
+  // Per IP before the token lookup, so guessing tokens costs a budget too.
+  const byIp = await limitBy('workerIp', clientIp(req.headers) ?? 'unknown');
+  if (!byIp.ok) return { refused: rateLimitedResponse(byIp.retryAfter) };
   const worker = await validateWorkerToken(req.headers.get(WORKER_TOKEN_HEADER));
   if (!worker) return { refused: unauthenticatedResponse() };
   const limited = await limitBy('worker', worker.id);

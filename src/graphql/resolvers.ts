@@ -59,6 +59,7 @@ function notFound(message: string) {
 function jobError(err: unknown): unknown {
   if (err instanceof Pipeline.JobRequestError) {
     if (err.code === 'KIND_UNKNOWN') return codedError('KIND_UNKNOWN', err.message);
+    if (err.code === 'KIND_NOT_APPLICABLE') return codedError('KIND_NOT_APPLICABLE', err.message);
     if (err.code === 'JOB_TERMINAL') return codedError('JOB_TERMINAL', err.message);
     return notFound(err.message);
   }
@@ -582,6 +583,11 @@ const rawResolvers = {
         return null;
       }
       return job;
+    },
+
+    pipelineWorkers: async (_: unknown, __: unknown, context: GraphQLContext) => {
+      assertCan(context.actor, 'instance.configure');
+      return Pipeline.listWorkers();
     },
 
     // Story 4.5: one query shape with or without Elasticsearch (library module).
@@ -1175,11 +1181,20 @@ const rawResolvers = {
     cancelJob: async (_: unknown, { id }: { id: string }, context: GraphQLContext) => {
       const actor = actorOf(context);
       assertCan(actor, 'pipeline.trigger');
+      // Like the other job queries: a job of a trashed or deleted file is not found.
+      const job = await Pipeline.jobById(id);
+      if (!job) throw notFound('Job not found');
+      await assertLiveFile(job.fileId);
       try {
         return await Pipeline.cancelJob(id);
       } catch (err) {
         throw jobError(err);
       }
+    },
+
+    revokeWorker: async (_: unknown, { id }: { id: string }, context: GraphQLContext) => {
+      assertCan(context.actor, 'instance.configure');
+      return Pipeline.revokeWorker(id);
     },
 
     cancelUpload: async (_: any, { sessionId }: { sessionId: string }, context: GraphQLContext) => {
@@ -1490,6 +1505,7 @@ const rawResolvers = {
 
   ProcessedVersion: {
     downloadUrl: (parent: { id: string }) => mediaUrl.processed(parent.id),
+    kindLabel: (parent: { kind: string }) => Pipeline.kindLabel(parent.kind).catch(() => null),
   },
 
   PipelineJob: {

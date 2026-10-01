@@ -26,6 +26,7 @@ on `worker` routes they name the credential (`bootstrap token`, `registered work
 | `/api/v1/pipeline/jobs/[id]/input` | GET | worker | claim holder |
 | `/api/v1/pipeline/jobs/[id]/output` | PUT | worker | claim holder |
 | `/api/v1/pipeline/jobs/[id]/progress` | POST | worker | claim holder |
+| `/api/v1/pipeline/jobs/[id]/release` | POST | worker | claim holder |
 | `/api/v1/pipeline/jobs/next` | POST | worker | registered worker |
 | `/api/v1/pipeline/workers/heartbeat` | POST | worker | registered worker |
 | `/api/v1/pipeline/workers/register` | POST | worker | bootstrap token |
@@ -61,6 +62,7 @@ on `worker` routes they name the credential (`bootstrap token`, `registered work
 | `Query.passwordResetAvailable` | public |  |
 | `Query.pendingUsers` | session | users.manage |
 | `Query.pipelineJob` | session | project.view |
+| `Query.pipelineWorkers` | session | instance.configure |
 | `Query.processedVersions` | session | project.view |
 | `Query.project` | session | project.view |
 | `Query.projects` | session | project.view |
@@ -106,6 +108,7 @@ on `worker` routes they name the credential (`bootstrap token`, `registered work
 | `Mutation.restoreFile` | session | item.trash |
 | `Mutation.restoreFolder` | session | item.trash |
 | `Mutation.revokeShareLink` | session | share.manage |
+| `Mutation.revokeWorker` | session | instance.configure |
 | `Mutation.sendMessage` | session | discussion.use |
 | `Mutation.updateProfile` | session | self |
 | `Mutation.updateProject` | session | item.move |

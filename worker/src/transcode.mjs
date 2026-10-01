@@ -118,8 +118,14 @@ export async function probe(input, { signal } = {}) {
   };
 }
 
-/** Transcodes `input` to the proxy at `output`, reporting whole percents. */
-export async function makeProxy(input, output, { durationSeconds, onPercent, signal }) {
+/** Transcodes `input` to the proxy at `output`, reporting whole percents; `onActivity` fires on every progress block. */
+export async function makeProxy(input, output, { durationSeconds, onPercent, onActivity = () => {}, signal }) {
   const parser = createProgressParser(durationSeconds, onPercent);
-  await run('ffmpeg', proxyArgs(input, output), { signal, onStdout: (d) => parser.push(d) });
+  await run('ffmpeg', proxyArgs(input, output), {
+    signal,
+    onStdout: (d) => {
+      onActivity();
+      parser.push(d);
+    },
+  });
 }

@@ -11,9 +11,10 @@
 // heartbeats back in time in the database to make the sweeper expire claims.
 import 'dotenv/config';
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
+import sharp from 'sharp';
 
 const LOCAL = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 const B = process.env.E2E_BASE_URL || 'http://localhost:3005';
@@ -51,6 +52,20 @@ const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const md5hex = (buf) => createHash('md5').update(buf).digest('hex');
 const md5b64 = (buf) => createHash('md5').update(buf).digest('base64');
 
+// A refused upload (413) is answered before its body is read, and the server
+// then closes that keep-alive socket; a request that reuses it fails with
+// ECONNRESET before it reaches the server. Send such a request once more.
+const rawFetch = globalThis.fetch;
+globalThis.fetch = async (url, init) => {
+  try {
+    return await rawFetch(url, init);
+  } catch (err) {
+    const replayable = !(init?.body instanceof ReadableStream);
+    if (replayable && err?.cause?.code === 'ECONNRESET') return rawFetch(url, init);
+    throw err;
+  }
+};
+
 // One short-lived connection per query (the PGlite dev database serves one at a time).
 async function sql(text, params) {
   const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
@@ -75,7 +90,10 @@ const code = (res) => res.errors?.[0]?.extensions?.code;
 
 /* ---------------- worker side ---------------- */
 
-const manifest = (kinds, extra = {}) => ({ name: 'e2e-worker', version: '0.0.1', kinds, contract: 1, ...extra });
+// Workers are one row per name: every test worker gets its own name.
+let workerCount = 0;
+const workerName = () => `e2e-${RUN}-w${++workerCount}`;
+const manifest = (kinds, extra = {}) => ({ name: workerName(), version: '0.0.1', kinds, contract: 1, ...extra });
 
 async function call(method, p, { token, bootstrap, claim, body, headers = {} } = {}) {
   const h = { ...headers };
@@ -101,16 +119,17 @@ async function call(method, p, { token, bootstrap, claim, body, headers = {} } =
   return { status: r.status, headers: r.headers, json, buf };
 }
 
-async function register(kinds) {
-  const r = await call('POST', 'workers/register', { bootstrap: BOOTSTRAP, body: { manifest: manifest(kinds) } });
+async function register(kinds, name = workerName()) {
+  const r = await call('POST', 'workers/register', { bootstrap: BOOTSTRAP, body: { manifest: { ...manifest(kinds), name } } });
   if (r.status !== 201) throw new Error(`register failed: ${r.status} ${r.buf.toString()}`);
-  return { id: r.json.workerId, token: r.json.token, kinds };
+  return { id: r.json.workerId, token: r.json.token, kinds, name };
 }
 const next = (w) => call('POST', 'jobs/next', { token: w.token, body: {} });
 const progress = (w, job, pct, claim = job.claimToken) => call('POST', `jobs/${job.id}/progress`, { token: w.token, claim, body: { progress: pct } });
 const output = (w, job, buf, claim = job.claimToken) =>
   call('PUT', `jobs/${job.id}/output`, { token: w.token, claim, body: buf, headers: { 'content-type': 'video/mp4', 'x-output-ext': 'mp4' } });
 const complete = (w, job, claim = job.claimToken) => call('POST', `jobs/${job.id}/complete`, { token: w.token, claim, body: {} });
+const release = (w, job) => call('POST', `jobs/${job.id}/release`, { token: w.token, claim: job.claimToken, body: {} });
 const failJob = (w, job, error, retryable) => call('POST', `jobs/${job.id}/fail`, { token: w.token, claim: job.claimToken, body: { error, retryable } });
 
 async function claimOne(w) {
@@ -141,8 +160,30 @@ async function objectExists(key) {
   return existsSync(path.join(process.env.STORAGE_LOCAL_ROOT || './data/media', key));
 }
 
+/** Number of stored objects under a key prefix (such as files/<id>/proc/). */
+async function objectsUnder(prefix) {
+  if ((process.env.STORAGE_BACKEND || 'local') === 's3') {
+    const { S3Client, ListObjectsV2Command } = await import('@aws-sdk/client-s3');
+    const s3 = new S3Client({
+      endpoint: process.env.S3_ENDPOINT || undefined,
+      region: process.env.S3_REGION || 'us-east-1',
+      forcePathStyle: /^(true|1|yes)$/i.test(process.env.S3_FORCE_PATH_STYLE || ''),
+      credentials: { accessKeyId: process.env.S3_ACCESS_KEY_ID, secretAccessKey: process.env.S3_SECRET_ACCESS_KEY },
+    });
+    const r = await s3.send(new ListObjectsV2Command({ Bucket: process.env.S3_BUCKET, Prefix: prefix }));
+    return r.KeyCount ?? 0;
+  }
+  const dir = path.join(process.env.STORAGE_LOCAL_ROOT || './data/media', prefix);
+  return existsSync(dir) ? readdirSync(dir).length : 0;
+}
+
 const jobRow = async (id) => (await sql('SELECT status::text AS status, attempts, claimed_by, claim_token, output_key, error FROM pipeline_jobs WHERE id = $1', [id]))[0];
 const expire = (id) => sql("UPDATE pipeline_jobs SET heartbeat_at = now() - interval '1 hour' WHERE id = $1", [id]);
+/** A requeued job waits 30 s per attempt (run_after); the tests skip the wait. */
+const skipDelay = (id) => sql('UPDATE pipeline_jobs SET run_after = NULL WHERE id = $1', [id]);
+const LEASE = Number(process.env.SHOTSTASH_PIPELINE_LEASE_SECONDS || 90);
+const SWEEP = Number(process.env.SHOTSTASH_PIPELINE_SWEEP_SECONDS || 30);
+const MAX_OUTPUT_MB = Number(process.env.SHOTSTASH_PIPELINE_MAX_OUTPUT_MB || 0);
 
 async function waitFor(fn, ms = SWEEP_WAIT_MS) {
   const end = Date.now() + ms;
@@ -166,8 +207,12 @@ const project = proj.data.projects.find((p) => p.title === 'Sample project');
 const folder = project.folders[0];
 const INIT = 'mutation($i: InitiateUploadInput!){ initiateUpload(input:$i){ id fileId partSize partCount } }';
 const COMPLETE_UPLOAD = 'mutation($s: ID!, $m: String){ completeUpload(sessionId:$s, md5Checksum:$m){ id } }';
-async function upload(name) {
-  const buf = Buffer.concat([Buffer.from('000000186674797069736f6d0000020069736f6d6d703431', 'hex'), randomBytes(20000)]);
+const JPEG = await sharp({ create: { width: 32, height: 24, channels: 3, background: '#808080' } }).jpeg().toBuffer();
+async function upload(name, kind = 'video') {
+  const buf =
+    kind === 'jpeg'
+      ? Buffer.concat([JPEG, randomBytes(16)])
+      : Buffer.concat([Buffer.from('000000186674797069736f6d0000020069736f6d6d703431', 'hex'), randomBytes(20000)]);
   const init = (await gql(editor.token, INIT, { i: { filename: name, totalSize: buf.length, projectId: project.id, folderId: folder.id } })).data.initiateUpload;
   await fetch(`${B}/api/v1/uploads/${init.id}/parts/1`, {
     method: 'PUT',
@@ -347,6 +392,11 @@ let doneVersionId = null;
   ok(row.status === 'queued' && !row.claim_token && row.error === 'temporary trouble', 'requeued job keeps the error and drops the claim', JSON.stringify(row));
   r = await progress(w, job, 10);
   ok(r.status === 409 && r.json?.code === 'CLAIM_STALE', 'the old claim is stale after a requeue', r.status);
+  const delay = (await sql('SELECT EXTRACT(EPOCH FROM run_after - now())::int AS s FROM pipeline_jobs WHERE id = $1', [q.data.enqueueJob.id]))[0];
+  ok(delay && delay.s >= 25 && delay.s <= 31, 'a retryable failure sets run_after 30 s per attempt', JSON.stringify(delay));
+  r = await next(w);
+  ok(r.status === 204, 'run_after delays the retried claim (204 meanwhile)', r.status);
+  await skipDelay(q.data.enqueueJob.id);
   job = await claimOne(w);
   ok(job.attempt === 2, 'second claim is attempt 2', job.attempt);
   r = await failJob(w, job, 'the input is broken', false);
@@ -398,7 +448,12 @@ let doneVersionId = null;
       return r.status === expected ? r : null;
     });
     ok(row && row.attempts === attempt, `missed heartbeats: attempt ${attempt} ends ${expected} (sweeper)`, JSON.stringify(row ?? (await jobRow(id))));
-    if (attempt < 3) ok(row && !row.claimed_by && !row.claim_token, 'the expired claim is cleared');
+    if (attempt < 3) {
+      ok(row && !row.claimed_by && !row.claim_token, 'the expired claim is cleared');
+      const ra = (await sql('SELECT run_after IS NOT NULL AND run_after > now() AS delayed FROM pipeline_jobs WHERE id = $1', [id]))[0];
+      ok(ra?.delayed, 'a sweeper requeue sets run_after');
+      await skipDelay(id);
+    }
     else ok(row && /heartbeats/.test(row.error ?? ''), 'third expiry fails the job with the heartbeat error', row?.error);
   }
   const late = await progress(w, { id, claimToken: (await jobRow(id)).claim_token }, 99);
@@ -418,6 +473,7 @@ let doneVersionId = null;
   ok(await objectExists(staleKey), 'the output object exists before the requeue', staleKey);
   await expire(id);
   ok(await waitFor(async () => (await jobRow(id)).status === 'queued'), 'the sweeper requeues the silent claim');
+  await skipDelay(id);
   const fresh = await claimOne(w2);
   ok(fresh.id === id && fresh.attempt === 2, 'another worker claims it (attempt 2)');
   const lateDone = await complete(w1, old);
@@ -431,6 +487,167 @@ let doneVersionId = null;
   ok(fin.status === 200 && done.status === 200, 'the new claim completes');
   const pv = (await sql('SELECT attempt FROM processed_versions WHERE job_id = $1', [id]))[0];
   ok(pv?.attempt === 2, 'its version records attempt 2', JSON.stringify(pv));
+}
+
+/* ---------------- heartbeats keep a claim alive ---------------- */
+{
+  const k = kind('hb');
+  const w = await register([k]);
+  await enqueue(file.id, k);
+  const job = await claimOne(w);
+  // Ten seconds before the lease runs out: without a heartbeat the next sweeps would requeue it.
+  await sql(`UPDATE pipeline_jobs SET heartbeat_at = now() - make_interval(secs => $2) WHERE id = $1`, [job.id, LEASE - 10]);
+  const hb = await call('POST', 'workers/heartbeat', { token: w.token, body: { manifest: manifest([k]), activeJobIds: [job.id] } });
+  ok(hb.status === 200 && Array.isArray(hb.json?.lostJobIds) && hb.json.lostJobIds.length === 0, 'heartbeat with the held job: lostJobIds empty', JSON.stringify(hb.json));
+  await new Promise((r) => setTimeout(r, (12 + 2 * SWEEP) * 1000));
+  const row = await jobRow(job.id);
+  ok(row.status === 'claimed' && row.attempts === 1 && row.claimed_by === w.id, 'after the sweeps the job is still claimed, attempt 1', JSON.stringify(row));
+  await failJob(w, job, 'e2e cleanup', false);
+}
+
+/* ---------------- double enqueue, release, workers by name ---------------- */
+{
+  const k = kind('double');
+  const w = await register([k]);
+  const [a, b] = await Promise.all([enqueue(file.id, k), enqueue(file.id, k)]);
+  const rows = await sql("SELECT id FROM pipeline_jobs WHERE media_file_id = $1 AND kind = $2", [file.id, k]);
+  ok(a.data?.enqueueJob?.id && a.data.enqueueJob.id === b.data?.enqueueJob?.id && rows.length === 1, 'two concurrent enqueues make one job', JSON.stringify([a.errors ?? a.data, b.errors ?? b.data, rows.length]));
+
+  const job = await claimOne(w);
+  ok((await output(w, job, randomBytes(500))).status === 200, 'output before a release');
+  const key = (await jobRow(job.id)).output_key;
+  const r = await release(w, job);
+  ok(r.status === 200 && r.json?.status === 'queued' && r.json.attempts === 0, 'release puts the job back without spending an attempt', JSON.stringify(r.json));
+  const row = (await sql('SELECT status::text AS status, attempts, claim_token, run_after FROM pipeline_jobs WHERE id = $1', [job.id]))[0];
+  ok(row.status === 'queued' && row.attempts === 0 && !row.claim_token && row.run_after === null, 'released row: queued, attempts 0, no claim, no delay', JSON.stringify(row));
+  ok(!(await objectExists(key)), 'release deletes the uploaded output');
+  const again = await claimOne(w);
+  ok(again.id === job.id && again.attempt === 1, 'the released job is claimed again at once as attempt 1', again.attempt);
+  const stale = await release(w, job);
+  ok(stale.status === 409 && stale.json?.code === 'CLAIM_STALE', 'releasing with the old claim 409 CLAIM_STALE', stale.status);
+  const noClaim = await call('POST', `jobs/${job.id}/release`, { token: w.token, body: {} });
+  ok(noClaim.status === 400 && noClaim.json?.code === 'CLAIM_TOKEN_REQUIRED', 'release without a claim token 400', noClaim.status);
+  await failJob(w, again, 'e2e cleanup', false);
+
+  // One row per name: registering again rotates the token on the same row.
+  const name = `e2e-${RUN}-named`;
+  const first = await register([k], name);
+  const second = await register([k], name);
+  const named = await sql('SELECT id FROM pipeline_workers WHERE name = $1', [name]);
+  ok(first.id === second.id && named.length === 1, 'registering one name twice keeps one row', JSON.stringify(named));
+  ok((await next(first)).status === 401, 'the rotated-out token stops working');
+  ok([200, 204].includes((await next(second)).status), 'the new token works');
+
+  // Revocation (super admin): token refused, name refused.
+  const listed = await gql(sa.token, '{ pipelineWorkers { id name live revokedAt } }');
+  ok(listed.data?.pipelineWorkers?.some((x) => x.id === second.id && x.live === true), 'pipelineWorkers lists the worker as live (super admin)', JSON.stringify(listed.errors ?? ''));
+  ok(code(await gql(editor.token, '{ pipelineWorkers { id } }')) === 'FORBIDDEN', 'pipelineWorkers FORBIDDEN for an editor');
+  ok(code(await gql(editor.token, 'mutation($id: ID!){ revokeWorker(id:$id){ id } }', { id: second.id })) === 'FORBIDDEN', 'revokeWorker FORBIDDEN for an editor');
+  const rv = await gql(sa.token, 'mutation($id: ID!){ revokeWorker(id:$id){ id revokedAt live } }', { id: second.id });
+  ok(rv.data?.revokeWorker?.revokedAt && rv.data.revokeWorker.live === false, 'revokeWorker marks it revoked', JSON.stringify(rv.errors ?? rv.data));
+  ok((await next(second)).status === 401, 'a revoked worker token 401');
+  const reReg = await call('POST', 'workers/register', { bootstrap: BOOTSTRAP, body: { manifest: { ...manifest([k]), name } } });
+  ok(reReg.status === 403 && reReg.json?.code === 'WORKER_REVOKED', 'a revoked name cannot register again 403 WORKER_REVOKED', reReg.status);
+}
+
+/* ---------------- request limits and kinds ---------------- */
+{
+  const k = kind('limits');
+  const w = await register([k]);
+  await enqueue(file.id, k);
+  const job = await claimOne(w);
+  let r = await call('PUT', `jobs/${job.id}/output`, { token: w.token, claim: job.claimToken, body: Buffer.from('<p>x</p>'), headers: { 'content-type': 'text/html', 'x-output-ext': 'html' } });
+  ok(r.status === 400 && r.json?.code === 'INVALID_OUTPUT', 'an output with a disallowed Content-Type 400 INVALID_OUTPUT', r.status);
+  r = await call('PUT', `jobs/${job.id}/output`, { token: w.token, claim: job.claimToken, body: Buffer.alloc(0), headers: { 'content-type': 'video/mp4', 'x-output-ext': 'mp4' } });
+  ok(r.status === 400 && r.json?.code === 'INVALID_OUTPUT', 'an empty output 400 INVALID_OUTPUT', r.status);
+
+  // A JSON body over 64 KiB sent without Content-Length (chunked).
+  const big = JSON.stringify({ progress: 1, pad: 'x'.repeat(70 * 1024) });
+  const chunked = new ReadableStream({
+    start(ctl) {
+      ctl.enqueue(new TextEncoder().encode(big));
+      ctl.close();
+    },
+  });
+  const res = await fetch(`${B}/api/v1/pipeline/jobs/${job.id}/progress`, {
+    method: 'POST',
+    headers: { 'x-worker-token': w.token, 'x-claim-token': job.claimToken, 'content-type': 'application/json' },
+    body: chunked,
+    duplex: 'half',
+  });
+  const body = await res.json().catch(() => null);
+  ok(res.status === 413 && body?.code === 'BODY_TOO_LARGE', 'a JSON body over 64 KiB without Content-Length 413 BODY_TOO_LARGE', res.status);
+
+  if (MAX_OUTPUT_MB === 1) {
+    const prefix = `files/${file.id}/proc/`;
+    const before = await objectsUnder(prefix);
+    const tooBig = randomBytes(1024 * 1024 + 4096);
+    r = await output(w, job, tooBig);
+    ok(r.status === 413 && r.json?.code === 'OUTPUT_TOO_LARGE', 'an output over 1 MiB (Content-Length) 413', r.status);
+    const streamed = new ReadableStream({
+      start(ctl) {
+        for (let i = 0; i < 5; i++) ctl.enqueue(randomBytes(300 * 1024));
+        ctl.close();
+      },
+    });
+    const sr = await fetch(`${B}/api/v1/pipeline/jobs/${job.id}/output`, {
+      method: 'PUT',
+      headers: { 'x-worker-token': w.token, 'x-claim-token': job.claimToken, 'content-type': 'video/mp4', 'x-output-ext': 'mp4' },
+      body: streamed,
+      duplex: 'half',
+    });
+    const sb = await sr.json().catch(() => null);
+    ok(sr.status === 413 && sb?.code === 'OUTPUT_TOO_LARGE', 'a streamed output over 1 MiB (no Content-Length) 413', sr.status);
+    ok((await objectsUnder(prefix)) === before && !(await jobRow(job.id)).output_key, 'no object is left by the refused outputs', `${before} -> ${await objectsUnder(prefix)}`);
+  } else {
+    console.log('SKIP output size limit rows: run the server with SHOTSTASH_PIPELINE_MAX_OUTPUT_MB=1');
+  }
+  await failJob(w, job, 'e2e cleanup', false);
+
+  const jpeg = await upload(`photo-${RUN}.jpg`, 'jpeg');
+  const na = await enqueue(jpeg.id, 'shotstash/proxy-720p');
+  ok(code(na) === 'KIND_NOT_APPLICABLE', 'a video kind on a JPEG KIND_NOT_APPLICABLE', JSON.stringify(na.errors ?? na.data));
+}
+
+/* ---------------- trash cancels jobs; complete answers FILE_GONE; purge cleans up ---------------- */
+{
+  const k = kind('trash');
+  const w = await register([k, kind('trash-queued')]);
+  const doomed = await upload(`trash-${RUN}.mp4`);
+  const q = await enqueue(doomed.id, k);
+  const queuedToo = await enqueue(doomed.id, kind('trash-queued'));
+  const job = await claimOne(w);
+  ok((await output(w, job, randomBytes(800))).status === 200, 'output before the trash');
+  const key = (await jobRow(job.id)).output_key;
+  const t = await gql(editor.token, `mutation { moveToTrash(fileId:"${doomed.id}") }`);
+  ok(t.data?.moveToTrash === true, 'trash the file', JSON.stringify(t.errors ?? ''));
+  const row = await jobRow(q.data.enqueueJob.id);
+  ok(row.status === 'cancelled' && row.error === 'file trashed', 'trashing cancels the claimed job with "file trashed"', JSON.stringify(row));
+  const qrow = queuedToo.data?.enqueueJob?.id ? await jobRow(queuedToo.data.enqueueJob.id) : null;
+  ok(qrow === null || (qrow.status === 'cancelled' && qrow.error === 'file trashed'), 'trashing cancels queued jobs too', JSON.stringify(qrow ?? queuedToo.errors));
+  ok(!(await objectExists(key)), 'the cancelled job output is deleted');
+  const done = await complete(w, job);
+  ok(done.status === 409 && done.json?.code === 'FILE_GONE', 'complete for a trashed file 409 FILE_GONE', `${done.status} ${done.json?.code}`);
+  ok((await sql('SELECT 1 FROM processed_versions WHERE job_id = $1', [job.id])).length === 0, 'no processed version for a trashed file');
+  const c = await gql(editor.token, 'mutation($id: ID!){ cancelJob(id:$id){ id } }', { id: job.id });
+  ok(code(c) === 'NOT_FOUND', 'cancelJob on a trashed file answers NOT_FOUND', JSON.stringify(c.errors ?? c.data));
+
+  // Purge of a file whose job holds an uploaded output: object and job row go.
+  const gone = await upload(`purge-${RUN}.mp4`);
+  const pq = await enqueue(gone.id, k);
+  const pj = await claimOne(w);
+  ok(pj.id === pq.data.enqueueJob.id, 'claim the job of the file to purge');
+  await output(w, pj, randomBytes(900));
+  const pkey = (await jobRow(pj.id)).output_key;
+  ok(pkey && (await objectExists(pkey)), 'its output is stored', pkey);
+  // Mark the file trashed in the database (the GraphQL trash would cancel the job first), then purge it.
+  await sql('UPDATE media_files SET "trashedAt" = now() WHERE id = $1', [gone.id]);
+  const purge = await gql(sa.token, `mutation { permanentDelete(fileId:"${gone.id}") }`);
+  ok(purge.data?.permanentDelete === true, 'purge the file', JSON.stringify(purge.errors ?? ''));
+  ok(!(await objectExists(pkey)), 'the purge deletes the job output object');
+  ok((await sql('SELECT 1 FROM pipeline_jobs WHERE id = $1', [pj.id])).length === 0, 'the purge deletes the job row');
+  const late = await complete(w, pj);
+  ok([404, 409].includes(late.status) && ['JOB_NOT_FOUND', 'FILE_GONE'].includes(late.json?.code), 'complete after the purge answers 404 or FILE_GONE, never 500', `${late.status} ${late.json?.code}`);
 }
 
 /* ---------------- status page figures ---------------- */

@@ -38,8 +38,9 @@ export class ContractClient {
     };
     if (this.token && !headers['X-Worker-Bootstrap-Token']) init.headers['X-Worker-Token'] = this.token;
     if (body !== undefined) {
-      if (body instanceof Blob) {
+      if (body instanceof Blob || body instanceof ReadableStream) {
         init.body = body;
+        if (body instanceof ReadableStream) init.duplex = 'half';
       } else {
         init.body = JSON.stringify(body);
         init.headers['Content-Type'] = 'application/json';
@@ -91,15 +92,26 @@ export class ContractClient {
     return res?.job ?? null;
   }
 
-  /** Streams the job input into `path` (the whole file, so an MP4 with its index at the end works). */
-  async downloadInput(job, path, signal) {
+  /**
+   * Streams the job input into `path` (the whole file, so an MP4 with its
+   * index at the end works). `onChunk` is called for every chunk received.
+   */
+  async downloadInput(job, path, signal, onChunk = () => {}) {
     const res = await this.#call('GET', `/api/v1/pipeline/jobs/${job.id}/input`, {
       headers: { 'X-Claim-Token': job.claimToken },
       signal,
       raw: true,
     });
     if (!res.body) throw new Error('The input stream is empty');
-    await pipeline(Readable.fromWeb(res.body), createWriteStream(path), { signal });
+    const counted = res.body.pipeThrough(
+      new TransformStream({
+        transform(chunk, ctl) {
+          onChunk(chunk.byteLength);
+          ctl.enqueue(chunk);
+        },
+      }),
+    );
+    await pipeline(Readable.fromWeb(counted), createWriteStream(path), { signal });
   }
 
   progress(job, percent) {
@@ -109,18 +121,31 @@ export class ContractClient {
     });
   }
 
-  /** Uploads the one output of the job as a raw streamed body. */
-  async uploadOutput(job, path, { mimeType, ext, signal }) {
+  /** Uploads the one output of the job as a raw streamed body; `onChunk` is called for every chunk sent. */
+  async uploadOutput(job, path, { mimeType, ext, signal, onChunk = () => {} }) {
     const blob = await openAsBlob(path, { type: mimeType });
+    const body = blob.stream().pipeThrough(
+      new TransformStream({
+        transform(chunk, ctl) {
+          onChunk(chunk.byteLength);
+          ctl.enqueue(chunk);
+        },
+      }),
+    );
     return this.#call('PUT', `/api/v1/pipeline/jobs/${job.id}/output`, {
-      body: blob,
-      headers: { 'X-Claim-Token': job.claimToken, 'Content-Type': mimeType, 'X-Output-Ext': ext },
+      body,
+      headers: { 'X-Claim-Token': job.claimToken, 'Content-Type': mimeType, 'X-Output-Ext': ext, 'Content-Length': String(blob.size) },
       signal,
     });
   }
 
   complete(job) {
     return this.#call('POST', `/api/v1/pipeline/jobs/${job.id}/complete`, { body: {}, headers: { 'X-Claim-Token': job.claimToken } });
+  }
+
+  /** Gives the job back without spending an attempt (shutdown). */
+  release(job) {
+    return this.#call('POST', `/api/v1/pipeline/jobs/${job.id}/release`, { body: {}, headers: { 'X-Claim-Token': job.claimToken } });
   }
 
   fail(job, error, retryable) {

@@ -52,6 +52,7 @@ test('worker auth is used exactly by the pipeline contract routes, and nothing e
     'POST /api/v1/pipeline/jobs/[id]/complete',
     'POST /api/v1/pipeline/jobs/[id]/fail',
     'POST /api/v1/pipeline/jobs/[id]/progress',
+    'POST /api/v1/pipeline/jobs/[id]/release',
     'POST /api/v1/pipeline/jobs/next',
     'POST /api/v1/pipeline/workers/heartbeat',
     'POST /api/v1/pipeline/workers/register',

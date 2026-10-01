@@ -203,6 +203,7 @@ const FILE_VERSIONS = gql`
     processedVersions(fileId: $fileId) {
       id
       kind
+      kindLabel
       mimeType
       size
       createdAt

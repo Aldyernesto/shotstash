@@ -4,7 +4,7 @@
  * completion the app decodes it once and stores a `preview` processed
  * version (JPEG, 2048 px on the long edge, EXIF orientation applied); the
  * viewer shows that preview and the thumbnail is rendered from it.
- * Full-resolution conversion is the `heic-to-jpeg` pipeline kind (Epic 5).
+ * Full-resolution conversion is the `shotstash/heic-to-jpeg` pipeline kind (Epic 5).
  *
  * libvips here has no HEVC decoder, so the pure-JS `heic-convert` (libheif
  * in WASM) decodes; sharp rotates, resizes and re-encodes.

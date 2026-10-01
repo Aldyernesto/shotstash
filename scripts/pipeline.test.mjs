@@ -94,9 +94,33 @@ test('output headers: extension and media type are required; multipart is refuse
     ['mp4', null],
     ['mp4', 'video'],
     ['mp4', 'multipart/form-data; boundary=x'],
+    ['html', 'text/html'],
+    ['svg', 'image/svg+xml'],
+    ['bin', 'application/octet-stream'],
   ]) {
     assert.equal(failure(() => contract.parseOutputHeaders(ext, type)), '400 INVALID_OUTPUT', `${ext} ${type}`);
   }
+});
+
+test('output media types: exactly the allowlist', () => {
+  assert.deepEqual([...contract.OUTPUT_MIME_TYPES].sort(), [
+    'application/json', 'application/pdf', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'image/jpeg', 'image/png', 'image/webp',
+    'text/plain', 'text/vtt', 'video/mp4', 'video/quicktime', 'video/webm',
+  ]);
+  for (const m of contract.OUTPUT_MIME_TYPES) assert.equal(contract.parseOutputHeaders('x', m).mimeType, m);
+});
+
+test('kind accepts: MIME prefixes, null or empty means any file', () => {
+  assert.equal(contract.kindAccepts(['video/'], 'video/mp4'), true);
+  assert.equal(contract.kindAccepts(['video/'], 'image/jpeg'), false);
+  assert.equal(contract.kindAccepts(['image/heic', 'image/heif'], 'image/heif'), true);
+  assert.equal(contract.kindAccepts(null, 'application/pdf'), true);
+  assert.equal(contract.kindAccepts([], 'application/pdf'), true);
+  const sql = readFileSync(new URL('../prisma/migrations/0007_pipeline_queue/migration.sql', import.meta.url), 'utf8');
+  assert.match(sql, /'shotstash\/proxy-720p', 'Proxy \(720p\)', true, ARRAY\['video\/'\]/);
+  assert.match(sql, /CREATE UNIQUE INDEX "pipeline_jobs_open_file_kind_key" ON "pipeline_jobs"\("media_file_id", "kind"\)\s*WHERE "status" IN \('queued', 'claimed', 'running'\)/);
+  assert.match(sql, /"run_after" TIMESTAMPTZ\(3\)/);
+  assert.match(sql, /CREATE UNIQUE INDEX "pipeline_workers_name_key"/);
 });
 
 test('derived state: queued without a live worker is waiting_for_worker; other states stay', () => {
@@ -154,5 +178,14 @@ test('settings: pipeline variables with defaults; short sweeps only outside prod
   assert.ok(prod.problems.some((p) => p.startsWith('SHOTSTASH_PIPELINE_SWEEP_SECONDS:')), JSON.stringify(prod.problems));
   assert.deepEqual(cfg.loadConfig({ ...GOOD, NODE_ENV: 'production', SHOTSTASH_PIPELINE_SWEEP_SECONDS: '5' }).problems, []);
   assert.ok(cfg.loadConfig({ ...GOOD, SHOTSTASH_PIPELINE_LEASE_SECONDS: '10' }).problems.some((p) => p.startsWith('SHOTSTASH_PIPELINE_LEASE_SECONDS:')));
+  // The lease is more than twice the 30 s heartbeat; the sweep at most half the lease.
+  const lease60 = cfg.loadConfig({ ...GOOD, SHOTSTASH_PIPELINE_LEASE_SECONDS: '60', SHOTSTASH_PIPELINE_SWEEP_SECONDS: '10' }).problems;
+  assert.ok(lease60.some((p) => p.startsWith('SHOTSTASH_PIPELINE_LEASE_SECONDS:') && /heartbeat/.test(p)), JSON.stringify(lease60));
+  assert.deepEqual(cfg.loadConfig({ ...GOOD, SHOTSTASH_PIPELINE_LEASE_SECONDS: '61', SHOTSTASH_PIPELINE_SWEEP_SECONDS: '30' }).problems, []);
+  const slowSweep = cfg.loadConfig({ ...GOOD, SHOTSTASH_PIPELINE_LEASE_SECONDS: '90', SHOTSTASH_PIPELINE_SWEEP_SECONDS: '46' }).problems;
+  assert.ok(
+    slowSweep.some((p) => p.startsWith('SHOTSTASH_PIPELINE_SWEEP_SECONDS:') && p.includes('SHOTSTASH_PIPELINE_LEASE_SECONDS')),
+    JSON.stringify(slowSweep),
+  );
   assert.ok(cfg.loadConfig({ ...GOOD, WORKER_BOOTSTRAP_TOKEN: 'short' }).problems.some((p) => p.startsWith('WORKER_BOOTSTRAP_TOKEN:')));
 });

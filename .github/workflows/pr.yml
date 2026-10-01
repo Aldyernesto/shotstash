@@ -220,9 +220,20 @@ jobs:
         run: |
           docker compose exec -T cache redis-cli FLUSHALL
           mkdir -p ci-out && chmod 777 ci-out
-          docker run --rm -v "$PWD/ci-out:/out" shotstash-worker:local             ffmpeg -v error -y -f lavfi -i testsrc2=size=1920x1080:rate=30 -f lavfi -i sine=frequency=440             -t 10 -c:v libx264 -preset veryfast -pix_fmt yuv420p -c:a aac -shortest /out/sample.mp4
-          docker run --rm --network "container:$(docker compose ps -q app)"             -v "$PWD:/w" -w /w             -e E2E_BASE_URL=http://127.0.0.1:3005             -e E2E_EMAIL=owner@example.com             -e E2E_PASSWORD=owner-password-1             -e E2E_SAMPLE=ci-out/sample.mp4             -e E2E_OUT=ci-out/proxy.mp4             -e E2E_TIMEOUT_SECONDS=300             node:24-bookworm-slim node scripts/e2e-worker.mjs
-          probe=$(docker run --rm -v "$PWD/ci-out:/out" shotstash-worker:local             ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,height -of json /out/proxy.mp4)
+          docker run --rm -v "$PWD/ci-out:/out" shotstash-worker:local \
+            ffmpeg -v error -y -f lavfi -i testsrc2=size=1920x1080:rate=30 -f lavfi -i sine=frequency=440 \
+            -t 10 -c:v libx264 -preset veryfast -pix_fmt yuv420p -c:a aac -shortest /out/sample.mp4
+          docker run --rm --network "container:$(docker compose ps -q app)" \
+            -v "$PWD:/w" -w /w \
+            -e E2E_BASE_URL=http://127.0.0.1:3005 \
+            -e E2E_EMAIL=owner@example.com \
+            -e E2E_PASSWORD=owner-password-1 \
+            -e E2E_SAMPLE=ci-out/sample.mp4 \
+            -e E2E_OUT=ci-out/proxy.mp4 \
+            -e E2E_TIMEOUT_SECONDS=300 \
+            node:24-bookworm-slim node scripts/e2e-worker.mjs
+          probe=$(docker run --rm -v "$PWD/ci-out:/out" shotstash-worker:local \
+            ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,height -of json /out/proxy.mp4)
           echo "$probe"
           echo "$probe" | jq -e '.streams[0].codec_name == "h264" and .streams[0].height <= 720'
 
@@ -236,7 +247,8 @@ jobs:
           done
           last=0
           for i in $(seq 1 60); do
-            last=$(docker compose exec -T db psql -U shotstash -d shotstash -tAc               "select coalesce(max(extract(epoch from last_seen)), 0)::bigint from pipeline_workers where revoked_at is null")
+            last=$(docker compose exec -T db psql -U shotstash -d shotstash -tAc \
+              "select coalesce(max(extract(epoch from last_seen)), 0)::bigint from pipeline_workers where revoked_at is null")
             if [ "$last" -gt "$before" ]; then break; fi
             sleep 3
           done
@@ -360,6 +372,8 @@ jobs:
       # Story 5.1: the shortest sweep allowed in production, so e2e:pipeline
       # sees expired claims requeued within seconds.
       SHOTSTASH_PIPELINE_SWEEP_SECONDS: "5"
+      # A 1 MiB output limit lets e2e:pipeline prove 413 OUTPUT_TOO_LARGE cheaply.
+      SHOTSTASH_PIPELINE_MAX_OUTPUT_MB: "1"
     steps:
       - uses: actions/checkout@v4
 

@@ -261,6 +261,8 @@ model PipelineJob {
   worker          PipelineWorker?   @relation(fields: [claimedBy], references: [id], onDelete: SetNull)
   claimToken      String?           @map("claim_token")
   heartbeatAt     DateTime?         @map("heartbeat_at")
+  // A retried job is not claimed before this (30 s per attempt used).
+  runAfter        DateTime?         @map("run_after") @db.Timestamptz(3)
   progress        Int               @default(0)
   seq             BigInt            @default(0)
   error           String?
@@ -274,6 +276,8 @@ model PipelineJob {
   updatedAt       DateTime          @default(now()) @updatedAt @map("updated_at")
   finishedAt      DateTime?         @map("finished_at")
 
+  // A partial unique index (migration 0007) allows one unfinished job per
+  // file and kind.
   @@index([status, kind, createdAt])
   @@index([status, heartbeatAt])
   @@index([mediaFileId])
@@ -286,6 +290,8 @@ model PipelineKind {
   name      String        @id
   label     String?
   builtIn   Boolean       @default(false) @map("built_in")
+  // MIME type prefixes the kind applies to (such as video/); null or empty means any file.
+  accepts   String[]
   firstSeen DateTime      @default(now()) @map("first_seen")
   jobs      PipelineJob[]
 
@@ -294,10 +300,12 @@ model PipelineKind {
 
 // Registered workers. The per-worker token is shown once at registration
 // and stored only as its SHA-256 hash. last_seen moves on every
-// authenticated call; a worker seen within the lease is "live".
+// authenticated call; a worker seen within the lease is "live". The
+// sweeper prunes rows not seen for 30 days that hold no claim.
 model PipelineWorker {
   id        String        @id
-  name      String
+  // One row per name: registering again rotates the token on this row.
+  name      String        @unique
   version   String
   kinds     String[]
   tokenHash String        @unique @map("token_hash")

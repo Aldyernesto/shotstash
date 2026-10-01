@@ -176,6 +176,9 @@ export const typeDefs = `#graphql
     id: ID!
     # "preview" (HEIC preview made at upload) or a pipeline kind.
     kind: String!
+    # Story 5.1: the kind's stored label (pipeline_kinds.label), null when
+    # none; clients prefer their own translation of known kinds.
+    kindLabel: String
     mimeType: String!
     size: BigInt!
     # /media/p/{id}: attachment, cookie session, same permission as the file.
@@ -206,6 +209,19 @@ export const typeDefs = `#graphql
     createdAt: DateTime!
     updatedAt: DateTime!
     finishedAt: DateTime
+  }
+
+  # Story 5.2: a registered processing worker (one per name).
+  type PipelineWorker {
+    id: ID!
+    name: String!
+    version: String!
+    kinds: [String!]!
+    lastSeen: DateTime!
+    revokedAt: DateTime
+    # Seen within the lease and not revoked.
+    live: Boolean!
+    createdAt: DateTime!
   }
 
   type ProjectChat {
@@ -415,6 +431,8 @@ export const typeDefs = `#graphql
     processedVersions(fileId: ID!): [ProcessedVersion!]!
     # Story 5.1: one processing job (null when it or its file is gone).
     pipelineJob(id: ID!): PipelineJob
+    # Story 5.2: registered workers, most recently seen first (super admin).
+    pipelineWorkers: [PipelineWorker!]!
 
     # Shares
     shareLinks: [ShareLink!]!
@@ -488,6 +506,9 @@ export const typeDefs = `#graphql
     # (JOB_TERMINAL when it already finished).
     enqueueJob(fileId: ID!, kind: String!): PipelineJob!
     cancelJob(id: ID!): PipelineJob!
+    # Revokes a worker: its token stops working and its name cannot register
+    # again (super admin). Null when there is no such worker.
+    revokeWorker(id: ID!): PipelineWorker
 
     # Share
     createShareLink(input: ShareLinkInput!): ShareLink!

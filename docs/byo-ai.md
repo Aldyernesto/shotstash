@@ -28,10 +28,10 @@ A kind names what a job does: `<namespace>/<name>`, lowercase letters, digits, `
 
 | Kind | What it makes |
 | --- | --- |
-| `shotstash/proxy-720p` | 720p H.264/AAC MP4 proxy of a video (the reference worker) |
-| `shotstash/heic-to-jpeg` | full-size JPEG of a HEIC photo (no worker ships for it yet) |
+| `shotstash/proxy-720p` | 720p H.264/AAC MP4 proxy of a video (the reference worker); videos only |
+| `shotstash/heic-to-jpeg` | full-size JPEG of a HEIC photo (no worker ships for it yet); HEIC/HEIF only |
 
-A kind exists once a worker registers it (or it is built in); kinds are never deleted. Queueing a kind that does not exist answers `KIND_UNKNOWN`. A queued job whose kind no live worker serves shows the state `waiting_for_worker` until a worker for it shows up.
+A kind exists once a worker registers it (or it is built in); kinds are never deleted. Queueing a kind that does not exist answers `KIND_UNKNOWN`. A kind may list the file types it applies to (MIME prefixes such as `video/`, stored in `pipeline_kinds.accepts`; a kind a worker registers applies to every file); queueing it for another type answers `KIND_NOT_APPLICABLE`. A file has at most one unfinished job per kind: queueing the same kind again answers that job. A queued job whose kind no live worker serves shows the state `waiting_for_worker` until a worker for it shows up.
 
 ## Authentication
 
@@ -43,7 +43,13 @@ Two tokens, both sent as headers, never in a URL:
 | `X-Worker-Token` | answered once by registration (per worker) | every other route |
 | `X-Claim-Token` | answered by `jobs/next` (per claim) | every call about that job |
 
-The app stores only the SHA-256 hash of a worker token; keep the token in memory or a secret store, never in logs. A worker that loses its token (restart, revocation) simply registers again. Worker calls are limited to 600 per minute per worker (`429 RATE_LIMITED` with `Retry-After`), and registrations to 60 per hour per IP.
+The app stores only the SHA-256 hash of a worker token; keep the token in memory or a secret store, never in logs.
+
+**One row per name.** `manifest.name` identifies a worker. Registering a name again (after a restart, or after a `401`) keeps the same worker and its claims and issues a new token; the old token stops working. Give every worker process its own name (the reference worker reads `WORKER_NAME`), or two processes with one name keep taking the token from each other. Worker rows not seen for 30 days that hold no claim are removed by the sweeper.
+
+**Revoking.** A super admin lists workers with the GraphQL query `pipelineWorkers` and revokes one with `revokeWorker(id)`. Its token answers `401` at once, its name cannot register again (`403 WORKER_REVOKED`; register under a new name), and its claims return to the queue when their lease expires.
+
+**Rotating the bootstrap token.** Change `WORKER_BOOTSTRAP_TOKEN` in `.env` and restart the app: registrations with the old value answer `401`, so no new worker (and no new name) can join with it. Workers that already registered keep their own tokens; revoke them to remove them, and give the new value to the workers you keep (they need it the next time they register). Worker calls are limited to 600 per minute per worker (`429 RATE_LIMITED` with `Retry-After`), and registrations to 60 per hour per IP.
 
 ## Versioning
 
@@ -67,12 +73,16 @@ Every answer under `/api/v1/pipeline/*` carries `X-Shotstash-Pipeline: 1`. Your 
 - `heartbeat_at` is the only lease. It moves when the job is claimed, on every progress report and output upload, and on every heartbeat that lists the job in `activeJobIds`.
 - Send `POST workers/heartbeat` every **30 s** (`heartbeatSeconds`), with the ids of the jobs you are working on.
 - A claim without any of these for **90 s** (`leaseSeconds`, `SHOTSTASH_PIPELINE_LEASE_SECONDS`) expires: the in-app sweeper (every 30 s) puts the job back in the queue. Each claim counts as one attempt; when the third claim expires the job fails with "The worker stopped sending heartbeats".
+- A requeued job waits before another claim: 30 s times the attempts used (`run_after`), so a failing job is not retried in a tight loop.
 - After a requeue your claim is **stale**: every call with the old claim token answers `409 CLAIM_STALE`, and any output you uploaded under it is deleted. Stop and drop the work.
 - When a person cancels the job, or it already finished, calls answer `409 JOB_TERMINAL`, and a heartbeat lists the job in `lostJobIds`. Stop and drop the work.
+- Moving the file to the Trash cancels its unfinished jobs (error "file trashed"); completing such a job answers `409 FILE_GONE` and its output is deleted.
+- To give a job back without spending an attempt (your worker is shutting down), call `POST jobs/:id/release`; it is queued again at once.
 
 ### Outputs
 
 - One output per job: the raw bytes as the request body of `PUT jobs/:id/output` (not multipart), with `Content-Type` set to its media type and `X-Output-Ext` to its extension (`mp4`, `jpg`, `json`, `vtt`, 1 to 10 letters or digits). Send `Content-Length` when you know it.
+- `Content-Type` must be one of `video/mp4`, `video/webm`, `video/quicktime`, `image/jpeg`, `image/png`, `image/webp`, `audio/mpeg`, `audio/mp4`, `audio/wav`, `application/pdf`, `application/json`, `text/plain`, `text/vtt`; anything else answers `400 INVALID_OUTPUT`.
 - Uploading again under the same claim replaces the previous output.
 - The limit is `SHOTSTASH_PIPELINE_MAX_OUTPUT_MB` (20480 MB by default); larger bodies answer `413 OUTPUT_TOO_LARGE`.
 - The output becomes a processed version only on `complete`, in the same transaction that verifies your claim. Its `kind` is the job's kind; it records the job id and the attempt.
@@ -83,7 +93,7 @@ Every answer under `/api/v1/pipeline/*` carries `X-Shotstash-Pipeline: 1`. Your 
 
 ### Backing off
 
-On `401`, `503` or a network error, wait **30 s** and try again; never exit. The app answers `503 SETUP_REQUIRED` until first-run setup is done, `503 PIPELINE_DISABLED` to registration while `WORKER_BOOTSTRAP_TOKEN` is not set, and connections fail while it restarts. On `401` register again before going on.
+On `401`, `503` or a network error, wait **30 s** and try again; never exit. Keep retrying an output upload or a `complete` the same way while your claim is valid (stop on `409`): the work is done, only the delivery failed. The app answers `503 SETUP_REQUIRED` until first-run setup is done, `503 PIPELINE_DISABLED` to registration while `WORKER_BOOTSTRAP_TOKEN` is not set, and connections fail while it restarts. On `401` register again before going on.
 
 ## Errors
 
@@ -92,16 +102,19 @@ Every refusal is JSON: `{ "code": "CLAIM_STALE", "message": "..." }`. Act on `co
 | Status | Code | When |
 | --- | --- | --- |
 | 400 | `INVALID_BODY`, `INVALID_MANIFEST` | the JSON body or the manifest is malformed |
+| 413 | `BODY_TOO_LARGE` | a JSON body over 64 KiB (counted as it arrives, with or without `Content-Length`) |
 | 400 | `CLAIM_TOKEN_REQUIRED` | a job call without `X-Claim-Token` |
-| 400 | `INVALID_OUTPUT` | missing or bad `Content-Type` / `X-Output-Ext`, empty output, body shorter than `Content-Length` |
+| 400 | `INVALID_OUTPUT` | missing, bad or disallowed `Content-Type`, bad `X-Output-Ext`, empty output, body shorter than `Content-Length` |
 | 401 | `UNAUTHENTICATED` | missing, unknown or revoked token |
+| 403 | `WORKER_REVOKED` | registering a name that a super admin revoked |
 | 404 | `JOB_NOT_FOUND`, `FILE_NOT_FOUND` | the job does not exist; the file is gone or in the Trash |
 | 409 | `CLAIM_STALE` | your claim is no longer valid (requeued, or not yours) |
 | 409 | `JOB_TERMINAL` | the job is done, failed or cancelled |
 | 409 | `OUTPUT_MISSING` | `complete` before an output was uploaded |
+| 409 | `FILE_GONE` | `complete` for a file that was trashed or deleted (the output is deleted) |
 | 413 | `OUTPUT_TOO_LARGE` | the output exceeds the limit |
 | 422 | `CONTRACT_UNSUPPORTED` | your manifest speaks another contract major |
-| 429 | `RATE_LIMITED` | too many calls; wait `Retry-After` seconds |
+| 429 | `RATE_LIMITED` | too many calls (per worker, and per IP before the token is checked); wait `Retry-After` seconds |
 | 503 | `SETUP_REQUIRED`, `PIPELINE_DISABLED`, `STORAGE_UNAVAILABLE` | try again later |
 
 ## Routes
@@ -123,7 +136,7 @@ curl -s -X POST "$BASE/api/v1/pipeline/workers/register" \
   -d '{"manifest":{"name":"my-transcriber","version":"1.0.0","kinds":["acme/transcript"],"contract":1}}'
 ```
 
-`201`:
+`201` (the same `workerId` when the name registered before):
 
 ```json
 { "workerId": "0192...", "token": "ssw_...", "contract": 1, "heartbeatSeconds": 30, "leaseSeconds": 90 }
@@ -217,6 +230,16 @@ curl -s -X POST "$BASE/api/v1/pipeline/jobs/$JOB/complete" -H "X-Worker-Token: $
 
 `200`: `{ "status": "done", "versionId": "0192..." }`. The version is now listed with the file and downloadable from `/media/p/<versionId>` by anyone who may download the file.
 
+### `POST /api/v1/pipeline/jobs/:id/release`
+
+Gives the job back without spending an attempt (for example on shutdown); it is queued again at once and any uploaded output is deleted.
+
+```bash
+curl -s -X POST "$BASE/api/v1/pipeline/jobs/$JOB/release" -H "X-Worker-Token: $TOKEN" -H "X-Claim-Token: $CLAIM"
+```
+
+`200`: `{ "status": "queued", "attempts": 0 }`.
+
 ### `POST /api/v1/pipeline/jobs/:id/fail`
 
 Body `{ "error": "what went wrong", "retryable": true }` (`error` at most 2000 characters).
@@ -257,8 +280,9 @@ loop:
   on your own error: POST fail (retryable: true when another try could work)
   on 409 CLAIM_STALE or JOB_TERMINAL: drop the job, no fail call
   always delete the temp files
-on 401: register again; on 401, 503 or a network error: wait 30 s; never exit
-on shutdown (SIGTERM): stop claiming, fail the current job with retryable: true
+on 401: register again (same name); on 401, 503 or a network error: wait 30 s; never exit
+retry PUT output and complete on 429, 503 or a network error while the claim is valid
+on shutdown (SIGTERM): stop claiming, release the current job (POST jobs/:id/release)
 ```
 
 A minimal sketch in Python (standard library only):
@@ -319,5 +343,5 @@ while True:
 | --- | --- | --- |
 | `WORKER_BOOTSTRAP_TOKEN` | (none) | shared registration token; required by docker compose |
 | `SHOTSTASH_PIPELINE_MAX_OUTPUT_MB` | 20480 | largest output per job |
-| `SHOTSTASH_PIPELINE_LEASE_SECONDS` | 90 | a claim without a heartbeat for this long is requeued |
-| `SHOTSTASH_PIPELINE_SWEEP_SECONDS` | 30 | how often the sweeper looks (at least 5 in production) |
+| `SHOTSTASH_PIPELINE_LEASE_SECONDS` | 90 | a claim without a heartbeat for this long is requeued (more than twice the 30 s heartbeat) |
+| `SHOTSTASH_PIPELINE_SWEEP_SECONDS` | 30 | how often the sweeper looks (at least 5 in production, at most half the lease) |

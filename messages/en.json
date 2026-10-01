@@ -748,7 +748,11 @@
       "OUTPUT_TOO_LARGE": "The worker's output is too large.",
       "OUTPUT_MISSING": "The worker finished without sending its output.",
       "FILE_NOT_FOUND": "The file of this job is gone or in the Trash.",
-      "PIPELINE_DISABLED": "Processing workers aren't set up on this instance."
+      "PIPELINE_DISABLED": "Processing workers aren't set up on this instance.",
+      "KIND_NOT_APPLICABLE": "This kind of processing doesn't apply to this file's type.",
+      "FILE_GONE": "The file of this job was moved to the Trash or deleted.",
+      "WORKER_REVOKED": "This worker was revoked on this instance.",
+      "BODY_TOO_LARGE": "The request is too large."
     },
     "forbidden": "You don't have access to do that."
   },

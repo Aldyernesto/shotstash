@@ -22,6 +22,16 @@ export const TERMINAL_STATUSES: readonly JobStatus[] = ['done', 'failed', 'cance
 /** Statuses a claim can act in. */
 export const CLAIMED_STATUSES: readonly JobStatus[] = ['claimed', 'running'];
 
+/** True when a kind that accepts `accepts` (MIME prefixes; empty or null means any) applies to a file of `mimeType`. */
+export function kindAccepts(accepts: readonly string[] | null | undefined, mimeType: string): boolean {
+  if (!accepts || !accepts.length) return true;
+  const m = mimeType.toLowerCase();
+  return accepts.some((prefix) => m.startsWith(prefix.toLowerCase()));
+}
+
+/** Seconds before a requeued job may be claimed again: 30 s per attempt used. */
+export const RETRY_DELAY_SECONDS = 30;
+
 export function isTerminal(status: string): boolean {
   return (TERMINAL_STATUSES as readonly string[]).includes(status);
 }
@@ -40,6 +50,9 @@ export const MAX_ATTEMPTS = 3;
 
 export type PipelineErrorCode =
   | 'INVALID_BODY'
+  | 'BODY_TOO_LARGE'
+  | 'WORKER_REVOKED'
+  | 'FILE_GONE'
   | 'INVALID_MANIFEST'
   | 'CONTRACT_UNSUPPORTED'
   | 'KIND_UNKNOWN'
@@ -208,6 +221,8 @@ export type FailRequest = {
 
 export type FailResponse = { status: 'queued' | 'failed'; attempts: number; maxAttempts: number };
 
+export type ReleaseResponse = { status: 'queued'; attempts: number };
+
 const JOB_ID_RE = /^[0-9a-f-]{36}$/i;
 
 export function isJobId(value: unknown): value is string {
@@ -261,15 +276,31 @@ export function parseFail(body: unknown): { error: string; retryable: boolean } 
 /* ------------------------------------------------------------------ */
 
 const EXT_RE = /^[a-z0-9]{1,10}$/;
-const MIME_RE = /^[a-z0-9][a-z0-9!#$&^_.+-]{0,63}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,63}$/;
+
+/** Media types an output may have; anything else is refused (400 INVALID_OUTPUT). */
+export const OUTPUT_MIME_TYPES: readonly string[] = [
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/wav',
+  'application/pdf',
+  'application/json',
+  'text/plain',
+  'text/vtt',
+];
 
 /** `X-Output-Ext` and `Content-Type` of an output upload, normalised; throws INVALID_OUTPUT. */
 export function parseOutputHeaders(ext: string | null, contentType: string | null): { ext: string; mimeType: string } {
   const e = (ext ?? '').trim().replace(/^\./, '').toLowerCase();
   if (!EXT_RE.test(e)) throw new PipelineFailure(400, 'INVALID_OUTPUT', 'X-Output-Ext must be 1 to 10 letters or digits, such as mp4');
   const mime = (contentType ?? '').split(';')[0].trim().toLowerCase();
-  if (!MIME_RE.test(mime) || mime.startsWith('multipart/')) {
-    throw new PipelineFailure(400, 'INVALID_OUTPUT', 'Content-Type must be the media type of the output, such as video/mp4');
+  if (!OUTPUT_MIME_TYPES.includes(mime)) {
+    throw new PipelineFailure(400, 'INVALID_OUTPUT', `Content-Type must be one of ${OUTPUT_MIME_TYPES.join(', ')}`);
   }
   return { ext: e, mimeType: mime };
 }

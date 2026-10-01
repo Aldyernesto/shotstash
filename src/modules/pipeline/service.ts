@@ -31,6 +31,8 @@ import { fileResponse } from '@/modules/media';
 import {
   CLAIMED_STATUSES,
   MAX_ATTEMPTS,
+  RETRY_DELAY_SECONDS,
+  kindAccepts,
   PipelineFailure,
   isJobId,
   isTerminal,
@@ -45,6 +47,7 @@ import {
   type ParsedManifest,
   type ProgressResponse,
   type RegisterResponse,
+  type ReleaseResponse,
 } from './contract.ts';
 import { isKindName } from './kinds.ts';
 
@@ -77,14 +80,38 @@ async function addKinds(kinds: string[]) {
   await prisma.pipelineKind.createMany({ data: kinds.map((name) => ({ name })), skipDuplicates: true });
 }
 
-/** Registers a worker: its kinds join `pipeline_kinds`; the token is returned once and stored hashed. */
+/** The unique-constraint error of a racing insert. */
+function isUniqueViolation(err: unknown): boolean {
+  return !!err && typeof err === 'object' && (err as { code?: string }).code === 'P2002';
+}
+
+/**
+ * Registers a worker by name: its kinds join `pipeline_kinds`; the token is
+ * returned once and stored hashed. A name that is already registered keeps
+ * its row and gets a new token (the old one stops working); a revoked name
+ * is refused with 403 WORKER_REVOKED.
+ */
 export async function registerWorker(manifest: ParsedManifest): Promise<RegisterResponse> {
   const token = newWorkerToken();
-  const id = uuidv7();
+  const data = { version: manifest.version, kinds: manifest.kinds, tokenHash: hashWorkerToken(token), lastSeen: new Date() };
   await addKinds(manifest.kinds);
-  await prisma.pipelineWorker.create({
-    data: { id, name: manifest.name, version: manifest.version, kinds: manifest.kinds, tokenHash: hashWorkerToken(token) },
-  });
+  let id: string | null = null;
+  for (let tries = 0; tries < 2 && !id; tries++) {
+    const existing = await prisma.pipelineWorker.findUnique({ where: { name: manifest.name }, select: { id: true, revokedAt: true } });
+    if (existing?.revokedAt) throw new PipelineFailure(403, 'WORKER_REVOKED', `The worker name ${manifest.name} is revoked`);
+    if (existing) {
+      const r = await prisma.pipelineWorker.updateMany({ where: { id: existing.id, revokedAt: null }, data });
+      if (r.count) id = existing.id;
+      continue;
+    }
+    try {
+      id = (await prisma.pipelineWorker.create({ data: { id: uuidv7(), name: manifest.name, ...data }, select: { id: true } })).id;
+    } catch (err) {
+      // Another registration of the same name won the insert: rotate on its row.
+      if (!isUniqueViolation(err)) throw err;
+    }
+  }
+  if (!id) throw new PipelineFailure(403, 'WORKER_REVOKED', `The worker name ${manifest.name} is revoked`);
   log.info('worker registered', { workerId: id, name: manifest.name, version: manifest.version, kinds: manifest.kinds });
   return {
     workerId: id,
@@ -95,10 +122,41 @@ export async function registerWorker(manifest: ParsedManifest): Promise<Register
   };
 }
 
-/** Revokes a worker: its token stops working at once (401). Its claims expire through the sweeper. */
-export async function revokeWorker(workerId: string): Promise<boolean> {
-  const r = await prisma.pipelineWorker.updateMany({ where: { id: workerId, revokedAt: null }, data: { revokedAt: new Date() } });
-  return r.count > 0;
+export type WorkerView = {
+  id: string;
+  name: string;
+  version: string;
+  kinds: string[];
+  lastSeen: Date;
+  revokedAt: Date | null;
+  createdAt: Date;
+  /** Seen within the lease and not revoked. */
+  live: boolean;
+};
+
+const WORKER_SELECT = { id: true, name: true, version: true, kinds: true, lastSeen: true, revokedAt: true, createdAt: true } as const;
+
+function workerView(w: Omit<WorkerView, 'live'>): WorkerView {
+  return { ...w, live: !w.revokedAt && Date.now() - w.lastSeen.getTime() <= leaseSeconds() * 1000 };
+}
+
+/** Registered workers, most recently seen first. */
+export async function listWorkers(): Promise<WorkerView[]> {
+  const rows = await prisma.pipelineWorker.findMany({ orderBy: [{ lastSeen: 'desc' }, { id: 'asc' }], select: WORKER_SELECT });
+  return rows.map(workerView);
+}
+
+/**
+ * Revokes a worker: its token stops working at once (401) and its name
+ * cannot register again (403 WORKER_REVOKED). Its claims expire through the
+ * sweeper. Null when there is no such worker.
+ */
+export async function revokeWorker(workerId: string): Promise<WorkerView | null> {
+  if (!isJobId(workerId)) return null;
+  await prisma.pipelineWorker.updateMany({ where: { id: workerId, revokedAt: null }, data: { revokedAt: new Date() } });
+  const row = await prisma.pipelineWorker.findUnique({ where: { id: workerId }, select: WORKER_SELECT });
+  if (row) log.info('worker revoked', { workerId });
+  return row ? workerView(row) : null;
 }
 
 /**
@@ -110,7 +168,8 @@ export async function heartbeat(worker: WorkerPrincipal, manifest: ParsedManifes
   await addKinds(manifest.kinds);
   await prisma.pipelineWorker.update({
     where: { id: worker.id },
-    data: { name: manifest.name, version: manifest.version, kinds: manifest.kinds, lastSeen: new Date() },
+    // The name is the identity of the row (set at registration); a heartbeat updates version and kinds only.
+    data: { version: manifest.version, kinds: manifest.kinds, lastSeen: new Date() },
   });
   let held: string[] = [];
   if (activeJobIds.length) {
@@ -147,12 +206,13 @@ export async function claimNext(worker: WorkerPrincipal): Promise<ClaimedJob | n
   const rows = await prisma.$queryRaw<ClaimRow[]>`
     UPDATE pipeline_jobs
     SET status = 'claimed', claimed_by = ${worker.id}, claim_token = gen_random_uuid()::text,
-        heartbeat_at = now(), attempts = attempts + 1, progress = 0, seq = seq + 1, updated_at = now(),
+        heartbeat_at = now(), attempts = attempts + 1, progress = 0, seq = seq + 1, updated_at = now(), run_after = NULL,
         output_version_id = NULL, output_key = NULL, output_mime_type = NULL, output_size = NULL
     WHERE id = (
       SELECT j.id FROM pipeline_jobs j
       JOIN media_files m ON m.id = j.media_file_id
       WHERE j.status = 'queued' AND j.kind = ANY(${kinds}::text[])
+        AND (j.run_after IS NULL OR j.run_after <= now())
         AND m.status = 'ready' AND m."trashedAt" IS NULL
       ORDER BY j.created_at, j.id
       FOR UPDATE OF j SKIP LOCKED
@@ -336,62 +396,168 @@ type LockedJob = {
   output_size: bigint | null;
 };
 
+/** True when the file is missing, not ready or in the Trash. */
+async function fileIsGone(fileId: string): Promise<boolean> {
+  const f = await prisma.mediaFile.findUnique({ where: { id: fileId }, select: { status: true, trashedAt: true } }).catch(() => null);
+  return !f || f.status !== 'ready' || !!f.trashedAt;
+}
+
+const fileGoneFailure = () => new PipelineFailure(409, 'FILE_GONE', 'The file of this job was trashed or deleted');
+
+/** Error recorded on jobs cancelled because their file went to the Trash. */
+export const FILE_TRASHED_ERROR = 'file trashed';
+
+type CompleteOutcome = { versionId: string } | { refused: PipelineFailure; drop?: string | null };
+
 /**
  * `POST jobs/:id/complete`: in one transaction the claim is verified, the
  * processed version created from the uploaded output (with `job_id` and
- * `attempt`) and the job marked done.
+ * `attempt`) and the job marked done. A job whose file is trashed or gone
+ * answers 409 FILE_GONE and its output is deleted.
+ *
+ * Lock order: the file row (FOR SHARE) before the job row, the order in
+ * which a purge deletes them (the file, then its jobs by cascade), so a
+ * purge running at the same time never deadlocks with a completion.
  */
 export async function completeJob(worker: WorkerPrincipal, jobId: string, claimToken: string | null): Promise<CompleteResponse> {
   assertJobRef(jobId, claimToken);
-  const outcome = await prisma.$transaction(async (tx) => {
-    const rows = await tx.$queryRaw<LockedJob[]>`
-      SELECT id, status::text AS status, claimed_by, claim_token, attempts, kind, media_file_id,
-             output_version_id, output_key, output_mime_type, output_size
-      FROM pipeline_jobs WHERE id = ${jobId} FOR UPDATE`;
-    const job = rows[0];
-    if (!job) return { refused: new PipelineFailure(404, 'JOB_NOT_FOUND', 'Job not found') };
-    const holds = job.claimed_by === worker.id && !!job.claim_token && secretsEqual(claimToken, job.claim_token);
-    if (!holds) return { refused: new PipelineFailure(409, 'CLAIM_STALE', 'This claim is no longer valid (the job was requeued or claimed again)') };
-    if (isTerminal(job.status)) {
-      // A cancelled job keeps no output.
-      const drop = job.output_key;
-      if (drop) {
-        await tx.$executeRaw`UPDATE pipeline_jobs SET output_version_id = NULL, output_key = NULL, output_mime_type = NULL, output_size = NULL WHERE id = ${jobId}`;
+  const head = await prisma.pipelineJob.findUnique({ where: { id: jobId }, select: { mediaFileId: true, outputKey: true } });
+  if (!head) throw new PipelineFailure(404, 'JOB_NOT_FOUND', 'Job not found');
+  let outcome: CompleteOutcome;
+  try {
+    outcome = await prisma.$transaction(async (tx): Promise<CompleteOutcome> => {
+      const files = await tx.$queryRaw<{ live: boolean }[]>`
+        SELECT ("trashedAt" IS NULL AND status = 'ready') AS live FROM media_files WHERE id = ${head.mediaFileId} FOR SHARE`;
+      const rows = await tx.$queryRaw<LockedJob[]>`
+        SELECT id, status::text AS status, claimed_by, claim_token, attempts, kind, media_file_id,
+               output_version_id, output_key, output_mime_type, output_size
+        FROM pipeline_jobs WHERE id = ${jobId} FOR UPDATE`;
+      const job = rows[0];
+      if (!job) {
+        return files[0] ? { refused: new PipelineFailure(404, 'JOB_NOT_FOUND', 'Job not found') } : { refused: fileGoneFailure(), drop: head.outputKey };
       }
-      return { refused: new PipelineFailure(409, 'JOB_TERMINAL', `The job is ${job.status}`), drop };
-    }
-    if (!(CLAIMED_STATUSES as readonly string[]).includes(job.status)) {
-      return { refused: new PipelineFailure(409, 'CLAIM_STALE', 'This claim is no longer valid') };
-    }
-    if (!job.output_key || !job.output_version_id || !job.output_mime_type || job.output_size === null) {
-      return { refused: new PipelineFailure(409, 'OUTPUT_MISSING', 'Upload the output (PUT jobs/:id/output) before completing') };
-    }
-    await tx.processedVersion.create({
-      data: {
-        id: job.output_version_id,
-        mediaFileId: job.media_file_id,
-        kind: job.kind,
-        jobId: job.id,
-        attempt: Number(job.attempts),
-        storageKey: job.output_key,
-        mimeType: job.output_mime_type,
-        size: BigInt(job.output_size),
-      },
+      const holds = job.claimed_by === worker.id && !!job.claim_token && secretsEqual(claimToken, job.claim_token);
+      if (!holds) return { refused: new PipelineFailure(409, 'CLAIM_STALE', 'This claim is no longer valid (the job was requeued or claimed again)') };
+      if (!files[0]?.live) {
+        // Trashed (the trash also cancels the job) or gone: no version, no output.
+        await tx.$executeRaw`
+          UPDATE pipeline_jobs
+          SET status = CASE WHEN status IN ('claimed', 'running') THEN 'cancelled'::"PipelineJobStatus" ELSE status END,
+              error = CASE WHEN status IN ('claimed', 'running') THEN ${FILE_TRASHED_ERROR} ELSE error END,
+              finished_at = COALESCE(finished_at, now()), seq = seq + 1, heartbeat_at = NULL, updated_at = now(), run_after = NULL,
+              output_version_id = NULL, output_key = NULL, output_mime_type = NULL, output_size = NULL
+          WHERE id = ${jobId}`;
+        return { refused: fileGoneFailure(), drop: job.output_key };
+      }
+      if (isTerminal(job.status)) {
+        // A cancelled job keeps no output.
+        const drop = job.output_key;
+        if (drop) {
+          await tx.$executeRaw`UPDATE pipeline_jobs SET output_version_id = NULL, output_key = NULL, output_mime_type = NULL, output_size = NULL WHERE id = ${jobId}`;
+        }
+        return { refused: new PipelineFailure(409, 'JOB_TERMINAL', `The job is ${job.status}`), drop };
+      }
+      if (!(CLAIMED_STATUSES as readonly string[]).includes(job.status)) {
+        return { refused: new PipelineFailure(409, 'CLAIM_STALE', 'This claim is no longer valid') };
+      }
+      if (!job.output_key || !job.output_version_id || !job.output_mime_type || job.output_size === null) {
+        return { refused: new PipelineFailure(409, 'OUTPUT_MISSING', 'Upload the output (PUT jobs/:id/output) before completing') };
+      }
+      await tx.processedVersion.create({
+        data: {
+          id: job.output_version_id,
+          mediaFileId: job.media_file_id,
+          kind: job.kind,
+          jobId: job.id,
+          attempt: Number(job.attempts),
+          storageKey: job.output_key,
+          mimeType: job.output_mime_type,
+          size: BigInt(job.output_size),
+        },
+      });
+      // The object now belongs to the processed version; the job keeps its id.
+      await tx.$executeRaw`
+        UPDATE pipeline_jobs
+        SET status = 'done', progress = 100, seq = seq + 1, heartbeat_at = NULL, finished_at = now(), updated_at = now(),
+            error = NULL, output_key = NULL
+        WHERE id = ${jobId}`;
+      return { versionId: job.output_version_id };
     });
-    // The object now belongs to the processed version; the job keeps its id.
-    await tx.$executeRaw`
-      UPDATE pipeline_jobs
-      SET status = 'done', progress = 100, seq = seq + 1, heartbeat_at = NULL, finished_at = now(), updated_at = now(),
-          error = NULL, output_key = NULL
-      WHERE id = ${jobId}`;
-    return { versionId: job.output_version_id };
-  });
+  } catch (err) {
+    // A purge that slipped in between (foreign key, deadlock, vanished row)
+    // means the file is gone: answer that, never a 500.
+    if (await fileIsGone(head.mediaFileId)) {
+      await dropObject(head.outputKey);
+      throw fileGoneFailure();
+    }
+    throw err;
+  }
   if ('refused' in outcome) {
-    if ('drop' in outcome) await dropObject(outcome.drop);
+    await dropObject(outcome.drop);
     throw outcome.refused;
   }
   log.info('job done', { jobId, versionId: outcome.versionId });
-  return { status: 'done', versionId: outcome.versionId! };
+  return { status: 'done', versionId: outcome.versionId };
+}
+
+/**
+ * `POST jobs/:id/release`: the claim holder gives the job back (shutdown)
+ * without spending an attempt; it can be claimed again at once.
+ */
+export async function releaseJob(worker: WorkerPrincipal, jobId: string, claimToken: string | null): Promise<ReleaseResponse> {
+  assertJobRef(jobId, claimToken);
+  const rows = await prisma.$queryRaw<{ attempts: number; previous_key: string | null }[]>`
+    WITH cur AS (
+      SELECT id, output_key FROM pipeline_jobs
+      WHERE id = ${jobId} AND claimed_by = ${worker.id} AND claim_token = ${claimToken} AND status IN ('claimed', 'running')
+      FOR UPDATE
+    )
+    UPDATE pipeline_jobs p
+    SET status = 'queued', attempts = GREATEST(p.attempts - 1, 0), claimed_by = NULL, claim_token = NULL,
+        heartbeat_at = NULL, run_after = NULL, progress = 0, seq = p.seq + 1, updated_at = now(),
+        output_version_id = NULL, output_key = NULL, output_mime_type = NULL, output_size = NULL
+    FROM cur WHERE p.id = cur.id
+    RETURNING p.attempts, cur.output_key AS previous_key`;
+  const row = rows[0];
+  if (!row) throw await refusal(worker, jobId, claimToken);
+  await dropObject(row.previous_key);
+  log.info('job released', { jobId, attempts: Number(row.attempts) });
+  return { status: 'queued', attempts: Number(row.attempts) };
+}
+
+/**
+ * Cancels every unfinished job whose file is in the Trash (error "file
+ * trashed") and deletes their uploaded outputs. Called by the trash after
+ * it moves files and by the sweeper. Answers the count.
+ */
+export async function cancelJobsOfTrashedFiles(): Promise<number> {
+  const rows = await prisma.$queryRaw<{ previous_key: string | null }[]>`
+    WITH cur AS (
+      SELECT j.id, j.output_key FROM pipeline_jobs j
+      JOIN media_files m ON m.id = j.media_file_id
+      WHERE j.status IN ('queued', 'claimed', 'running') AND m."trashedAt" IS NOT NULL
+      FOR UPDATE OF j
+    )
+    UPDATE pipeline_jobs p
+    SET status = 'cancelled', error = ${FILE_TRASHED_ERROR}, seq = p.seq + 1, heartbeat_at = NULL, finished_at = now(), updated_at = now(),
+        run_after = NULL, output_version_id = NULL, output_key = NULL, output_mime_type = NULL, output_size = NULL
+    FROM cur WHERE p.id = cur.id
+    RETURNING cur.output_key AS previous_key`;
+  for (const r of rows) await dropObject(r.previous_key);
+  if (rows.length) log.info('jobs cancelled: file trashed', { jobs: rows.length });
+  return rows.length;
+}
+
+/** Days after which a worker row that holds no claim is removed. */
+export const WORKER_PRUNE_DAYS = 30;
+
+/** Removes worker rows not seen for 30 days that hold no claim. Answers the count. */
+export async function pruneWorkers(): Promise<number> {
+  const before = new Date(Date.now() - WORKER_PRUNE_DAYS * 24 * 3600 * 1000);
+  const r = await prisma.pipelineWorker.deleteMany({
+    where: { lastSeen: { lt: before }, jobs: { none: { status: { in: ['claimed', 'running'] } } } },
+  });
+  return r.count;
 }
 
 type FailRow = { status: string; attempts: number; max_attempts: number; previous_key: string | null };
@@ -417,6 +583,7 @@ export async function failJob(
         claim_token = CASE WHEN cur.requeue THEN NULL ELSE p.claim_token END,
         progress = CASE WHEN cur.requeue THEN 0 ELSE p.progress END,
         finished_at = CASE WHEN cur.requeue THEN NULL ELSE now() END,
+        run_after = CASE WHEN cur.requeue THEN now() + make_interval(secs => ${RETRY_DELAY_SECONDS}::int * p.attempts) ELSE NULL END,
         heartbeat_at = NULL, error = ${input.error}, seq = p.seq + 1, updated_at = now(),
         output_version_id = NULL, output_key = NULL, output_mime_type = NULL, output_size = NULL
     FROM cur WHERE p.id = cur.id
@@ -436,11 +603,13 @@ export async function failJob(
 export const LEASE_EXPIRED_ERROR = 'The worker stopped sending heartbeats';
 
 /**
- * Claims whose last heartbeat is older than the lease go back to the queue,
- * or fail once their attempts are used up (the late worker then gets
- * JOB_TERMINAL). Outputs they uploaded are deleted. Answers the counts.
+ * Claims whose last heartbeat is older than the lease go back to the queue
+ * (claimable again after 30 s per attempt used), or fail once their
+ * attempts are used up (the late worker then gets JOB_TERMINAL). Outputs
+ * they uploaded are deleted. Also cancels jobs of trashed files and prunes
+ * stale worker rows. Answers the counts.
  */
-export async function sweepExpiredClaims(): Promise<{ requeued: number; failed: number }> {
+export async function sweepExpiredClaims(): Promise<{ requeued: number; failed: number; cancelled: number; pruned: number }> {
   const lease = leaseSeconds();
   const rows = await prisma.$queryRaw<{ id: string; status: string; previous_key: string | null }[]>`
     WITH expired AS (
@@ -454,23 +623,28 @@ export async function sweepExpiredClaims(): Promise<{ requeued: number; failed: 
         claim_token = CASE WHEN e.exhausted THEN p.claim_token ELSE NULL END,
         progress = CASE WHEN e.exhausted THEN p.progress ELSE 0 END,
         finished_at = CASE WHEN e.exhausted THEN now() ELSE NULL END,
+        run_after = CASE WHEN e.exhausted THEN NULL ELSE now() + make_interval(secs => ${RETRY_DELAY_SECONDS}::int * p.attempts) END,
         heartbeat_at = NULL, error = ${LEASE_EXPIRED_ERROR}, seq = p.seq + 1, updated_at = now(),
         output_version_id = NULL, output_key = NULL, output_mime_type = NULL, output_size = NULL
     FROM expired e WHERE p.id = e.id
     RETURNING p.id, p.status::text AS status, e.output_key AS previous_key`;
   for (const r of rows) await dropObject(r.previous_key);
   const failed = rows.filter((r) => r.status === 'failed').length;
-  return { requeued: rows.length - failed, failed };
+  const cancelled = await cancelJobsOfTrashedFiles();
+  const pruned = await pruneWorkers();
+  return { requeued: rows.length - failed, failed, cancelled, pruned };
 }
 
 /* ------------------------------------------------------------------ */
 /* Jobs for people (GraphQL)                                           */
 /* ------------------------------------------------------------------ */
 
+export type JobRequestCode = 'KIND_UNKNOWN' | 'KIND_NOT_APPLICABLE' | 'JOB_TERMINAL' | 'NOT_FOUND';
+
 /** Refusals of the GraphQL job API; resolvers turn them into coded errors. */
 export class JobRequestError extends Error {
-  readonly code: 'KIND_UNKNOWN' | 'JOB_TERMINAL' | 'NOT_FOUND';
-  constructor(code: 'KIND_UNKNOWN' | 'JOB_TERMINAL' | 'NOT_FOUND', message: string) {
+  readonly code: JobRequestCode;
+  constructor(code: JobRequestCode, message: string) {
     super(message);
     this.name = 'JobRequestError';
     this.code = code;
@@ -554,35 +728,50 @@ function view(row: JobRow, live: Set<string>): JobView {
 }
 
 /**
- * Queues `kind` for a ready, live file. An unfinished job of the same kind
- * on the same file is answered instead of a second one (a double click
- * queues once).
+ * Queues `kind` for a ready, live file whose type the kind accepts. At most
+ * one unfinished job per file and kind exists (a partial unique index): a
+ * second request answers the open one (a double click queues once).
  */
 export async function enqueueJob(input: { fileId: string; kind: string; createdById: string; params?: Record<string, unknown> }): Promise<JobView> {
-  if (!isKindName(input.kind) || !(await prisma.pipelineKind.findUnique({ where: { name: input.kind }, select: { name: true } }))) {
-    throw new JobRequestError('KIND_UNKNOWN', `Unknown job kind ${input.kind}`);
-  }
-  const file = await prisma.mediaFile.findUnique({ where: { id: input.fileId }, select: { id: true, status: true, trashedAt: true } });
+  const kind = isKindName(input.kind)
+    ? await prisma.pipelineKind.findUnique({ where: { name: input.kind }, select: { name: true, accepts: true } })
+    : null;
+  if (!kind) throw new JobRequestError('KIND_UNKNOWN', `Unknown job kind ${input.kind}`);
+  const file = await prisma.mediaFile.findUnique({ where: { id: input.fileId }, select: { id: true, status: true, trashedAt: true, mimeType: true } });
   if (!file || file.status !== 'ready' || file.trashedAt) throw new JobRequestError('NOT_FOUND', 'File not found');
-  const live = await liveKinds();
-  const open = await prisma.pipelineJob.findFirst({
-    where: { mediaFileId: file.id, kind: input.kind, status: { in: ['queued', 'claimed', 'running'] } },
-    select: JOB_SELECT,
-  });
-  if (open) return view(open, live);
-  const row = await prisma.pipelineJob.create({
-    data: {
-      id: uuidv7(),
-      kind: input.kind,
-      mediaFileId: file.id,
-      params: (input.params ?? {}) as object,
-      maxAttempts: MAX_ATTEMPTS,
-      createdById: input.createdById,
-    },
-    select: JOB_SELECT,
-  });
-  log.info('job queued', { jobId: row.id, kind: row.kind, fileId: file.id });
-  return view(row, live);
+  if (!kindAccepts(kind.accepts, file.mimeType)) {
+    throw new JobRequestError('KIND_NOT_APPLICABLE', `${kind.name} does not apply to ${file.mimeType} files`);
+  }
+  const params = JSON.stringify(input.params ?? {});
+  for (let tries = 0; tries < 3; tries++) {
+    const id = uuidv7();
+    const inserted = await prisma.$queryRaw<{ id: string }[]>`
+      INSERT INTO pipeline_jobs (id, kind, media_file_id, params, max_attempts, created_by)
+      VALUES (${id}, ${kind.name}, ${file.id}, ${params}::jsonb, ${MAX_ATTEMPTS}::int, ${input.createdById})
+      ON CONFLICT (media_file_id, kind) WHERE status IN ('queued', 'claimed', 'running') DO NOTHING
+      RETURNING id`;
+    const row = await prisma.pipelineJob.findFirst({
+      where: inserted[0] ? { id } : { mediaFileId: file.id, kind: kind.name, status: { in: ['queued', 'claimed', 'running'] } },
+      select: JOB_SELECT,
+    });
+    // The open job may have finished between the conflict and the read: try again.
+    if (!row) continue;
+    if (inserted[0]) log.info('job queued', { jobId: row.id, kind: row.kind, fileId: file.id });
+    return view(row, await liveKinds());
+  }
+  throw new Error('enqueueJob: could not queue or find the open job');
+}
+
+const labelCache = { at: 0, labels: new Map<string, string | null>() };
+
+/** The stored label of a kind (`pipeline_kinds.label`), cached for a minute; null when none. */
+export async function kindLabel(kind: string): Promise<string | null> {
+  if (Date.now() - labelCache.at > 60_000) {
+    const rows = await prisma.pipelineKind.findMany({ select: { name: true, label: true } });
+    labelCache.labels = new Map(rows.map((r) => [r.name, r.label]));
+    labelCache.at = Date.now();
+  }
+  return labelCache.labels.get(kind) ?? null;
 }
 
 /** Cancels a queued, claimed or running job; its worker learns it through 409 JOB_TERMINAL. */

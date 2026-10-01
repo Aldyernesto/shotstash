@@ -189,7 +189,7 @@ async function sweepJobs(lockTtlMs: number) {
     if (locked.ran) result = locked.value;
     else if (locked.reason === 'unavailable') result = await run();
     else return;
-    if (result.requeued || result.failed) jobSweepLog.info('expired claims', result);
+    if (result.requeued || result.failed || result.cancelled || result.pruned) jobSweepLog.info('swept', result);
   } catch (err) {
     jobSweepLog.error('failed', { err: errMessage(err) });
   }
