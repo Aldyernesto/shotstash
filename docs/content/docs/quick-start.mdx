@@ -21,26 +21,17 @@ This guide installs Shotstash with Docker Compose on one machine and ends with a
 <Steps>
 <Step>
 
-### Get the code
+### Get the code and create `.env`
 
 ```bash
 git clone https://github.com/%REPO%.git shotstash
 cd shotstash
-cp .env.example .env
+sh docker/init.sh
 ```
 
-</Step>
-<Step>
+`docker/init.sh` copies `.env.example` to `.env` and gives `SESSION_SECRET`, `MEDIA_SIGNING_SECRET`, `SETUP_TOKEN`, `WORKER_BOOTSTRAP_TOKEN` and `POSTGRES_PASSWORD` each its own random value. It prints none of them and never overwrites an existing `.env`. Then it runs the preflight: Docker present, secrets valid, port free.
 
-### Fill in three secrets
-
-Open `.env` and give each of these its own random value:
-
-```bash
-openssl rand -hex 32   # paste as SESSION_SECRET
-openssl rand -hex 32   # paste as POSTGRES_PASSWORD
-openssl rand -hex 32   # paste as WORKER_BOOTSTRAP_TOKEN
-```
+To do it by hand instead, run `cp .env.example .env`, give each of those five its own `openssl rand -hex 32`, and run `sh docker/preflight.sh`.
 
 `POSTGRES_PASSWORD` is fixed when the database is first created. Changing it in `.env` later does not change the database, and the app can no longer connect: keep the first value, or start over with `docker compose down -v`.
 
@@ -59,12 +50,13 @@ Left empty, it is `http://localhost:3005`, which only works on the server itself
 </Step>
 <Step>
 
-### Check the machine and start
+### Start
 
 ```bash
-sh docker/preflight.sh   # Docker present, secrets valid, port free
 docker compose up -d
 ```
+
+After changing `.env`, `sh docker/preflight.sh` checks it again.
 
 The first start builds the app and worker images. `docker compose ps` lists the services; the app is ready when it reports `healthy`.
 
@@ -73,7 +65,7 @@ The first start builds the app and worker images. `docker compose ps` lists the 
 
 ### Create the owner account
 
-Open `http://localhost:3005` (or `http://<server-ip>:3005`). You land on `/setup`: it checks that storage is writable and creates the first super admin. Whoever submits it first becomes the owner, so finish it before the instance is reachable by others, or set `SETUP_TOKEN` in `.env` first (the form then asks for it).
+Open `http://localhost:3005` (or `http://<server-ip>:3005`). You land on `/setup`: it checks that storage is writable and creates the first super admin. The form asks for the `SETUP_TOKEN` that `docker/init.sh` wrote to `.env` (`grep SETUP_TOKEN .env`), so nobody else can claim a fresh instance. Without a `SETUP_TOKEN`, whoever submits the form first becomes the owner.
 
 </Step>
 <Step>

@@ -1,7 +1,6 @@
 # Shotstash quick start (Story 6.2). See README.md, "Quick start".
 #
-#   cp .env.example .env        # then set SESSION_SECRET, POSTGRES_PASSWORD and WORKER_BOOTSTRAP_TOKEN
-#   sh docker/preflight.sh
+#   sh docker/init.sh           # .env with random secrets, then the preflight
 #   docker compose up -d
 #
 # Only the app is published on the host (SHOTSTASH_PORT, default 3005);
