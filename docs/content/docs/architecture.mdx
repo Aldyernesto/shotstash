@@ -109,7 +109,7 @@ Subscriptions (discussion, notifications, job progress) run over graphql-ws on t
 
 ### AD-8: Docker Compose runtime; images carry no environment [#ad-8]
 
-`server.ts` is compiled with esbuild to `dist/server.js`, with every dependency external. No `NEXT_PUBLIC_` variable exists: the browser reads public settings from `GET /api/v1/config`, so one image serves every installation. The image runs migrations and then the server as a non-root user. Compose defines the app, PostgreSQL 17, Dragonfly, the reference worker and an optional Elasticsearch profile. Releases publish multi-arch images to the GitHub Container Registry. Logs are one JSON line per event; there is no telemetry.
+`server.ts` is compiled with esbuild to `dist/server.js`, with every dependency external. No public build-time variable exists: the browser reads public settings from `GET /api/v1/config`, so one image serves every installation. The image runs migrations and then the server as a non-root user. Compose defines the app, PostgreSQL 17, Dragonfly, the reference worker and an optional Elasticsearch profile. Releases publish multi-arch images to the GitHub Container Registry. Logs are one JSON line per event; there is no telemetry.
 
 ### AD-9: First-run setup gate, no seeded credentials [#ad-9]
 

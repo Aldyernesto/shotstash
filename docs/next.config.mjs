@@ -16,7 +16,7 @@ const config = {
   images: { unoptimized: true },
   turbopack: { root: import.meta.dirname },
   outputFileTracingRoot: import.meta.dirname,
-  // Inlined at build time (no NEXT_PUBLIC_ variables in this repository).
+  // Inlined at build time (the app itself has no public build-time variables).
   env: {
     DOCS_BASE_PATH: s.basePath,
     DOCS_REPOSITORY: s.repo,
