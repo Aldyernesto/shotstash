@@ -66,8 +66,13 @@ jobs:
         if: steps.release.outputs.prs_created == 'true' && steps.release.outputs.pr != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
-        run: gh workflow run pr.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+          # Passed as text and parsed in the shell: an expression like
+          # fromJSON() is evaluated even when the step is skipped.
+          PR_JSON: ${{ steps.release.outputs.pr }}
+        run: |
+          BRANCH=$(printf "%s" "$PR_JSON" | jq -r ".headBranchName // empty")
+          if [ -z "$BRANCH" ]; then echo "no release PR branch"; exit 0; fi
+          gh workflow run pr.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
 
   # What to publish: the release just created, or the tag of a manual
   # republish. `latest` and `X.Y` only move when this is the highest release
