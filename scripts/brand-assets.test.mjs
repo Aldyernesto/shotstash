@@ -38,3 +38,17 @@ test('the mark in every brand SVG uses brand.mark', () => {
     assert.equal(m[1].toLowerCase(), brand.mark, p);
   }
 });
+
+test('README banner: SVG source with the brand mark, PNG rendered at 1280x640', async () => {
+  const { default: sharp } = await import('sharp');
+  const dir = path.join(ROOT, '.github', 'assets');
+  const svg = readFileSync(path.join(dir, 'banner.svg'), 'utf8');
+  const m = svg.match(/<rect width="512" height="512" rx="[\d.]+" fill="(#[0-9a-f]{6})"/i);
+  assert.ok(m, 'no mark rect in .github/assets/banner.svg');
+  assert.equal(m[1].toLowerCase(), brand.mark);
+  // Outlined paths only: no font is needed to render it.
+  assert.doesNotMatch(svg, /<text\b/);
+  const meta = await sharp(path.join(dir, 'banner.png')).metadata();
+  assert.equal(meta.width, 1280);
+  assert.equal(meta.height, 640);
+});

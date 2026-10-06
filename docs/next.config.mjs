@@ -21,6 +21,8 @@ const config = {
     DOCS_BASE_PATH: s.basePath,
     DOCS_REPOSITORY: s.repo,
     DOCS_SITE_URL: s.url,
+    // Story 8.2: the public demo's origin; empty means no try-it console.
+    DOCS_DEMO_ORIGIN: s.demoOrigin,
   },
 };
 

@@ -92,6 +92,8 @@ export const typeDefs = `#graphql
     passwordResetEmail: Boolean!
     "Project discussion and mentions are on (SHOTSTASH_FEATURE_DISCUSSION)."
     discussion: Boolean!
+    "Public demo mode is on (SHOTSTASH_DEMO_MODE): demo accounts are read-only and the demo data resets every night."
+    demo: Boolean!
   }
 
   "A project: the top-level container of folders (sections), files and discussion."

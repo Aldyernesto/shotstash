@@ -13,4 +13,6 @@ These pages are generated at build time from [`openapi.json`](https://github.com
 - **System**: health, the runtime configuration, setup and status.
 - **GraphQL**: the GraphQL endpoint itself, documented in the [GraphQL reference](/docs/api/graphql/).
 
-There is no try-it console yet: it arrives with the public demo instance, and it will never send requests to your own installation.
+A try-it console appears only when the site is built with `DEMO_ORIGIN`, the origin of the [public demo](/docs/demo/). It sends requests to that origin only, never to your own installation, using a short read-only token from `POST /api/v1/demo/session` (the "Get a demo token" button). Sites built without `DEMO_ORIGIN`, including your own docs builds, have no console.
+
+<DemoToken />

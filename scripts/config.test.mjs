@@ -151,7 +151,7 @@ test('naming rule: SHOTSTASH_* for product settings, plain names for infrastruct
 
 test('features are derived from the environment', () => {
   const off = cfg.loadConfig(GOOD).config.features;
-  assert.deepEqual(off, { signup: true, google: false, search: false, passwordResetEmail: false, discussion: true });
+  assert.deepEqual(off, { signup: true, google: false, search: false, passwordResetEmail: false, discussion: true, demo: false });
   const on = cfg.loadConfig({
     ...GOOD,
     SHOTSTASH_FEATURE_SIGNUP: 'false',
@@ -160,7 +160,7 @@ test('features are derived from the environment', () => {
     EMAIL_TRANSPORT: 'log',
     SHOTSTASH_FEATURE_DISCUSSION: 'false',
   }).config.features;
-  assert.deepEqual(on, { signup: false, google: true, search: true, passwordResetEmail: true, discussion: false });
+  assert.deepEqual(on, { signup: false, google: true, search: true, passwordResetEmail: true, discussion: false, demo: false });
   assert.equal(cfg.loadConfig({ ...GOOD, RESEND_API_KEY: 're_x' }).config.features.passwordResetEmail, true);
   assert.equal(cfg.loadConfig({ ...GOOD, EMAIL_TRANSPORT: 'resend' }).config.features.passwordResetEmail, false);
 });
@@ -171,7 +171,8 @@ test('GET /api/v1/config shape: public settings only, never a secret', () => {
     Object.assign(process.env, GOOD, { GOOGLE_CLIENT_ID: 'gid', SHOTSTASH_VERSION: '9.9.9', SETUP_TOKEN: 'top-secret' });
     cfg.resetConfig();
     const pub = cfg.publicConfig();
-    assert.deepEqual(Object.keys(pub).sort(), ['appUrl', 'defaultLocale', 'features', 'googleClientId', 'version']);
+    assert.deepEqual(Object.keys(pub).sort(), ['appUrl', 'defaultLocale', 'demo', 'features', 'googleClientId', 'version']);
+    assert.equal(pub.demo, null);
     assert.equal(pub.googleClientId, 'gid');
     assert.equal(pub.version, '9.9.9');
     const text = JSON.stringify(pub);

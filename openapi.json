@@ -473,6 +473,71 @@
         "x-shotstash-auth": "public"
       }
     },
+    "/api/v1/demo/session": {
+      "post": {
+        "operationId": "postApiV1DemoSession",
+        "summary": "Demo try-it session",
+        "description": "Public demo instances only (SHOTSTASH_DEMO_MODE): a 60-minute session of the read-only demo viewer for the docs try-it console. It never slides; every write with it is refused. Rate limited to 10 per hour per IP. A browser Origin must be the instance itself or listed in SHOTSTASH_CORS_ORIGINS. 404 on every other instance.",
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "A read-only demo session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DemoSessionResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGIN_NOT_ALLOWED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND (demo mode is off)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "DEMO_NOT_SEEDED (the demo accounts do not exist yet) or SETUP_REQUIRED (first-run setup not done)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "x-shotstash-auth": "public"
+      }
+    },
     "/api/v1/pipeline/jobs/next": {
       "post": {
         "operationId": "postApiV1PipelineJobsNext",
@@ -2989,6 +3054,23 @@
           "file"
         ]
       },
+      "DemoSessionResponse": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Bearer token for `/api/graphql` and `/api/v1/*`."
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "When the session ends (60 minutes after it was made; it never slides)."
+          }
+        },
+        "required": [
+          "token",
+          "expiresAt"
+        ]
+      },
       "EmptyBody": {
         "type": "object",
         "additionalProperties": {
@@ -3452,6 +3534,10 @@
               "discussion": {
                 "type": "boolean",
                 "description": "Project discussion is on (`SHOTSTASH_FEATURE_DISCUSSION`)."
+              },
+              "demo": {
+                "type": "boolean",
+                "description": "Public demo mode is on (`SHOTSTASH_DEMO_MODE`): read-only demo accounts, nightly reset, sign-up off."
               }
             },
             "required": [
@@ -3459,7 +3545,8 @@
               "google",
               "search",
               "passwordResetEmail",
-              "discussion"
+              "discussion",
+              "demo"
             ],
             "description": "Feature switches."
           },
@@ -3470,6 +3557,44 @@
           "defaultLocale": {
             "type": "string",
             "description": "Default UI locale, such as `en`."
+          },
+          "demo": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "accounts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "email": {
+                      "type": "string",
+                      "description": "Sign-in email."
+                    },
+                    "role": {
+                      "type": "string",
+                      "description": "Role of the account (every demo account is read-only whatever its role)."
+                    }
+                  },
+                  "required": [
+                    "email",
+                    "role"
+                  ]
+                },
+                "description": "The read-only demo accounts."
+              },
+              "password": {
+                "type": "string",
+                "description": "Shared password of the demo accounts (public on purpose: the accounts cannot write)."
+              }
+            },
+            "required": [
+              "accounts",
+              "password"
+            ],
+            "description": "Demo mode only: the demo accounts and their password; null on every other instance."
           }
         },
         "required": [
@@ -3477,7 +3602,8 @@
           "googleClientId",
           "features",
           "version",
-          "defaultLocale"
+          "defaultLocale",
+          "demo"
         ]
       },
       "RegisterRequest": {

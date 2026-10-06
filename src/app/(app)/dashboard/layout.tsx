@@ -25,6 +25,7 @@ import { useHumanizeError, errorKind, errorCodeOf } from "@/components/feedback/
 import { useFormat } from "@/i18n/useFormat";
 import { SUPPORTED_LOCALES, LOCALE_NAMES } from "@/i18n/config";
 import { syncLocaleCookie } from "@/i18n/client";
+import DemoBanner from "@/components/demo/DemoBanner";
 
 const UPDATE_PROFILE = gql`
   mutation UpdateProfile($name: String, $avatarUrl: String, $locale: String) {
@@ -126,7 +127,11 @@ export default function DashboardLayout({
           onOpenLogout={() => setShowLogoutConfirm(true)}
         />
 
-        <main id="spine-main-content" tabIndex={-1} className={styles.mainContent}>{authed ? children : null}</main>
+        <main id="spine-main-content" tabIndex={-1} className={styles.mainContent}>
+          {/* Story 8.2: public demo notice (demo mode only). */}
+          {authed ? <DemoBanner /> : null}
+          {authed ? children : null}
+        </main>
 
         <UploadPanel />
         <UploadDock />

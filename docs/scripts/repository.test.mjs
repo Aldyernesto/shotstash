@@ -48,3 +48,16 @@ test('project site, user site and custom domain addresses', () => {
 
   assert.equal(site({ GITHUB_REPOSITORY: 'a/b', DOCS_BASE_PATH: '/b' }).basePath, '/b');
 });
+
+test('DEMO_ORIGIN: an exact origin or nothing (Story 8.2)', async () => {
+  const { normaliseDemoOrigin } = await import('../lib/repository.mjs');
+  assert.equal(normaliseDemoOrigin(''), '');
+  assert.equal(normaliseDemoOrigin(undefined), '');
+  assert.equal(normaliseDemoOrigin(' https://Demo.Example.com/ '), 'https://demo.example.com');
+  assert.equal(normaliseDemoOrigin('http://localhost:3005'), 'http://localhost:3005');
+  for (const bad of ['demo.example.com', 'https://demo.example.com/app', 'https://*.example.com', 'ftp://demo.example.com', 'https://u:p@demo.example.com']) {
+    assert.throws(() => normaliseDemoOrigin(bad), /DEMO_ORIGIN/, bad);
+  }
+  assert.equal(site({ GITHUB_REPOSITORY: 'a/b' }).demoOrigin, '');
+  assert.equal(site({ GITHUB_REPOSITORY: 'a/b', DEMO_ORIGIN: 'https://demo.example.com' }).demoOrigin, 'https://demo.example.com');
+});

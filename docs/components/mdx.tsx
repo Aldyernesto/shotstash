@@ -5,6 +5,7 @@ import type { MDXComponents } from 'mdx/types';
 import { Mermaid } from './mermaid';
 import { CommunityWorkers } from './community-workers';
 import { Screenshot } from './screenshot';
+import { DemoToken } from './demo-token';
 
 export function getMDXComponents(components?: MDXComponents) {
   return {
@@ -16,6 +17,7 @@ export function getMDXComponents(components?: MDXComponents) {
     Tabs,
     CommunityWorkers,
     Screenshot,
+    DemoToken,
     ...components,
   } satisfies MDXComponents;
 }

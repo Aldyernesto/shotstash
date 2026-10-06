@@ -753,7 +753,11 @@
       "KIND_NOT_APPLICABLE": "This kind of processing doesn't apply to this file's type.",
       "FILE_GONE": "The file of this job was moved to the Trash or deleted.",
       "WORKER_REVOKED": "This worker was revoked on this instance.",
-      "BODY_TOO_LARGE": "The request is too large."
+      "BODY_TOO_LARGE": "The request is too large.",
+      "ORIGIN_NOT_ALLOWED": "This site may not open a demo session.",
+      "DEMO_NOT_SEEDED": "The demo is being prepared. Try again in a few minutes.",
+      "DEMO_MODE_OFF": "Demo mode is off on this instance.",
+      "NO_DEMO_ACCOUNT": "No demo account could be created."
     },
     "forbidden": "You don't have access to do that."
   },
@@ -1498,5 +1502,16 @@
     },
     "alreadyOpen": "Already queued or running for this file.",
     "errorDetails": "Show the error"
+  },
+  "demo": {
+    "banner": "Public demo: read-only, resets every night.",
+    "signInTitle": "Try the demo",
+    "signInBody": "Sign in with one of these read-only accounts. Password: <code>{password}</code>",
+    "useAccount": "Use {role} account {email}",
+    "role": {
+      "ADMIN": "Admin",
+      "EDITOR": "Editor",
+      "VIEWER": "Viewer"
+    }
   }
 }

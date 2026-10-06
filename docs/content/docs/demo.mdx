@@ -1,0 +1,134 @@
+---
+title: Run a public demo
+description: A read-only Shotstash with synthetic sample media, reset every night, that anyone can try without an account of their own.
+---
+
+Demo mode turns an instance into a public showroom: visitors sign in with shared, read-only demo accounts and browse a sample project made of synthetic media. Nothing they do changes anything, and the sample data is restored every night. Your own super admin account keeps full rights.
+
+Run a demo on its own server and its own database. Demo mode is meant for an instance that holds nothing but the demo.
+
+## What demo mode does
+
+Demo mode is on when the app starts with `SHOTSTASH_DEMO_MODE=true` and `DEMO_ADMIN_PASSWORD` set (at least 10 characters).
+
+- **Demo accounts.** The seed creates three accounts that share `DEMO_ADMIN_PASSWORD`:
+
+  | Account | Role |
+  | --- | --- |
+  | `demo-admin@example.com` | Admin |
+  | `demo-editor@example.com` | Editor |
+  | `demo-viewer@example.com` | Viewer |
+
+- **Read-only.** All three are read-only: every write, upload and profile change answers `FORBIDDEN`. Demo accounts cannot upload at all, so there is no upload limit to tune.
+- **Password on the sign-in page.** In demo mode the sign-in page lists the demo accounts and their password. That is the point: the accounts cannot change anything, so the password is not a secret.
+- **No sign-up.** Public sign-up is forced off and `register` answers `FEATURE_DISABLED`, whatever `SHOTSTASH_FEATURE_SIGNUP` says.
+- **A banner** in the app says it is a public demo, read-only, reset every night.
+- **Your account is untouched.** The super admin you create at `/setup` is not a demo account and keeps every right.
+
+## What you need
+
+- A small Linux server with Docker Engine and the Compose plugin. 2 GB of memory is enough.
+- A domain name pointing at it, for example `demo.example.com`.
+- A TLS reverse proxy in front of the app. The [Networking](/docs/networking/) guide has Caddy and nginx examples; Caddy gets certificates by itself.
+
+## 1. Get the code and create `.env`
+
+```bash
+git clone https://github.com/%REPO%.git
+cd shotstash
+sh docker/init.sh
+```
+
+`docker/init.sh` copies `.env.example` to `.env` and fills every generated secret with a random value, then runs the preflight. It never overwrites an existing `.env`, and it prints no secret.
+
+Then add the demo settings to `.env`:
+
+```bash
+APP_URL=https://demo.example.com
+TRUST_PROXY=true
+DEMO_ADMIN_PASSWORD=pick-a-friendly-password
+SHOTSTASH_CORS_ORIGINS=https://aldyernesto.github.io
+```
+
+- `APP_URL` and `TRUST_PROXY=true`: the app sits behind your TLS proxy (see [Networking](/docs/networking/) for what the proxy must do before `TRUST_PROXY=true` is safe).
+- `DEMO_ADMIN_PASSWORD`: every visitor sees it, so make it easy to type.
+- `SHOTSTASH_CORS_ORIGINS`: the origin of the docs site, and nothing else. It is only needed for the docs try-it console (see below).
+
+## 2. Start with the demo override
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d
+```
+
+[`docker-compose.demo.yml`](https://github.com/%REPO%/blob/main/docker-compose.demo.yml) sets `SHOTSTASH_DEMO_MODE=true`, refuses to start without `DEMO_ADMIN_PASSWORD` in `.env`, and publishes the app on `127.0.0.1` only, so it is reached through your TLS proxy and nowhere else.
+
+Point the proxy at `127.0.0.1:3005`. A Caddy site for the demo:
+
+```text
+demo.example.com {
+	reverse_proxy 127.0.0.1:3005 {
+		header_up -Cf-Connecting-Ip
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		flush_interval -1
+	}
+}
+```
+
+## 3. Finish setup
+
+Open `https://demo.example.com`. You land on `/setup`, which creates your owner account (the super admin). `docker/init.sh` set a `SETUP_TOKEN`, so the form asks for it:
+
+```bash
+grep SETUP_TOKEN .env
+```
+
+## 4. Seed the demo
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.demo.yml exec app node dist/demo.js seed
+```
+
+The seed runs inside the app container and generates everything on the server. It creates the three demo accounts and a sample project with:
+
+- images made with sharp and short ffmpeg test clips, plus a PDF document;
+- thumbnails and one 720p proxy version;
+- a public share link and a discussion thread.
+
+No real photos, faces or footage are involved. The seed refuses to run (and exits with an error) when demo mode is off or setup is not finished.
+
+Sign out, sign in as `demo-viewer@example.com` with the demo password, and check that the project opens, a clip plays and the share link works.
+
+## Resets
+
+**Nightly.** While demo mode is on, the app resets the demo by itself every night at 03:00 in `SHOTSTASH_DEFAULT_TIMEZONE`. With several app processes, only one runs it (a Dragonfly lock).
+
+**By hand.**
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.demo.yml exec app node dist/demo.js reset
+```
+
+A reset deletes the demo project's rows and bytes, the demo accounts' sessions and notifications, then seeds again. It never touches `instance_settings` (so setup never reopens), your super admin or any account that is not a demo account.
+
+**Without Docker** (a source checkout with `npm run dev` or `npm start`): `npm run demo:seed` and `npm run demo:reset` do the same with the variables in `.env`.
+
+## The docs try-it console
+
+The [REST reference](/docs/api/rest/) can show a try-it console that sends requests to your demo. It is off unless the docs site is built with `DEMO_ORIGIN`, and when it is on it talks to that origin only, never to a visitor's own install.
+
+1. **Allow the docs origin on the demo.** `SHOTSTASH_CORS_ORIGINS` takes comma-separated exact origins (`scheme://host[:port]`, no path, no wildcard; empty by default). For the default GitHub Pages site the origin is `https://aldyernesto.github.io`: an origin never has a path, so not `.../shotstash/`. Matching origins get `Access-Control-Allow-Origin` echoed on `/api/*`, with credentials off and an answer to the preflight. Any other origin gets no CORS headers.
+2. **Build the docs with the demo origin.** In the repository settings, set the variable `DEMO_ORIGIN` (for example `https://demo.example.com`) and rerun the `docs.yml` workflow. The REST reference then shows the console pointed at that origin, with a **Get a demo token** button.
+
+The button calls `POST /api/v1/demo/session`, which:
+
+- exists only in demo mode (`404` otherwise);
+- is rate limited to 10 per hour per IP (`429` with `Retry-After` beyond that);
+- refuses a request whose `Origin` is neither the app's own nor listed in `SHOTSTASH_CORS_ORIGINS`;
+- answers `{ token, expiresAt }`: a 60-minute session of the read-only demo viewer that never slides. Reads work; every write is refused.
+
+## Keep an eye on it
+
+Shotstash has no telemetry and makes no outbound calls. Watch the demo from the outside with your own uptime monitor on `https://demo.example.com/api/health`, which answers `{ ok, setupRequired, version }` and returns `503` when the database, cache or storage is down.
+
+Upgrade a demo like any other install ([Upgrading](/docs/upgrading/)); keep the `-f docker-compose.yml -f docker-compose.demo.yml` pair on every compose command.

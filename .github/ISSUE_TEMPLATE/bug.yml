@@ -1,0 +1,68 @@
+name: Bug report
+description: Something does not work the way the docs say it should.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Security problems go through a private
+        [security advisory](https://github.com/Aldyernesto/shotstash/security/advisories/new), not here.
+        Please never paste secrets, real media or personal data; use synthetic files and invented names.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The shortest path to the problem, ideally on a fresh install.
+      placeholder: |
+        1. Open a project
+        2. Upload a 2 GB video
+        3. Reload the page at 50%
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown on `/status` and in `GET /api/health`, or the commit you run.
+      placeholder: 0.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How Shotstash runs
+      options:
+        - docker compose (images built locally)
+        - docker compose (published images)
+        - Node.js from source
+        - Other (describe below)
+    validations:
+      required: true
+  - type: dropdown
+    id: storage
+    attributes:
+      label: Storage backend
+      options:
+        - local disk or NAS mount
+        - S3-compatible bucket
+        - Not sure
+  - type: input
+    id: environment
+    attributes:
+      label: Host and browser
+      description: Operating system and architecture of the host, reverse proxy if any, and the browser.
+      placeholder: Ubuntu 24.04 x64, Caddy, Firefox 140
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The relevant lines of `docker compose logs app` (or the worker). Remove anything private.
+      render: text

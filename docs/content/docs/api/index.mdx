@@ -10,7 +10,7 @@ Shotstash has two API surfaces, and both references on this site are generated f
 | GraphQL at `/api/graphql` (HTTP and WebSocket) | [GraphQL reference](/docs/api/graphql/) | [`schema.graphql`](https://github.com/%REPO%/blob/main/schema.graphql) |
 | REST under `/api/v1`, `/media` and `/s` | [REST reference](/docs/api/rest/) | [`openapi.json`](https://github.com/%REPO%/blob/main/openapi.json) (OpenAPI 3.1) |
 
-The references have no try-it console: a console on this site would send your token to whatever address you typed. One arrives with the public demo instance.
+The REST reference has a try-it console only when the site is built with `DEMO_ORIGIN`, the origin of the [public demo](/docs/demo/). It then sends requests to that origin only, never to your own install, with a short read-only token from `POST /api/v1/demo/session`. Sites built without it, including your own docs builds, have no console.
 
 ## Authentication
 

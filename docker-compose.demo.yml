@@ -1,0 +1,23 @@
+# Public demo instance (Story 8.2). Use it together with docker-compose.yml
+# (and docker-compose.images.yml once images are published):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.demo.yml exec app node dist/demo.js seed
+#
+# Demo mode lists the read-only demo accounts and their password on the
+# sign-in page, turns sign-up off, shows a demo banner, hands out short
+# read-only sessions for the docs try-it console and resets the demo data
+# every night at 03:00 (SHOTSTASH_DEFAULT_TIMEZONE). The owner's super admin
+# account keeps full rights. Guide: https://aldyernesto.github.io/shotstash/docs/demo/
+#
+# The app is published on 127.0.0.1 only: put a TLS reverse proxy in front
+# (set APP_URL to the public https address and TRUST_PROXY=true in .env).
+# Set SHOTSTASH_CORS_ORIGINS in .env to the docs origin for the try-it console.
+
+services:
+  app:
+    environment:
+      SHOTSTASH_DEMO_MODE: "true"
+      DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:?Set DEMO_ADMIN_PASSWORD in .env (at least 10 characters; it is shown on the sign-in page)}
+    ports: !override
+      - "127.0.0.1:${SHOTSTASH_PORT:-3005}:3005"

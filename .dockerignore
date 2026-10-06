@@ -17,3 +17,5 @@ worker
 # sources that the build checks (docs/design) reach the image build.
 docs/*
 !docs/design
+# Launch texts (Story 8.3) are not part of any image.
+launch

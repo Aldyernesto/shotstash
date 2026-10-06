@@ -48,6 +48,8 @@ export const LIMITS = {
   uploadInitiate: { limit: 10000, windowMs: HOUR },
   /** Upload parts per user: 16 MiB parts at 1 Gbit/s are about 480 a minute. */
   uploadPart: { limit: 1200, windowMs: MIN },
+  /** Demo try-it sessions per IP (Story 8.2, demo mode only). */
+  demoSession: { limit: 10, windowMs: HOUR },
 } as const satisfies Record<string, Limit>;
 
 /* ------------------------------------------------------------------ */

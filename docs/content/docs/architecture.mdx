@@ -129,7 +129,7 @@ Every push and pull request runs gitleaks for secrets and a scanner that hashes 
 
 ### AD-13: Docs from committed artifacts, published statically [#ad-13]
 
-The docs are a separate Fumadocs app in `docs/` with its own dependencies. They read only committed files: the guides, `schema.graphql` and `openapi.json`, which CI regenerates and diff-checks, so the API reference cannot drift from the code. The `docs.yml` workflow deploys the static export to GitHub Pages under the project path, or at the root of a custom domain when one is configured. Try-it consoles stay off until a public demo instance exists.
+The docs are a separate Fumadocs app in `docs/` with its own dependencies. They read only committed files: the guides, `schema.graphql` and `openapi.json`, which CI regenerates and diff-checks, so the API reference cannot drift from the code. The `docs.yml` workflow deploys the static export to GitHub Pages under the project path, or at the root of a custom domain when one is configured. A try-it console exists only when the site is built with `DEMO_ORIGIN`, and then sends requests to that public demo origin only.
 
 ### AD-14: CI and releases [#ad-14]
 

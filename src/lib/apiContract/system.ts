@@ -48,6 +48,24 @@ export type FeatureFlags = {
   passwordResetEmail: boolean;
   /** Project discussion is on (`SHOTSTASH_FEATURE_DISCUSSION`). */
   discussion: boolean;
+  /** Public demo mode is on (`SHOTSTASH_DEMO_MODE`): read-only demo accounts, nightly reset, sign-up off. */
+  demo: boolean;
+};
+
+/** A read-only account of a public demo instance. */
+export type DemoAccountBody = {
+  /** Sign-in email. */
+  email: string;
+  /** Role of the account (every demo account is read-only whatever its role). */
+  role: string;
+};
+
+/** How to sign in to a public demo instance; shown on its sign-in page. */
+export type DemoSignIn = {
+  /** The read-only demo accounts. */
+  accounts: DemoAccountBody[];
+  /** Shared password of the demo accounts (public on purpose: the accounts cannot write). */
+  password: string;
 };
 
 /** Public runtime settings for the browser. Never carries a secret. */
@@ -62,6 +80,16 @@ export type PublicConfigResponse = {
   version: string;
   /** Default UI locale, such as `en`. */
   defaultLocale: string;
+  /** Demo mode only: the demo accounts and their password; null on every other instance. */
+  demo: DemoSignIn | null;
+};
+
+/** A short read-only session of the demo viewer, for the docs try-it console. */
+export type DemoSessionResponse = {
+  /** Bearer token for `/api/graphql` and `/api/v1/*`. */
+  token: string;
+  /** When the session ends (60 minutes after it was made; it never slides). */
+  expiresAt: string;
 };
 
 /** The first super admin. */

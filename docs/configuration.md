@@ -28,6 +28,7 @@ client id, enabled features, version, default language) from
 | `PORT` | `3005` |  | Port the server listens on inside the machine or container. |
 | `APP_URL` |  |  | Public URL of this installation (the address people open: LAN IP or domain), used in emails and share links. Defaults to http://localhost:<PORT> (with docker compose: http://localhost:<SHOTSTASH_PORT>). /api/health reports schemeMismatch when this says https but requests arrive as http. |
 | `TRUST_PROXY` | `false` |  | Set to true ONLY when the app is reachable exclusively through a reverse proxy (Cloudflare, nginx) that sets cf-connecting-ip, x-forwarded-for and x-forwarded-proto. Otherwise clients could spoof those headers. |
+| `SHOTSTASH_CORS_ORIGINS` |  |  | Comma-separated exact origins (scheme://host[:port], no path, never a wildcard) allowed to call /api/* from a browser, without credentials. Empty: no cross-origin access. A public demo sets the docs origin here for the try-it console. |
 | `LOG_LEVEL` | `info` |  | fatal, error, warn, info, debug, trace or silent. Logs are JSON lines on stdout. |
 
 ## Database
@@ -109,8 +110,8 @@ client id, enabled features, version, default language) from
 
 | Variable | Default | Required | Description |
 | --- | --- | --- | --- |
-| `SHOTSTASH_DEMO_MODE` | `false` |  | Demo instances only. With true, `npm run demo:seed` (after first-run setup) creates read-only demo accounts and a sample project. |
-| `DEMO_ADMIN_PASSWORD` |  |  | Demo instances only. Password of every demo account, at least 10 characters. Secret. |
+| `SHOTSTASH_DEMO_MODE` | `false` |  | Public demo instances only. With true: the sign-in page lists the read-only demo accounts and their password, sign-up is off, a demo banner shows, POST /api/v1/demo/session hands out short read-only sessions and the demo data is reset every night at 03:00 (SHOTSTASH_DEFAULT_TIMEZONE). Seed it once after setup with `node dist/demo.js seed` (`npm run demo:seed` from source). Needs DEMO_ADMIN_PASSWORD. |
+| `DEMO_ADMIN_PASSWORD` |  |  | Public demo instances only. Password of every demo account, at least 10 characters. It is shown on the sign-in page in demo mode (the accounts are read-only), so never reuse a real password. Secret. |
 
 ## Docker Compose
 

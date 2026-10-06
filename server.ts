@@ -23,6 +23,8 @@ import { purgeExpired } from './src/modules/trash';
 import { checkSearchIndex } from './src/modules/library';
 import { expireSessions } from './src/modules/upload';
 import { sweepExpiredClaims } from './src/modules/pipeline';
+import { demoResetDue, resetDemo } from './src/modules/demo';
+import { corsDecision } from './src/lib/cors';
 import { PIPELINE_CONTRACT_VERSION, PIPELINE_HEADER, PIPELINE_PATH_PREFIX } from './src/lib/pipelineContract';
 import { ConfigError, assertConfig, config } from './src/lib/config';
 import { errMessage, logger } from './src/lib/logger';
@@ -32,6 +34,7 @@ const log = logger('server');
 const sweepLog = logger('trash-sweeper');
 const uploadSweepLog = logger('upload-sweeper');
 const jobSweepLog = logger('job-sweeper');
+const demoLog = logger('demo-reset');
 const wsLog = logger('websocket');
 
 /* ------------------------------------------------------------------ */
@@ -195,6 +198,62 @@ async function sweepJobs(lockTtlMs: number) {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* CORS (Story 8.2): only for the exact origins in                     */
+/* SHOTSTASH_CORS_ORIGINS (the docs try-it console of a public demo),  */
+/* only on /api/*, never with credentials. No list: no CORS at all.    */
+/* ------------------------------------------------------------------ */
+
+/** True when the request was answered here (a preflight). */
+function applyCors(req: IncomingMessage, res: ServerResponse, pathname: string): boolean {
+  if (!pathname.startsWith('/api/')) return false;
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? null;
+  const decision = corsDecision(
+    { method: req.method ?? 'GET', origin: one(req.headers.origin), requestMethod: one(req.headers['access-control-request-method']) },
+    config().SHOTSTASH_CORS_ORIGINS ?? [],
+  );
+  if (decision.kind === 'none') return false;
+  for (const [k, v] of Object.entries(decision.headers)) res.setHeader(k, v);
+  if (decision.kind === 'preflight') {
+    res.statusCode = 204;
+    res.end();
+    return true;
+  }
+  return false;
+}
+
+/* ------------------------------------------------------------------ */
+/* Nightly demo reset (Story 8.2): demo mode only. Checked every       */
+/* minute; runs once per local date at 03:00 in                        */
+/* SHOTSTASH_DEFAULT_TIMEZONE, on the instance holding the lock.       */
+/* ------------------------------------------------------------------ */
+const DEMO_RESET_LOCK = 'shotstash:lock:demo-reset';
+const DEMO_RESET_LOCK_TTL_MS = 30 * 60 * 1000;
+let demoResetDate: string | null = null;
+let demoResetRunning = false;
+
+async function nightlyDemoReset() {
+  const date = demoResetDue(new Date(), config().SHOTSTASH_DEFAULT_TIMEZONE, demoResetDate);
+  if (!date || demoResetRunning) return;
+  demoResetRunning = true;
+  demoResetDate = date;
+  try {
+    const locked = await withLock(DEMO_RESET_LOCK, DEMO_RESET_LOCK_TTL_MS, () => resetDemo());
+    let result;
+    if (locked.ran) result = locked.value;
+    else if (locked.reason === 'unavailable') result = await resetDemo();
+    else {
+      demoLog.info('skipped: another instance holds the lock');
+      return;
+    }
+    demoLog.info('demo data reset', { date, files: result.files });
+  } catch (err) {
+    demoLog.error('failed', { err: errMessage(err) });
+  } finally {
+    demoResetRunning = false;
+  }
+}
+
 // Fail fast before serving anything: every bad variable is listed by name,
 // and signed share URLs need a real secret.
 try {
@@ -265,6 +324,7 @@ app.prepare().then(() => {
       // show why a link is inactive (Next gives not-found.tsx no params).
       delete req.headers[REQUEST_PATH_HEADER];
       req.headers[REQUEST_PATH_HEADER] = parsedUrl.pathname ?? '/';
+      if (applyCors(req, res, parsedUrl.pathname ?? '/')) return;
       if (await setupGate(res, parsedUrl.pathname ?? '/')) return;
       await handle(req, res, parsedUrl);
     } catch (err) {
@@ -388,6 +448,10 @@ app.prepare().then(() => {
         void sweepUploads();
       }, SWEEP_EVERY_MS).unref();
     }, 60 * 1000).unref();
+    if (config().features.demo) {
+      setInterval(() => void nightlyDemoReset(), 60 * 1000).unref();
+      log.info('demo mode: nightly reset at 03:00', { timeZone: config().SHOTSTASH_DEFAULT_TIMEZONE });
+    }
     const jobSweepMs = config().SHOTSTASH_PIPELINE_SWEEP_SECONDS * 1000;
     let jobSweepRunning = false;
     setInterval(() => {

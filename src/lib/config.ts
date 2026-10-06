@@ -23,6 +23,8 @@ import path from 'node:path';
 import { z } from 'zod';
 import { isValidTimeZone, resolveLocale } from '../i18n/config.ts';
 import { brand } from './brand.ts';
+import { parseCorsOrigins } from './cors.ts';
+import { DEMO_ACCOUNTS } from './demoAccounts.ts';
 import { HEARTBEAT_SECONDS } from './pipelineContract.ts';
 
 /* ------------------------------------------------------------------ */
@@ -146,6 +148,20 @@ export const VARIABLES = {
     description:
       'Set to true ONLY when the app is reachable exclusively through a reverse proxy (Cloudflare, nginx) that sets ' +
       'cf-connecting-ip, x-forwarded-for and x-forwarded-proto. Otherwise clients could spoof those headers.',
+  }),
+  SHOTSTASH_CORS_ORIGINS: opt({
+    group: 'Server',
+    kind: 'product',
+    schema: z
+      .string()
+      .transform((v, ctx) => {
+        const { origins, problems } = parseCorsOrigins(v);
+        for (const message of problems) ctx.addIssue({ code: 'custom', message });
+        return origins;
+      }),
+    description:
+      'Comma-separated exact origins (scheme://host[:port], no path, never a wildcard) allowed to call /api/* from a browser, ' +
+      'without credentials. Empty: no cross-origin access. A public demo sets the docs origin here for the try-it console.',
   }),
   LOG_LEVEL: withDefault({
     group: 'Server',
@@ -438,7 +454,10 @@ export const VARIABLES = {
     schema: bool,
     default: false,
     description:
-      'Demo instances only. With true, `npm run demo:seed` (after first-run setup) creates read-only demo accounts and a sample project.',
+      'Public demo instances only. With true: the sign-in page lists the read-only demo accounts and their password, ' +
+      'sign-up is off, a demo banner shows, POST /api/v1/demo/session hands out short read-only sessions and the demo data ' +
+      'is reset every night at 03:00 (SHOTSTASH_DEFAULT_TIMEZONE). Seed it once after setup with `node dist/demo.js seed` ' +
+      '(`npm run demo:seed` from source). Needs DEMO_ADMIN_PASSWORD.',
   }),
   DEMO_ADMIN_PASSWORD: opt({
     group: 'Demo',
@@ -446,7 +465,9 @@ export const VARIABLES = {
     secret: true,
     schema: z.string().min(10, 'must be at least 10 characters'),
     generate: false,
-    description: 'Demo instances only. Password of every demo account, at least 10 characters.',
+    description:
+      'Public demo instances only. Password of every demo account, at least 10 characters. It is shown on the sign-in page ' +
+      'in demo mode (the accounts are read-only), so never reuse a real password.',
   }),
 
   /* ---------- Docker Compose (read by docker-compose.yml, not by the app) ---------- */
@@ -488,6 +509,8 @@ export type Features = {
   passwordResetEmail: boolean;
   /** Project discussion and mentions (SHOTSTASH_FEATURE_DISCUSSION). */
   discussion: boolean;
+  /** Public demo mode (SHOTSTASH_DEMO_MODE): read-only demo accounts, nightly reset. */
+  demo: boolean;
 };
 
 export type Config = ConfigValues & {
@@ -567,6 +590,9 @@ export function loadConfig(env: Env): { config: Config; problems: string[] } {
       `SHOTSTASH_PIPELINE_SWEEP_SECONDS: must be at most half of SHOTSTASH_PIPELINE_LEASE_SECONDS (${sweep} > ${lease} / 2)`,
     );
   }
+  if (values.SHOTSTASH_DEMO_MODE === true && !values.DEMO_ADMIN_PASSWORD) {
+    problems.push('DEMO_ADMIN_PASSWORD: required when SHOTSTASH_DEMO_MODE=true');
+  }
   if (values.STORAGE_BACKEND === 's3') {
     for (const name of ['S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const) {
       if (!values[name]) problems.push(`${name}: required when STORAGE_BACKEND=s3`);
@@ -576,11 +602,13 @@ export function loadConfig(env: Env): { config: Config; problems: string[] } {
   const config: Config = {
     ...v,
     features: {
-      signup: v.SHOTSTASH_FEATURE_SIGNUP,
+      // A public demo never takes sign-ups, whatever the toggle says.
+      signup: v.SHOTSTASH_FEATURE_SIGNUP && !v.SHOTSTASH_DEMO_MODE,
       google: Boolean(v.GOOGLE_CLIENT_ID),
       search: Boolean(v.ELASTICSEARCH_NODE_URL),
       passwordResetEmail: v.EMAIL_TRANSPORT === 'log' || Boolean(v.RESEND_API_KEY),
       discussion: v.SHOTSTASH_FEATURE_DISCUSSION,
+      demo: v.SHOTSTASH_DEMO_MODE,
     },
     appUrl: (v.APP_URL || `http://localhost:${v.PORT}`).replace(/\/+$/, ''),
     version: v.SHOTSTASH_VERSION || readPackageVersion(),
@@ -622,6 +650,9 @@ export function resetConfig(): void {
   memo = null;
 }
 
+/** How to sign in to a public demo (demo mode only). */
+export type DemoSignIn = { accounts: { email: string; role: string }[]; password: string };
+
 /** Settings the browser may read (`GET /api/v1/config`). Never includes a secret. */
 export function publicConfig() {
   const c = config();
@@ -631,6 +662,10 @@ export function publicConfig() {
     features: c.features,
     version: c.version,
     defaultLocale: c.defaultLocale,
+    // Demo mode only: the demo accounts are read-only, so their shared password is meant to be public.
+    demo: (c.features.demo && c.DEMO_ADMIN_PASSWORD
+      ? { accounts: DEMO_ACCOUNTS.map(({ email, role }) => ({ email, role })), password: c.DEMO_ADMIN_PASSWORD }
+      : null) as DemoSignIn | null,
   };
 }
 

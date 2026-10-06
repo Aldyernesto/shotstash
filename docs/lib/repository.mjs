@@ -51,6 +51,28 @@ export function normaliseDomain(raw) {
     .toLowerCase();
 }
 
+/**
+ * The public demo's origin for the try-it console (`https://demo.example.com`),
+ * from DEMO_ORIGIN; empty when unset. Throws on anything but an exact
+ * http(s) origin (no path, no wildcard), so a typo never ships a console
+ * pointed somewhere unexpected.
+ */
+export function normaliseDemoOrigin(raw) {
+  const value = String(raw ?? '').trim();
+  if (!value) return '';
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`docs: DEMO_ORIGIN is not a URL: ${value}`);
+  }
+  const exact = value.replace(/\/$/, '').toLowerCase() === url.origin.toLowerCase();
+  if (!['https:', 'http:'].includes(url.protocol) || !exact || value.includes('*') || url.username) {
+    throw new Error(`docs: DEMO_ORIGIN must be an origin such as https://demo.example.com (no path): ${value}`);
+  }
+  return url.origin;
+}
+
 /** `/repo` or `''`, without a trailing slash. */
 export function normaliseBasePath(raw) {
   const value = String(raw ?? '').trim().replace(/\/+$/, '');
@@ -74,7 +96,8 @@ export function site(env = process.env, root = ROOT) {
   const host = domain || `${ownerLc}.github.io`;
   const url = `https://${host}${pagesBasePath}/`;
   const basePath = env.DOCS_BASE_PATH === undefined ? '' : normaliseBasePath(env.DOCS_BASE_PATH);
-  return { repo, owner, name, ownerLc, domain, userSite, pagesBasePath, basePath, url };
+  const demoOrigin = normaliseDemoOrigin(env.DEMO_ORIGIN);
+  return { repo, owner, name, ownerLc, domain, userSite, pagesBasePath, basePath, url, demoOrigin };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

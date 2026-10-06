@@ -1,0 +1,36 @@
+name: Feature request
+description: An idea that would make Shotstash better for creators and small teams.
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Shotstash is a media cloud for creators: video-first storage and sharing on hardware you already own.
+        It is not a camera-roll backup or a frame-accurate review tool, and v1 has no mobile app.
+        Ideas that fit that picture have the best chance.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: How it could work, from the point of view of the person using it.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Workarounds you use now, or other ways to solve it (a processing worker through the worker contract, for example).
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      options:
+        - label: I would like to work on this myself (see CONTRIBUTING.md).

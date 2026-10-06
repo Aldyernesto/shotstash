@@ -40,12 +40,16 @@ export function newSessionToken(): string {
   return randomBytes(32).toString('base64url');
 }
 
-export async function createSessionRow(userId: string, meta?: { ip?: string; userAgent?: string }) {
+/**
+ * A new session row. `ttlMs` shorter than half of `SESSION_TTL_MS` makes a
+ * fixed-length session that never slides (the demo try-it sessions).
+ */
+export async function createSessionRow(userId: string, meta?: { ip?: string; userAgent?: string }, ttlMs = SESSION_TTL_MS) {
   return prisma.session.create({
     data: {
       token: newSessionToken(),
       userId,
-      expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+      expiresAt: new Date(Date.now() + ttlMs),
       ipAddress: meta?.ip,
       userAgent: meta?.userAgent,
     },
@@ -66,7 +70,9 @@ export async function validateSessionToken(token: string | null | undefined): Pr
 
   let expiresAt = session.expiresAt;
   let renewed = false;
-  if (expiresAt.getTime() - now < SESSION_TTL_MS / 2) {
+  // A session created shorter than half the normal lifetime is fixed-length (never slides).
+  const slides = expiresAt.getTime() - session.createdAt.getTime() >= SESSION_TTL_MS / 2;
+  if (slides && expiresAt.getTime() - now < SESSION_TTL_MS / 2) {
     expiresAt = new Date(now + SESSION_TTL_MS);
     renewed = true;
     await prisma.session

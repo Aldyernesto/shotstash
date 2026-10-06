@@ -11,12 +11,17 @@
  *                             applies its own mask, so the corners are filled
  *                             with brand.mark instead of staying transparent)
  *   public/brand/og.svg    -> public/brand/og.png (1200x630 social card)
+ *   .github/assets/banner.svg -> .github/assets/banner.png (1280x640 README
+ *                             banner; kept out of public/ so the app never serves it)
  */
 import { copyFileSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { brand } from '../src/lib/brand.ts';
+
+/** README banner size (GitHub's social preview ratio, 2:1). */
+const BANNER = { width: 1280, height: 640 };
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pub = (p) => path.join(ROOT, 'public', p.replace(/^\//, ''));
@@ -38,4 +43,10 @@ await sharp(readFileSync(og))
   .png()
   .toFile(pub(brand.ogImage.url));
 
-console.log('brand:assets: icon.svg copied; logo.png, apple-icon.png and og.png rendered');
+const banner = path.join(ROOT, '.github', 'assets', 'banner.svg');
+await sharp(readFileSync(banner))
+  .resize(BANNER.width, BANNER.height)
+  .png()
+  .toFile(banner.replace(/\.svg$/, '.png'));
+
+console.log('brand:assets: icon.svg copied; logo.png, apple-icon.png, og.png and banner.png rendered');

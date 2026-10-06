@@ -47,6 +47,9 @@ jobs:
       NEXT_TELEMETRY_DISABLED: "1"
       # Normalised (scheme, path and slash removed) by docs/lib/repository.mjs below.
       DOCS_DOMAIN_RAW: ${{ vars.DOCS_DOMAIN }}
+      # Story 8.2: the public demo's origin (repository variable). Set, the REST
+      # reference gets a try-it console pointed at that origin only; unset, none.
+      DEMO_ORIGIN: ${{ vars.DEMO_ORIGIN }}
     steps:
       - uses: actions/checkout@v7
 

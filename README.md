@@ -1,53 +1,60 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="public/brand/logo-on-dark.svg">
-  <img src="public/brand/logo-on-light.svg" alt="Shotstash" height="56">
-</picture>
+<p align="center">
+  <img src=".github/assets/banner.png" alt="Shotstash" width="100%">
+</p>
 
-# Shotstash
+<p align="center"><b>Your footage, your hardware, your cloud.</b><br>A self-hosted media cloud for creators and small teams, on the PC, NAS or spare drive you already own.</p>
 
-[![CI](https://github.com/Aldyernesto/shotstash/actions/workflows/pr.yml/badge.svg?branch=main)](https://github.com/Aldyernesto/shotstash/actions/workflows/pr.yml)
-[![Release](https://img.shields.io/github/v/release/Aldyernesto/shotstash?include_prereleases&sort=semver)](https://github.com/Aldyernesto/shotstash/releases)
-[![License: MIT](https://img.shields.io/github/license/Aldyernesto/shotstash)](LICENSE)
-[![Docs](https://img.shields.io/badge/docs-aldyernesto.github.io%2Fshotstash-3563f2)](https://aldyernesto.github.io/shotstash/)
+<p align="center">
+  <a href="https://github.com/Aldyernesto/shotstash/actions/workflows/pr.yml"><img src="https://github.com/Aldyernesto/shotstash/actions/workflows/pr.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/Aldyernesto/shotstash/releases"><img src="https://img.shields.io/github/v/release/Aldyernesto/shotstash?include_prereleases&amp;sort=semver&amp;label=release" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Aldyernesto/shotstash" alt="License: MIT"></a>
+  <a href="https://aldyernesto.github.io/shotstash/"><img src="https://img.shields.io/badge/docs-aldyernesto.github.io%2Fshotstash-3563f2" alt="Docs"></a>
+</p>
 
-**Self-hosted media cloud for creators. Your footage, your hardware, your cloud.**
+```bash
+git clone https://github.com/Aldyernesto/shotstash.git && cd shotstash && sh docker/init.sh && docker compose up -d
+```
 
-Shotstash turns the PC, NAS, or spare drive you already own into a media cloud built for work: projects and sections instead of a flat photo stream, a viewer that respects portrait video, resumable chunked uploads straight from the browser, share links you can hand to a client, and roles for the people you work with. All of it behind a dark, deliberately premium UI.
+Then open `http://localhost:3005` and create the owner account. Linux x64 with Docker; the [quick start](https://aldyernesto.github.io/shotstash/docs/quick-start/) covers WSL2, macOS and LAN access.
 
-> **Status: pre-release.** The core has been extracted from a production media library (thousands of files, in daily use since 2026) into this repository with a clean history. It runs with one command (see Quick start); the first published images land with the first release. Watch or star the repo to follow it.
+<!-- Public demo: uncomment once the demo instance is live (see launch/checklist.md).
+**[Try the live demo](<demo-url>)**: read-only accounts, resets every night.
+-->
 
-**Documentation: [aldyernesto.github.io/shotstash](https://aldyernesto.github.io/shotstash/)** (the site is built from [`docs/`](docs/) and follows the repository owner: `https://<owner>.github.io/<repo>/`). Quick start, configuration, storage, networking, backup and upgrades, the GraphQL and REST reference, the worker contract, the architecture and an illustrated user guide.
+<p align="center">
+  <img src=".github/assets/demo.gif" alt="Uploading footage, opening it in the viewer and creating a share link" width="100%">
+</p>
 
-## Why not Immich / PhotoPrism / a DAM?
+Born in production: it has run a real media library with thousands of files every day since 2026. **MIT licensed. No paid tier, no locked features, nothing held back.**
 
-- Immich, PhotoPrism and Ente are personal photo libraries: great for your phone's camera roll, not for delivering project footage to a client.
-- Enterprise DAMs (ResourceSpace, Pimcore) are heavy, dated, and built for procurement, not for a two-person studio.
-- Video review tools (Clapshot, FreeFrame) review clips; they do not store and share a whole library.
+**[Documentation](https://aldyernesto.github.io/shotstash/)**: quick start, configuration, storage, networking, backup and upgrades, the GraphQL and REST reference, the worker contract, the architecture and an illustrated user guide.
 
-Shotstash sits in the gap: **video-first storage and sharing for creators and small teams**, on hardware you already have.
+## Why not Immich, PhotoPrism or a DAM?
 
-## What you get (v1 scope)
+- **Immich, PhotoPrism and Ente** are personal photo libraries: great for a phone's camera roll, not for delivering project footage to a client.
+- **ResourceSpace and Pimcore** are enterprise DAMs: heavy, and built for procurement, not for a two-person studio.
+- **Clapshot and FreeFrame** review clips; they do not store and share a whole library.
 
-- **Projects → Sections → Files** with 3D folder cards, grid and list views, sort and search.
-- **Uploads that survive bad Wi-Fi**: parallel parts with retries, resumable after a reload or a dropped connection, checksum-verified, with duplicate detection per project; stored on a local disk, a NAS mount, or any S3-compatible bucket (AWS S3, Cloudflare R2, MinIO, RustFS, SeaweedFS). See [docs/storage.md](docs/storage.md).
-- **Viewer** for photos and video that follows the file's real aspect ratio, custom video controls, keyboard navigation, an info panel with dimensions and duration.
+Shotstash sits in the gap: **video-first storage and sharing for work**, on hardware you already have. It is not a Frame.io-style review tool, not a camera-roll backup, and has no mobile app in v1.
+
+## What you get
+
+| | |
+| --- | --- |
+| <img src="docs/public/screenshots/projects-1280.webp" alt="Projects library with 3D folder cards" width="100%"> | <img src="docs/public/screenshots/viewer-1280.webp" alt="Viewer with a video and its info panel" width="100%"> |
+| <img src="docs/public/screenshots/upload-1280.webp" alt="Resumable uploads with progress per file" width="100%"> | <img src="docs/public/screenshots/sharepage-1280.webp" alt="A client share page" width="100%"> |
+
+- **Projects, sections, files** with 3D folder cards, grid and list views, sort and search.
+- **Uploads that survive bad Wi-Fi**: parallel parts with retries, resumable after a reload or a dropped connection, checksum-verified, with duplicate detection per project.
+- **Your storage**: a local disk, a NAS mount, or any S3-compatible bucket (AWS S3, Cloudflare R2, MinIO, RustFS, SeaweedFS). See [docs/storage.md](docs/storage.md).
+- **A viewer that respects portrait video**: the file's real aspect ratio, custom video controls, keyboard navigation, an info panel.
 - **Share links** per file, section or project, public or private, with a clean client page and ZIP download.
-- **Roles and onboarding**: super admin, admin, crew, editor, viewer; account approval; email password reset.
-- **API**: GraphQL over HTTP and WebSocket, every type and field described in the generated [`schema.graphql`](schema.graphql), plus REST routes for upload, ranged download, sharing, the worker pipeline and health, described in the generated OpenAPI 3.1 document [`openapi.json`](openapi.json). CI fails when either file is stale.
-- **Bring your own AI**: a small job-pipeline contract (queue, worker heartbeat, progress, finalize) so you can plug in your own model or worker for proxy transcodes, transcription or scene detection. A reference worker is included.
-- **One-command install** with Docker Compose.
+- **Roles** for the people you work with: super admin, admin, crew, editor, viewer; account approval; email password reset.
+- **Bring your own AI**: a small job contract (queue, heartbeat, progress, output) for your own worker in any language. A reference worker that makes 720p proxies is included.
+- **An API for everything**: GraphQL over HTTP and WebSocket ([`schema.graphql`](schema.graphql)) plus REST for uploads, media, sharing, workers and health ([`openapi.json`](openapi.json), OpenAPI 3.1). Both are generated and checked in CI.
+- **No telemetry.** Nothing calls home.
 
-## Stack
-
-Next.js 16 · React 19 · TypeScript · Apollo GraphQL + graphql-ws · Prisma 7 · PostgreSQL · Dragonfly/Redis · ffmpeg + sharp · Docker.
-
-## Roadmap to the first public release
-
-1. Clean extraction of the core from the production codebase (new history, generic branding, env-driven config). Done.
-2. Security review of every public route before the code is readable by the world.
-3. Docker Compose, `.env.example`, and a 10-minute quick start. Done (images are published with the first release).
-4. Docs site: install, storage and networking, API reference, bring-your-own-AI guide, user guide. Done ([docs site](https://aldyernesto.github.io/shotstash/)).
-5. Public demo instance and launch.
+Stack: Next.js 16, React 19, TypeScript, Apollo GraphQL with graphql-ws, Prisma 7, PostgreSQL, Dragonfly or Redis, ffmpeg and sharp, Docker.
 
 ## Quick start (Docker Compose)
 
@@ -58,29 +65,17 @@ Linux x64 is the primary platform; linux/arm64 images are built too, on a best-e
 ```bash
 git clone https://github.com/Aldyernesto/shotstash.git
 cd shotstash
-cp .env.example .env
-```
-
-Open `.env` and fill in the three secrets, each with its own random value:
-
-```bash
-openssl rand -hex 32   # paste as SESSION_SECRET
-openssl rand -hex 32   # paste as POSTGRES_PASSWORD
-openssl rand -hex 32   # paste as WORKER_BOOTSTRAP_TOKEN (the processing worker registers with it)
-```
-
-`POSTGRES_PASSWORD` is fixed when the database is first created: changing it in `.env` later does not change the database, and the app can no longer connect (keep the first value, or start over with `docker compose down -v`).
-
-Set `APP_URL` in `.env` to the address people open, because emails and share links use it: `http://192.168.1.20:3005` for a server on your LAN, or `https://media.example.com` behind a domain. Left empty, it is `http://localhost:3005`, which only works on the server itself.
-
-Then check the machine and start:
-
-```bash
-sh docker/preflight.sh   # Docker present, secrets set, port free
+sh docker/init.sh      # creates .env with random secrets, then checks Docker, the secrets and the port
 docker compose up -d
 ```
 
-Open `http://localhost:3005` (or `http://<server-ip>:3005`). You land on `/setup`, which creates the owner account; whoever submits it first becomes the super admin, so finish it before the instance is reachable by others, or set `SETUP_TOKEN` in `.env` first. `docker compose ps` shows the services; the app is ready when it reports `healthy`.
+`docker/init.sh` copies `.env.example` to `.env` and fills `SESSION_SECRET`, `MEDIA_SIGNING_SECRET`, `SETUP_TOKEN`, `WORKER_BOOTSTRAP_TOKEN` and `POSTGRES_PASSWORD` with random values (it never prints them and never overwrites an existing `.env`), then runs `docker/preflight.sh`. By hand instead: `cp .env.example .env`, set each of those five to its own `openssl rand -hex 32`, and run `sh docker/preflight.sh`.
+
+`POSTGRES_PASSWORD` is fixed when the database is first created: changing it in `.env` later does not change the database, and the app can no longer connect (keep the first value, or start over with `docker compose down -v`).
+
+Set `APP_URL` in `.env` to the address people open, because emails and share links use it: `http://192.168.1.20:3005` for a server on your LAN, or `https://media.example.com` behind a domain. Left empty, it is `http://localhost:3005`, which only works on the server itself. Run `docker compose up -d` again after changing it.
+
+Open `http://localhost:3005` (or `http://<server-ip>:3005`). You land on `/setup`, which creates the owner account and asks for the `SETUP_TOKEN` from `.env` (`grep SETUP_TOKEN .env`), so nobody else can claim a fresh instance. `docker compose ps` shows the services; the app is ready when it reports `healthy`.
 
 What runs: `app` (Shotstash with ffmpeg), `db` (PostgreSQL 17), `cache` (Dragonfly) and `worker` (the reference processing worker, which makes 720p proxies of videos). Only the app is published on the host; the database, cache and worker are reachable only inside the compose network. Media files live in `./data/media` next to the compose file; the database lives in the `db-data` volume. Database migrations run automatically every time the app starts.
 
@@ -129,7 +124,7 @@ npm run dev         # app on http://localhost:3005
 
 A fresh install without the seed starts at `/setup`: until the first super admin exists, every page redirects there and `/api/*` and `/media/*` answer `503 SETUP_REQUIRED`. The wizard checks that the storage backend is writable (the `STORAGE_LOCAL_ROOT` folder, or the S3 bucket) and creates the owner account. Whoever submits it first becomes the super admin: set `SETUP_TOKEN` (the form then asks for it) or finish setup before exposing the instance. `GET /api/health` answers `{ ok, setupRequired, version }`; from the server itself (loopback) or with a super admin session it also reports version, database, cache, storage and `schemeMismatch`.
 
-Demo instances: after setup, `SHOTSTASH_DEMO_MODE=true DEMO_ADMIN_PASSWORD=... npm run demo:seed` adds read-only demo accounts and a sample project. Trashed items are deleted for good after `SHOTSTASH_TRASH_RETENTION_DAYS` (default 30) by an hourly sweeper.
+Public demo instances: [Run a public demo](https://aldyernesto.github.io/shotstash/docs/demo/) (`docker-compose.demo.yml`, `node dist/demo.js seed` or `reset` in the image, `npm run demo:seed` and `npm run demo:reset` from source). Trashed items are deleted for good after `SHOTSTASH_TRASH_RETENTION_DAYS` (default 30) by an hourly sweeper.
 
 Before you push, run the same checks CI runs:
 
@@ -161,7 +156,7 @@ Product name, logo and brand colors live in `src/lib/brand.ts`. The identity is 
 
 ## Contributing and releases
 
-Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `feat!:` for a breaking change); see [CONTRIBUTING.md](CONTRIBUTING.md). Releases are cut by merging the release PR that release-please keeps open; how that works, what gets published and how to roll back: [docs/releasing.md](docs/releasing.md). Every release is listed in the [changelog](https://aldyernesto.github.io/shotstash/docs/changelog/). Security issues: [SECURITY.md](SECURITY.md).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [code of conduct](CODE_OF_CONDUCT.md). Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `feat!:` for a breaking change); see [CONTRIBUTING.md](CONTRIBUTING.md). Releases are cut by merging the release PR that release-please keeps open; how that works, what gets published and how to roll back: [docs/releasing.md](docs/releasing.md). Every release is listed in the [changelog](https://aldyernesto.github.io/shotstash/docs/changelog/). Security issues: [SECURITY.md](SECURITY.md).
 
 The docs site is a separate app in `docs/` (its own `package.json`): `npm ci --prefix docs`, then `npm run dev --prefix docs` serves it on `http://localhost:3100`. Guides that live as Markdown in the repository (`docs/*.md`, `CONTRIBUTING.md`, `SECURITY.md`) are pulled into the site at build time, so edit them where they are.
 

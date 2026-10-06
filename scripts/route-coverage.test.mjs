@@ -66,7 +66,7 @@ test('worker auth is used exactly by the pipeline contract routes, and nothing e
 });
 
 // Story 7.3: POST routes that read no body (the Bearer token is the whole request).
-const NO_BODY = new Set(['POST /api/v1/auth/cookie', 'POST /api/v1/auth/logout']);
+const NO_BODY = new Set(['POST /api/v1/auth/cookie', 'POST /api/v1/auth/logout', 'POST /api/v1/demo/session']);
 
 test('every route under src/app/api, src/app/media and src/app/s carries its OpenAPI annotations', () => {
   const problems = [];
@@ -127,7 +127,8 @@ test('openapi.json maps every auth mode to its security and embeds no host or to
     }
   }
   assert.deepEqual(leakProblems(text), []);
-  assert.doesNotMatch(text, /demo/i, 'no demo host or token until the demo instance exists');
+  // The demo try-it route is documented, but no demo host is ever baked in: the docs add it at build time.
+  assert.doesNotMatch(text, /https?:\/\/[^"\s]*demo/i, 'no demo host in openapi.json');
   assert.deepEqual(referenceProblems(doc), []);
 });
 

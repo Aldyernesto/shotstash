@@ -1,0 +1,10 @@
+/* Story 8.2: demo notice above the page content. */
+.banner {
+  margin: 0 0 16px;
+  padding: 8px 14px;
+  border: 1px solid var(--app-spine-accent-35);
+  border-radius: 10px;
+  background: var(--app-spine-accent-08);
+  color: var(--app-spine-text);
+  text-align: center;
+}

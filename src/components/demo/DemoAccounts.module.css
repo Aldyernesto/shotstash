@@ -1,0 +1,71 @@
+/* Story 8.2: demo accounts on the sign-in page (demo mode only). */
+.box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--app-spine-accent-35);
+  border-radius: 12px;
+  background: var(--app-spine-accent-08);
+}
+
+.title {
+  margin: 0;
+  color: var(--app-spine-text);
+}
+
+.body {
+  margin: 0;
+  color: var(--app-spine-muted);
+}
+
+.body code {
+  color: var(--app-spine-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  user-select: all;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.account {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: 8px;
+  background: var(--app-spine-surface);
+  color: var(--app-spine-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.account:hover {
+  border-color: var(--app-spine-accent);
+}
+
+.role {
+  min-width: 52px;
+  font-weight: 600;
+  color: var(--app-spine-accent-2);
+}
+
+.email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--app-spine-text-soft);
+  font-size: 13px;
+}
+
+:global([data-theme='light']) .role {
+  color: var(--app-spine-accent-text-light);
+}

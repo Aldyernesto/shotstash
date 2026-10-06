@@ -1,0 +1,74 @@
+name: List a community worker
+description: Ask for a processing worker you built to be listed on the community workers page.
+title: "worker: "
+labels: [community-worker]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Processing workers plug into Shotstash through the worker contract. Read how listing works on the
+        [community workers page](https://aldyernesto.github.io/shotstash/docs/community-workers/).
+        A pull request that adds your worker to the list directly is welcome too.
+  - type: input
+    id: name
+    attributes:
+      label: Worker name
+      placeholder: whisper-transcribe
+    validations:
+      required: true
+  - type: input
+    id: kinds
+    attributes:
+      label: Job kinds
+      description: The kinds the worker registers, as `<namespace>/<name>`, comma separated.
+      placeholder: acme/transcript-srt
+    validations:
+      required: true
+  - type: input
+    id: contract
+    attributes:
+      label: Contract major version
+      description: The `X-Shotstash-Pipeline` major the worker speaks.
+      placeholder: "1"
+    validations:
+      required: true
+  - type: input
+    id: repository
+    attributes:
+      label: Repository URL
+      description: Public source code of the worker.
+      placeholder: https://github.com/you/your-worker
+    validations:
+      required: true
+  - type: input
+    id: license
+    attributes:
+      label: License
+      description: An SPDX identifier.
+      placeholder: MIT
+    validations:
+      required: true
+  - type: input
+    id: maintainer
+    attributes:
+      label: Maintainer
+      description: Your GitHub handle.
+      placeholder: "@you"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What it does
+      description: One or two sentences, plus anything it needs (a GPU, an external service, an API key).
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: The worker talks to Shotstash only through the worker contract (no direct database or storage access).
+          required: true
+        - label: It sends nothing to a third party unless the README says so clearly.
+          required: true

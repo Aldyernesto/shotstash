@@ -21,6 +21,7 @@ on `worker` routes they name the credential (`bootstrap token`, `registered work
 | `/api/v1/auth/login` | POST | public |  |
 | `/api/v1/auth/logout` | POST | session |  |
 | `/api/v1/config` | GET | public |  |
+| `/api/v1/demo/session` | POST | public |  |
 | `/api/v1/pipeline/jobs/[id]/complete` | POST | worker | claim holder |
 | `/api/v1/pipeline/jobs/[id]/fail` | POST | worker | claim holder |
 | `/api/v1/pipeline/jobs/[id]/input` | GET | worker | claim holder |

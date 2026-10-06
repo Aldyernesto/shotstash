@@ -235,16 +235,20 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Write .env from .env.example with generated secrets
+      # Story 8.1: the one-line install's first step writes .env with random
+      # secrets (never printed) and runs the preflight.
+      - name: docker/init.sh writes .env and passes the preflight
         run: |
-          cp .env.example .env
-          sed -i "s/^SESSION_SECRET=.*/SESSION_SECRET=$(openssl rand -hex 32)/" .env
-          sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 32)/" .env
-          sed -i "s/^SETUP_TOKEN=.*/SETUP_TOKEN=$(openssl rand -hex 32)/" .env
-          sed -i "s/^WORKER_BOOTSTRAP_TOKEN=.*/WORKER_BOOTSTRAP_TOKEN=$(openssl rand -hex 32)/" .env
-
-      - name: Preflight
-        run: sh docker/preflight.sh
+          out=$(sh docker/init.sh)
+          echo "$out"
+          for name in SESSION_SECRET MEDIA_SIGNING_SECRET SETUP_TOKEN WORKER_BOOTSTRAP_TOKEN POSTGRES_PASSWORD; do
+            value=$(sed -n "s/^$name=//p" .env)
+            echo "$value" | grep -Eq '^[0-9a-f]{64}$' || { echo "$name is not a generated secret"; exit 1; }
+            if echo "$out" | grep -qF "$value"; then echo "$name was printed"; exit 1; fi
+          done
+          before=$(sha256sum .env)
+          sh docker/init.sh | grep -q "already exists"
+          test "$before" = "$(sha256sum .env)"
 
       - name: Build the app and worker images
         run: docker compose build --build-arg VERSION="$VERSION" app worker
@@ -296,6 +300,18 @@ jobs:
           echo "$out" | tail -n 20
           test "$status" -ne 0
           echo "$out" | grep -q "config: SHOTSTASH_TRASH_RETENTION_DAYS"
+
+      # Story 8.2: the demo command is compiled into the image and refuses to
+      # run while demo mode is off (exit code 2).
+      - name: The demo command ships in the image and refuses outside demo mode
+        run: |
+          set +e
+          out=$(docker compose exec -T app node dist/demo.js seed 2>&1)
+          status=$?
+          set -e
+          echo "$out"
+          test "$status" -eq 2
+          echo "$out" | grep -q "SHOTSTASH_DEMO_MODE=true"
 
       - name: Install dependencies for the e2e script
         run: npm ci
@@ -696,6 +712,40 @@ jobs:
           kill "$pid" || true
           exit "$status"
 
+      - name: Reset rate limit counters (demo)
+        run: |
+          c="$(docker ps -q --filter publish=6379 | head -n 1)"
+          test -n "$c"
+          docker exec "$c" redis-cli --scan --pattern 'rl:*' | xargs -r -n 100 docker exec "$c" redis-cli DEL
+
+      # Story 8.2: a demo-mode process on the same database: seed (synthetic
+      # media through the storage backend), demo sign-in, every write class
+      # refused, sign-up off, reset restores rows and bytes and keeps
+      # instance_settings and the super admin, CORS for an allowed and a
+      # refused origin, the try-it session reads but cannot write, and the
+      # session endpoint answers 404 on the normal process.
+      - name: e2e:demo (SHOTSTASH_DEMO_MODE=true)
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3008
+          E2E_OTHER_BASE_URL: http://127.0.0.1:3005
+          E2E_DEMO_PASSWORD: demo-password-ci-only
+          E2E_CORS_ORIGIN: https://docs.example.test
+          SHOTSTASH_DEMO_MODE: "true"
+          DEMO_ADMIN_PASSWORD: demo-password-ci-only
+          SHOTSTASH_CORS_ORIGINS: https://docs.example.test
+        run: |
+          node dist/demo.js seed
+          PORT=3008 NODE_ENV=production nohup node dist/server.js > /tmp/app4.log 2>&1 &
+          pid=$!
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3008/api/health >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          status=0
+          npm run e2e:demo || status=$?
+          kill "$pid" || true
+          exit "$status"
+
       - name: App log on failure
         if: failure()
         run: |
@@ -704,3 +754,5 @@ jobs:
           tail -n 100 /tmp/app2.log || true
           echo "---- third app process (discussion off) ----"
           tail -n 100 /tmp/app3.log || true
+          echo "---- fourth app process (demo mode) ----"
+          tail -n 100 /tmp/app4.log || true

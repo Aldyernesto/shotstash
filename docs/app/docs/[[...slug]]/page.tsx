@@ -6,6 +6,7 @@ import { source } from '@/lib/source';
 import { i18n } from '@/lib/i18n';
 import { getMDXComponents } from '@/components/mdx';
 import { GraphQLPage, OpenAPIPage } from '@/components/api-page';
+import { DemoToken } from '@/components/demo-token';
 
 const lang = i18n.defaultLanguage;
 
@@ -20,6 +21,7 @@ export default async function Page(props: { params: Promise<{ slug?: string[] }>
         <DocsTitle>{page.data.title}</DocsTitle>
         <DocsDescription>{page.data.description}</DocsDescription>
         <DocsBody>
+          <DemoToken />
           <OpenAPIPage {...page.data.getOpenAPIPageProps()} />
         </DocsBody>
       </DocsPage>

@@ -22,6 +22,7 @@ import { errorCodeOf, errorKind } from '@/lib/errorCodes';
 import { brand } from '@/lib/brand';
 import { issueMediaCookie } from '@/lib/authClient';
 import { usePublicConfig } from '@/lib/usePublicConfig';
+import DemoAccounts from '@/components/demo/DemoAccounts';
 // Story 1.31: email hasil reset dibawa lewat sessionStorage (bukan query param).
 import { LOGIN_PREFILL_KEY } from '@/app/(app)/forgot-password/shared';
 
@@ -740,9 +741,22 @@ export default function LandingPage() {
              slot ini kosong dan AuthCard tidak merender wadahnya sama
              sekali (slot tanpa isi tidak menyisakan ruang). */
           mode === 'login' ? (
-            <p className={`spine-footnote ${styles.helpText}`}>
-              {t.rich('help', { productName, b: (chunks) => <strong>{chunks}</strong> })}
-            </p>
+            // Story 8.2: a public demo lists its read-only accounts instead.
+            publicConfig?.demo ? (
+              <DemoAccounts
+                demo={publicConfig.demo}
+                onPick={(pickedEmail, pickedPassword) => {
+                  setEmail(pickedEmail);
+                  setPassword(pickedPassword);
+                  setLoginMessage(null);
+                  setLoginErrorCode(null);
+                }}
+              />
+            ) : (
+              <p className={`spine-footnote ${styles.helpText}`}>
+                {t.rich('help', { productName, b: (chunks) => <strong>{chunks}</strong> })}
+              </p>
+            )
           ) : undefined
         }
       />

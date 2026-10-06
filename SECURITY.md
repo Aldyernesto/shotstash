@@ -23,6 +23,8 @@ A useful report says:
 
 Never include real media, personal data or secrets from a live installation.
 
+This channel is for vulnerabilities only. Conduct problems go through the [code of conduct](CODE_OF_CONDUCT.md); bugs and feature ideas go into a normal issue.
+
 ## What to expect
 
 - An acknowledgement within 7 days.
