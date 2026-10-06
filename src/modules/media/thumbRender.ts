@@ -49,7 +49,7 @@ export function ffmpegFrame(input: string, seek: boolean): Promise<Buffer> {
 /** Upright JPEG inside a 480x480 box (aspect ratio kept, never enlarged). */
 export async function renderThumbnail(input: Buffer | Readable): Promise<Buffer> {
   const sharp = (await import('sharp')).default;
-  const transform = sharp({ failOnError: false })
+  const transform = sharp({ failOn: 'none' })
     .rotate() // EXIF orientation (ffmpeg frames carry none: already upright)
     .resize(THUMB_LONG_EDGE, THUMB_LONG_EDGE, { fit: 'inside', withoutEnlargement: true })
     .jpeg({ quality: JPEG_QUALITY });

@@ -19,7 +19,7 @@ export async function saveCover(kind: CoverKind, id: string, input: Buffer): Pro
   if (!COVER_INPUT.has(sniffMime(input.subarray(0, 4100)))) return { ok: false, code: 'UNSUPPORTED_TYPE' };
   let jpeg: Buffer;
   try {
-    jpeg = await sharp(input, { failOnError: false, animated: false })
+    jpeg = await sharp(input, { failOn: 'none', animated: false })
       .rotate()
       .resize(MAX_COVER_EDGE, MAX_COVER_EDGE, { fit: 'inside', withoutEnlargement: true })
       .jpeg({ quality: 85, mozjpeg: true })
