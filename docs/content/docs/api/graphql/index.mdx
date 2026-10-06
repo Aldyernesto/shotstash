@@ -1,0 +1,13 @@
+---
+title: GraphQL reference
+description: Every query, mutation, subscription and type of /api/graphql, generated from schema.graphql.
+---
+
+These pages are generated at build time from [`schema.graphql`](https://github.com/%REPO%/blob/main/schema.graphql), which `npm run sdl` writes from the server's schema; CI fails when the committed file is stale or a public member has no description. Deprecated members are struck through.
+
+- **Queries** read data: the signed-in user, projects, folders, files, share links, jobs and notifications.
+- **Mutations** change it: projects and sections, uploads, trash, sharing, discussion, jobs and administration.
+- **Subscriptions** stream live events over WebSocket (graphql-ws): discussion messages, notifications and job progress.
+- **Types** describe what the operations take and return.
+
+Endpoint: `POST /api/graphql` with `Authorization: Bearer <token>` (see [Authentication](/docs/api/#authentication)). Every operation page shows which permission it needs; a call without it answers an error with the code `FORBIDDEN` in `extensions`.

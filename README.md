@@ -8,12 +8,15 @@
 [![CI](https://github.com/Aldyernesto/shotstash/actions/workflows/pr.yml/badge.svg?branch=main)](https://github.com/Aldyernesto/shotstash/actions/workflows/pr.yml)
 [![Release](https://img.shields.io/github/v/release/Aldyernesto/shotstash?include_prereleases&sort=semver)](https://github.com/Aldyernesto/shotstash/releases)
 [![License: MIT](https://img.shields.io/github/license/Aldyernesto/shotstash)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-aldyernesto.github.io%2Fshotstash-3563f2)](https://aldyernesto.github.io/shotstash/)
 
 **Self-hosted media cloud for creators. Your footage, your hardware, your cloud.**
 
 Shotstash turns the PC, NAS, or spare drive you already own into a media cloud built for work: projects and sections instead of a flat photo stream, a viewer that respects portrait video, resumable chunked uploads straight from the browser, share links you can hand to a client, and roles for the people you work with. All of it behind a dark, deliberately premium UI.
 
-> **Status: pre-release.** The core has been extracted from a production media library (thousands of files, in daily use since 2026) into this repository with a clean history. It runs with one command (see Quick start); docs and the first published images land over the next days. Watch or star the repo to follow the first public release.
+> **Status: pre-release.** The core has been extracted from a production media library (thousands of files, in daily use since 2026) into this repository with a clean history. It runs with one command (see Quick start); the first published images land with the first release. Watch or star the repo to follow it.
+
+**Documentation: [aldyernesto.github.io/shotstash](https://aldyernesto.github.io/shotstash/)** (the site is built from [`docs/`](docs/) and follows the repository owner: `https://<owner>.github.io/<repo>/`). Quick start, configuration, storage, networking, backup and upgrades, the GraphQL and REST reference, the worker contract, the architecture and an illustrated user guide.
 
 ## Why not Immich / PhotoPrism / a DAM?
 
@@ -43,10 +46,12 @@ Next.js 16 · React 19 · TypeScript · Apollo GraphQL + graphql-ws · Prisma 7 
 1. Clean extraction of the core from the production codebase (new history, generic branding, env-driven config). Done.
 2. Security review of every public route before the code is readable by the world.
 3. Docker Compose, `.env.example`, and a 10-minute quick start. Done (images are published with the first release).
-4. Docs site: install, storage and networking, API reference, bring-your-own-AI guide, user guide.
+4. Docs site: install, storage and networking, API reference, bring-your-own-AI guide, user guide. Done ([docs site](https://aldyernesto.github.io/shotstash/)).
 5. Public demo instance and launch.
 
 ## Quick start (Docker Compose)
+
+The short version follows; the [full quick start](https://aldyernesto.github.io/shotstash/docs/quick-start/) adds platform notes and troubleshooting.
 
 You need a Linux x64 machine (or WSL2, or macOS with Docker Desktop) with Docker Engine and the Docker Compose plugin, git, and about 2 GB of free memory. The first start builds the app image, which takes a few minutes; official images arrive with the first release.
 
@@ -91,7 +96,7 @@ What runs: `app` (Shotstash with ffmpeg), `db` (PostgreSQL 17), `cache` (Dragonf
 
 **Search (optional).** `docker compose --profile search up -d` adds Elasticsearch (about 1 GB of memory); then set `ELASTICSEARCH_NODE_URL=http://elasticsearch:9200` in `.env` and run `docker compose up -d`. Without it, search runs in PostgreSQL. Both answer the same results (Elasticsearch only narrows the candidates); after enabling it on an existing install, run `npm run search:reindex` once.
 
-**Behind a reverse proxy or tunnel.** Set `APP_URL` to the public `https://` address and `TRUST_PROXY=true`, and only when the app is reachable through the proxy alone.
+**Behind a reverse proxy or tunnel.** Set `APP_URL` to the public `https://` address and `TRUST_PROXY=true`, and only when the app is reachable through the proxy alone. Caddy, nginx, Tailscale and Cloudflare Tunnel examples: [Networking](https://aldyernesto.github.io/shotstash/docs/networking/).
 
 **WSL2 (Windows).** Run everything inside the Linux distribution and keep the checkout in the Linux file system (for example `~/shotstash`), not under `/mnt/c`: files on the Windows drive are slow and their permissions do not map, so uploads and the database suffer. Docker Desktop with the WSL2 backend, or Docker Engine installed in the distribution, both work. Open the app at `http://localhost:3005` from Windows.
 
@@ -102,17 +107,10 @@ What runs: `app` (Shotstash with ffmpeg), `db` (PostgreSQL 17), `cache` (Dragonf
 - **Logs:** `docker compose logs -f app`. The app writes one JSON line per event.
 - **Status:** a super admin can open `/status` for the version, storage, database, cache, live workers and queued jobs. `GET /api/health` answers `{ ok, setupRequired, version }` for monitoring.
 - **Official images (after the first release):** every release publishes `ghcr.io/aldyernesto/shotstash` and `ghcr.io/aldyernesto/shotstash-worker` for linux/amd64 and linux/arm64, tagged `X.Y.Z`, `X.Y` and `latest`. Until the first release is out these do not exist yet and compose builds both images locally. Once they do, add the override file [`docker-compose.images.yml`](docker-compose.images.yml) to every compose command, which uses the published images instead of building (`IMAGE_TAG` in `.env` picks the release, default `latest`): `docker compose -f docker-compose.yml -f docker-compose.images.yml pull`, then the same with `up -d`. Details, pinning and rollback: [docs/releasing.md](docs/releasing.md).
-- **Upgrade:** `git pull && docker compose up -d --build`. **Upgrade note (processing worker):** before pulling a version with the `worker` service, add `WORKER_BOOTSTRAP_TOKEN` to your existing `.env` (`openssl rand -hex 32`, its own value); docker compose refuses to start without it. Once images are published, upgrading becomes `docker compose pull && docker compose up -d`.
+- **Upgrade:** `git pull && docker compose up -d --build` ([upgrading and rollback](https://aldyernesto.github.io/shotstash/docs/upgrading/)). **Upgrade note (processing worker):** before pulling a version with the `worker` service, add `WORKER_BOOTSTRAP_TOKEN` to your existing `.env` (`openssl rand -hex 32`, its own value); docker compose refuses to start without it. Once images are published, upgrading becomes `docker compose pull && docker compose up -d`.
 - **Rollback:** check out the previous release tag and run `docker compose up -d --build` (with published images: pin the previous image tag). Every migration stays compatible with the previous release, so the older version still runs on the upgraded database. Before v1.0.0 databases are throwaway: a pre-release upgrade may ask you to start with an empty database. **Upgrade note (storage keys):** from migration `0006_storage_keys_uploads` on, files live under hierarchy-free keys and old bytes are not moved; reset pre-1.0 development data after upgrading (empty database and `./data/media`, see [docs/storage.md](docs/storage.md)).
-- **Backup:** stop the app first so files and database match (`docker compose stop app`), dump the database with `docker compose exec -T db pg_dump -U shotstash shotstash > shotstash.sql`, copy `./data/media`, then `docker compose start app`.
-- **Restore:** into an empty database, before the app runs (the app creates its tables at start, and a dump restored on top of them fails with "relation already exists"). Put the files back in `./data/media`, keep the `POSTGRES_PASSWORD` you want in `.env`, then:
-
-  ```bash
-  docker compose down -v                 # removes the old database volume
-  docker compose up -d db                # empty database only, no app yet
-  docker compose exec -T db psql -U shotstash shotstash < shotstash.sql
-  docker compose up -d                   # the app starts; its migrations see an up-to-date database
-  ```
+- **Backup:** stop the app and the worker first so files and database match (`docker compose stop app worker`), dump the database with `docker compose exec -T db pg_dump -U shotstash shotstash > shotstash.sql`, copy `./data/media` and `.env`, then `docker compose start app worker`.
+- **Restore:** into an empty database, before the app runs; the order matters. The full procedure, which CI rehearses on every change: [Backup and restore](https://aldyernesto.github.io/shotstash/docs/backup/).
 - **Stop:** `docker compose down` keeps your data; `docker compose down -v` also deletes the database volume.
 
 ## Development
@@ -163,7 +161,9 @@ Product name, logo and brand colors live in `src/lib/brand.ts`. The identity is 
 
 ## Contributing and releases
 
-Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `feat!:` for a breaking change); see [CONTRIBUTING.md](CONTRIBUTING.md). Releases are cut by merging the release PR that release-please keeps open; how that works, what gets published and how to roll back: [docs/releasing.md](docs/releasing.md).
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `feat!:` for a breaking change); see [CONTRIBUTING.md](CONTRIBUTING.md). Releases are cut by merging the release PR that release-please keeps open; how that works, what gets published and how to roll back: [docs/releasing.md](docs/releasing.md). Every release is listed in the [changelog](https://aldyernesto.github.io/shotstash/docs/changelog/). Security issues: [SECURITY.md](SECURITY.md).
+
+The docs site is a separate app in `docs/` (its own `package.json`): `npm ci --prefix docs`, then `npm run dev --prefix docs` serves it on `http://localhost:3100`. Guides that live as Markdown in the repository (`docs/*.md`, `CONTRIBUTING.md`, `SECURITY.md`) are pulled into the site at build time, so edit them where they are.
 
 ## License
 

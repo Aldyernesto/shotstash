@@ -120,6 +120,55 @@ jobs:
       - name: Build
         run: npm run build
 
+  # Stories 7.1-7.4: the docs site (docs/, its own package.json) installs,
+  # builds as a static export under a project base path, passes its tests and
+  # an offline link check, and its production dependencies pass the audit.
+  docs:
+    name: Docs site build and link check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install docs dependencies
+        run: npm ci --prefix docs
+
+      - name: Docs tests
+        run: npm test --prefix docs
+
+      - name: Docs dependency audit
+        run: npm run audit:check --prefix docs
+
+      # The project site path (https://<owner>.github.io/<repo>/), as docs.yml builds it.
+      - name: Build the docs with a project base path
+        run: DOCS_BASE_PATH="/${GITHUB_REPOSITORY#*/}" npm run build --prefix docs
+
+      - name: Lay out the export under its base path
+        run: |
+          mkdir -p /tmp/site
+          cp -r docs/out "/tmp/site/${GITHUB_REPOSITORY#*/}"
+
+      # Offline: every internal link and image must resolve inside the export.
+      - name: Internal links resolve
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --offline
+            --no-progress
+            --root-dir /tmp/site
+            --index-files index.html
+            '/tmp/site/**/*.html'
+          fail: true
+          jobSummary: true
+
   # Story 6.4: both release images build natively for amd64 and arm64 on
   # every PR, without pushing anywhere (the release workflow publishes).
   images:
@@ -308,6 +357,42 @@ jobs:
           test "$last" -gt "$before"
           test "$(docker inspect -f '{{.RestartCount}}' "$(docker compose ps -q worker)")" = "0"
           docker compose logs worker | tail -n 20
+
+      # Story 7.4: the backup and restore procedure of the docs
+      # (docs/content/docs/backup.mdx), end to end: data is created, dumped and
+      # copied, the stack is wiped with down -v, restored, and the restored
+      # instance signs in and serves the same file bytes.
+      - name: Backup and restore rehearsal
+        run: |
+          e2e_backup() {
+            docker run --rm --network "container:$(docker compose ps -q app)"               -v "$PWD:/w" -w /w               -e E2E_BASE_URL=http://127.0.0.1:3005               -e E2E_EMAIL=owner@example.com,other@example.com               -e E2E_PASSWORD=owner-password-1               node:24-bookworm-slim node scripts/e2e-backup.mjs "$@"
+          }
+          media_sums() { (cd data/media && sudo find . -type f -print0 | sort -z | sudo xargs -0 -r sha256sum); }
+          docker compose exec -T cache redis-cli FLUSHALL
+          e2e_backup snapshot ci-out/backup-state.json
+
+          echo "--- back up"
+          docker compose stop app worker
+          docker compose exec -T db pg_dump -U shotstash shotstash > ci-out/shotstash.sql
+          sudo cp -a data/media ci-out/media-backup
+          media_sums > ci-out/media-before.txt
+          test -s ci-out/shotstash.sql
+
+          echo "--- lose everything"
+          docker compose down -v
+          sudo rm -rf data/media
+
+          echo "--- restore"
+          sudo cp -a ci-out/media-backup data/media
+          docker compose up -d db
+          docker compose exec -T db sh -c 'until pg_isready -h 127.0.0.1 -U shotstash -d shotstash; do sleep 1; done'
+          docker compose exec -T db psql -v ON_ERROR_STOP=1 -q -U shotstash shotstash < ci-out/shotstash.sql
+          docker compose up -d --wait --wait-timeout 300
+
+          media_sums > ci-out/media-after.txt
+          diff ci-out/media-before.txt ci-out/media-after.txt
+          docker compose logs app | grep -q "No pending migrations"
+          e2e_backup verify ci-out/backup-state.json
 
       - name: Logs on failure
         if: failure()

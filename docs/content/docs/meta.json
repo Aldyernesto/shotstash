@@ -1,0 +1,30 @@
+{
+  "title": "Shotstash",
+  "pages": [
+    "---Get started---",
+    "index",
+    "quick-start",
+    "---Configure---",
+    "configuration",
+    "---Storage---",
+    "storage",
+    "---Networking & backup---",
+    "networking",
+    "backup",
+    "upgrading",
+    "---API---",
+    "api",
+    "---Bring your own AI---",
+    "byo-ai",
+    "---Community workers---",
+    "community-workers",
+    "---Architecture---",
+    "architecture",
+    "---Contributing---",
+    "contributing",
+    "---User guide---",
+    "user-guide",
+    "---Changelog---",
+    "changelog"
+  ]
+}

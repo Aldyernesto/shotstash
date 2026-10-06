@@ -13,3 +13,7 @@ next-env.d.ts
 npm-debug.log*
 coverage
 worker
+# The docs site is a separate app (docs/package.json); only the design
+# sources that the build checks (docs/design) reach the image build.
+docs/*
+!docs/design

@@ -1,0 +1,70 @@
+---
+title: Listed workers
+description: Processing workers written by the community, and how to list yours.
+---
+
+A worker is any program that speaks the [worker contract](/docs/byo-ai/): it registers with a manifest, claims jobs of its kinds, reads the input file, and sends one output back. This page lists workers that people have published for others to run.
+
+<CommunityWorkers />
+
+Workers listed here are not reviewed or endorsed by the Shotstash maintainers. A worker only reads the files of the jobs it claims and never gets storage or database credentials, but it does see those files: run only workers you trust with your media.
+
+## The manifest
+
+Every worker describes itself with a manifest, sent on registration and on every heartbeat:
+
+```json
+{
+  "name": "acme-whisper-1",
+  "version": "1.2.0",
+  "kinds": ["acme/whisper-transcript"],
+  "contract": 1
+}
+```
+
+| Field | Rules |
+| --- | --- |
+| `name` | 1 to 100 characters; one name per running process (the reference worker reads `WORKER_NAME`) |
+| `version` | 1 to 50 characters; your release version |
+| `kinds` | 1 to 32 kind names, `<namespace>/<name>` in lowercase letters, digits, `.`, `-` and `_` |
+| `contract` | the contract major you speak: `1` |
+
+Use your own namespace for kinds (`acme/...`), and leave `shotstash/...` to the project's built-in kinds.
+
+## Listing your worker
+
+The list above is the file `docs/data/community-workers.json` in the repository. To add your worker, open a pull request that appends one entry:
+
+```json
+{
+  "name": "Whisper transcripts",
+  "description": "Speech to WebVTT subtitles with OpenAI Whisper, CPU or CUDA.",
+  "repository": "https://github.com/acme/shotstash-whisper",
+  "kinds": ["acme/whisper-transcript"],
+  "contract": 1,
+  "license": "MIT",
+  "maintainer": "@acme"
+}
+```
+
+| Field | Rules |
+| --- | --- |
+| `name` | what people call it, at most 60 characters |
+| `description` | one sentence, at most 160 characters: what it makes and what it needs (GPU, model download) |
+| `repository` | an `https://` URL of the public source repository |
+| `kinds` | the kinds it registers, exactly as in its manifest |
+| `contract` | the contract major it speaks |
+| `license` | an SPDX identifier, for example `MIT` or `Apache-2.0` |
+| `maintainer` | a GitHub handle (`@name`) |
+
+Before you open the pull request, check that:
+
+1. the repository is public and its README says how to run the worker next to docker compose (image or command, `SHOTSTASH_URL`, `WORKER_BOOTSTRAP_TOKEN`);
+2. the worker follows the contract: heartbeats every 30 seconds, backs off on `401` and `503`, drops jobs on `409`, releases its job on shutdown;
+3. the kinds use your own namespace.
+
+The docs build validates the file (`npm test` in `docs/`), so a malformed entry fails CI with the reason.
+
+## Writing one
+
+Start with [Bring your own AI](/docs/byo-ai/): it has every route with `curl` examples, a minimal Python worker, and the loop every worker follows. The reference worker in [`worker/`](https://github.com/%REPO%/tree/main/worker) is a complete Node.js example with ffmpeg.

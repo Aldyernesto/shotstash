@@ -1,5 +1,5 @@
-// Shotstash — Reset password mandiri via email (kode OTP)
-// Spec: docs/history/spec-self-service-password-reset.md
+// Shotstash: Reset password mandiri via email (kode OTP)
+// Email settings for the reset codes: docs/configuration.md (Email).
 //
 // Alur: requestReset(email) → kode 6 karakter via email → verifyCode(email, code) → resetToken
 //       → completeReset(resetToken, newPassword, confirmPassword) → password baru, semua sesi dicabut.

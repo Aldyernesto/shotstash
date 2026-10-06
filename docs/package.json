@@ -1,0 +1,44 @@
+{
+  "name": "shotstash-docs",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Documentation site for Shotstash (static export, deployed to GitHub Pages).",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "prebuild": "node scripts/prepare.mjs",
+    "build": "next build",
+    "predev": "node scripts/prepare.mjs",
+    "dev": "next dev --port 3100",
+    "test": "node --test \"scripts/*.test.mjs\"",
+    "audit:check": "node scripts/audit-check.mjs"
+  },
+  "dependencies": {
+    "@fumadocs/graphql": "0.3.2",
+    "fumadocs-core": "16.16.2",
+    "fumadocs-mdx": "15.4.6",
+    "fumadocs-openapi": "12.3.0",
+    "fumadocs-ui": "16.16.2",
+    "graphql": "17.0.2",
+    "json-schema-typed": "8.0.2",
+    "lucide-react": "1.52.0",
+    "mermaid": "12.1.0",
+    "next": "16.3.8",
+    "next-themes": "0.4.6",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/mdx": "2.0.14",
+    "@types/node": "26.6.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "postcss": "8.5.29",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3"
+  }
+}

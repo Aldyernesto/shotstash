@@ -1,0 +1,53 @@
+---
+title: API overview
+description: GraphQL for everything the app does, REST for login, uploads, media, share pages, workers and health.
+---
+
+Shotstash has two API surfaces, and both references on this site are generated from files committed in the repository, which CI regenerates and compares on every change. They cannot drift from the code.
+
+| Surface | Reference | Source file |
+| --- | --- | --- |
+| GraphQL at `/api/graphql` (HTTP and WebSocket) | [GraphQL reference](/docs/api/graphql/) | [`schema.graphql`](https://github.com/%REPO%/blob/main/schema.graphql) |
+| REST under `/api/v1`, `/media` and `/s` | [REST reference](/docs/api/rest/) | [`openapi.json`](https://github.com/%REPO%/blob/main/openapi.json) (OpenAPI 3.1) |
+
+The references have no try-it console: a console on this site would send your token to whatever address you typed. One arrives with the public demo instance.
+
+## Authentication
+
+Sign in with REST, then use the token everywhere else:
+
+```bash
+curl -s -X POST http://localhost:3005/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"you@example.com","password":"..."}'
+```
+
+The answer carries a session `token`. Send it as `Authorization: Bearer <token>` to `/api/graphql` and `/api/v1/*`. The same login also sets the `shotstash_session` cookie (`HttpOnly`, `Path=/media`), which is how browsers load media bytes; a script sends it the same way (`curl --cookie shotstash_session=<token>`). Processing workers use their own tokens; see [Bring your own AI](/docs/byo-ai/).
+
+## GraphQL
+
+Projects, sections, files, sharing, discussion, notifications, jobs and administration are GraphQL. Every type, field and argument has a description in the schema.
+
+```bash
+curl -s http://localhost:3005/api/graphql \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"query":"{ me { id name role } }"}'
+```
+
+Subscriptions (discussion messages, notifications, job progress) use the [graphql-ws](https://github.com/enisdenjo/graphql-ws) protocol on the same path over WebSocket. Pass the token in the connection parameters: `{ "authorization": "Bearer <token>" }`. Events carry a `seq` number: drop any event whose `seq` is not higher than the last one you saw for that item.
+
+## REST
+
+REST covers what GraphQL is not good at: setting cookies at login, uploading large files in parts, streaming bytes with Range requests, the public share pages, the worker contract, the runtime configuration and health.
+
+- Paths under `/api/v1` are versioned; a breaking change gets a new version.
+- `/media/*` serves bytes (originals, thumbnails, processed versions, ZIP archives) with Range support.
+- `/s/<slug>` serves share pages and their unlock and signing routes.
+
+## Errors
+
+Every error is JSON with a stable code: `{ "code": "SETUP_REQUIRED", "message": "..." }` in REST, and the same `code` in `extensions` of a GraphQL error. Act on `code`; `message` is English text for developers and logs. Until first-run setup is done, every route except health, config and setup answers `503 SETUP_REQUIRED`.
+
+## Limits
+
+Requests are rate limited per IP and per account (login 10 per 15 minutes per IP, share unlock 5 per 15 minutes, worker calls 600 per minute per worker). A limited request answers `429 RATE_LIMITED` with a `Retry-After` header.

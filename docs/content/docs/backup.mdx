@@ -1,0 +1,67 @@
+---
+title: Backup and restore
+description: A database dump plus a copy of the media, restored in the right order. CI rehearses this procedure on every change.
+---
+
+A Shotstash backup has three parts, and you need all three to restore:
+
+| Part | Where it lives (docker compose) | How to copy it |
+| --- | --- | --- |
+| The database | the `db-data` volume (PostgreSQL 17) | `pg_dump` |
+| The media | `./data/media` next to the compose file (or your S3 bucket) | a file copy (or a bucket sync) |
+| The settings | `.env` | a file copy, kept somewhere safe: it holds your secrets |
+
+Rows in the database point at files by key, so the database and the media must be copied while nothing changes them. Stop the app for the few minutes a backup takes.
+
+## Back up
+
+```bash
+cd shotstash
+docker compose stop app worker
+docker compose exec -T db pg_dump -U shotstash shotstash > shotstash.sql
+sudo cp -a data/media /backups/shotstash-media-$(date +%F)
+cp .env /backups/shotstash-env-$(date +%F)
+docker compose start app worker
+```
+
+- `pg_dump` runs inside the database container, which keeps running; only the app and the worker stop.
+- `cp -a` keeps the owner (uid 1000) and the timestamps. `rsync -a` works as well and copies only what changed since the last run.
+- With **S3 storage**, copy the bucket instead of `./data/media`, for example `rclone sync s3:shotstash /backups/shotstash-media`, while the app is stopped. See [Storage](/docs/storage/).
+- Keep at least one copy on another machine or disk. A backup on the same drive does not survive that drive.
+
+## Restore
+
+Restore into an **empty** database, before the app runs. The app creates its tables when it starts, and a dump restored on top of them fails with "relation already exists".
+
+```bash
+cd shotstash
+docker compose down -v                  # removes the old database volume
+sudo rm -rf data/media
+sudo cp -a /backups/shotstash-media-2026-10-06 data/media
+docker compose up -d db                 # an empty database, no app yet
+docker compose exec -T db sh -c 'until pg_isready -h 127.0.0.1 -U shotstash -d shotstash; do sleep 1; done'
+docker compose exec -T db psql -v ON_ERROR_STOP=1 -U shotstash shotstash < shotstash.sql
+docker compose up -d                    # the app starts; its migrations find an up-to-date database
+```
+
+The wait checks over TCP on purpose: while PostgreSQL initialises a new volume it runs a temporary server that answers on its socket only, and a restore sent to it races with that initialisation.
+
+Use the `.env` of the backup, or at least the same `SESSION_SECRET` and `MEDIA_SIGNING_SECRET` when you set one: they sign sessions and share URLs. `POSTGRES_PASSWORD` may differ, because `down -v` creates a new database with whatever `.env` says.
+
+After the restore:
+
+1. `docker compose ps` shows the app `healthy`.
+2. Sign in with an existing account.
+3. Open a few files: thumbnails, the viewer and downloads work.
+
+## Restoring onto another machine
+
+The same steps work on a new machine: install Docker, clone the repository at the same release (or a newer one, see [Upgrading](/docs/upgrading/)), put the backed-up `.env` in place, then run the restore. Change `APP_URL` if the address changed.
+
+## Rehearsed in CI
+
+The `docker` job of the CI workflow runs this procedure on every pull request: it uploads files through the API, takes a backup exactly as above (`pg_dump`, a copy of `./data/media`), wipes the stack with `docker compose down -v`, restores, and then checks that the owner can still sign in and that a downloaded file has the same bytes as before the backup. A change that breaks backup or restore fails the build.
+
+## Not covered (yet)
+
+Backups are manual in v1: there is no scheduler and no built-in export. A nightly `cron` job running the backup commands above is a good start; test a restore now and then, a backup you never restored is a hope, not a backup.

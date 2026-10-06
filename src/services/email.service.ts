@@ -1,5 +1,5 @@
-// Shotstash — Email Service (transaksional)
-// Provider: Resend via HTTP API (bukan SMTP). Dokumentasi DNS: docs/history/email-dns-setup.md
+// Shotstash: Email Service (transaksional)
+// Provider: Resend over its HTTP API (not SMTP). Email settings: docs/configuration.md (Email).
 //
 // Env:
 //   RESEND_API_KEY   — API key Resend. Tanpa ini (dan tanpa EMAIL_TRANSPORT=log) fitur email dianggap belum aktif.

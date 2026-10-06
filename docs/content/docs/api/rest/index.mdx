@@ -1,0 +1,16 @@
+---
+title: REST reference
+description: Every REST route of a Shotstash instance, generated from openapi.json (OpenAPI 3.1).
+---
+
+These pages are generated at build time from [`openapi.json`](https://github.com/%REPO%/blob/main/openapi.json), which `npm run openapi` writes from the route annotations; CI fails when the committed document is stale or does not validate as OpenAPI 3.1. Routes are grouped by tag:
+
+- **Auth**: sign in, sign out and the media cookie.
+- **Uploads**: the parts of a resumable upload (the session itself starts and ends in GraphQL).
+- **Media**: originals, thumbnails, previews, processed versions, covers and ZIP archives, with Range support.
+- **Share**: the data behind a share page, unlocking a private link and fresh signed URLs.
+- **Pipeline**: the worker contract; see [Bring your own AI](/docs/byo-ai/) for the full guide.
+- **System**: health, the runtime configuration, setup and status.
+- **GraphQL**: the GraphQL endpoint itself, documented in the [GraphQL reference](/docs/api/graphql/).
+
+There is no try-it console yet: it arrives with the public demo instance, and it will never send requests to your own installation.

@@ -1,0 +1,20 @@
+# Docs app build output and dependencies
+/node_modules/
+/.next/
+/out/
+/.source/
+next-env.d.ts
+*.tsbuildinfo
+
+# Written by scripts/prepare.mjs from committed repository files (one source per topic)
+/content/docs/configuration.md
+/content/docs/storage.md
+/content/docs/byo-ai.md
+/content/docs/changelog.md
+/content/docs/contributing/index.md
+/content/docs/contributing/releasing.md
+/content/docs/contributing/i18n.md
+/content/docs/contributing/security.md
+/public/brand/
+/assets/fonts/
+/app/icon.svg

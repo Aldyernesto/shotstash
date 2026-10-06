@@ -1,0 +1,4 @@
+{
+  "$comment": "High or critical advisories in production dependencies of the docs site that cannot be fixed yet. Same rules as the root audit-allowlist.json: a reason and an expiry at most 90 days ahead.",
+  "advisories": []
+}

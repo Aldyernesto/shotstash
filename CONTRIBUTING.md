@@ -8,4 +8,4 @@ Thanks for helping. Shotstash is MIT licensed, and there is no paid tier: everyt
 - **Generated files:** after changing `src/graphql/schema.ts` run `npm run sdl`; after changing a route under `src/app` run `npm run openapi`; after changing `src/lib/config.ts` run `npm run env:example`. Commit the regenerated files.
 - **Code layout:** new domain code goes into `src/modules/<domain>/` and is imported through `@/modules/<domain>` only. Modules never import from `src/app`, `src/components`, `src/graphql` or `src/services` (lint enforces it).
 - **UI text** comes from `messages/en.json` ([docs/i18n.md](docs/i18n.md)).
-- **Security issues:** please report them privately through GitHub security advisories, not in a public issue.
+- **Security issues:** please report them privately through GitHub security advisories, not in a public issue; see [SECURITY.md](SECURITY.md).

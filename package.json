@@ -52,6 +52,7 @@
     "e2e:discussion-off": "node scripts/e2e-discussion-off.mjs",
     "test:s3": "node --import tsx --test scripts/storage-s3.contract.mjs",
     "e2e:upload": "node scripts/e2e-upload-resume.mjs",
+    "e2e:backup": "node scripts/e2e-backup.mjs",
     "e2e:search": "tsx scripts/e2e-search-parity.ts",
     "search:reindex": "tsx scripts/search-reindex.ts",
     "thumbs:rebuild": "tsx scripts/thumbs-rebuild.ts",

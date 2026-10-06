@@ -1,6 +1,6 @@
 # Bring your own AI: the worker contract
 
-> Draft for the docs site. Contract version **1**.
+> Contract version **1**.
 
 Shotstash does not ship a model. It ships a job queue and a small HTTP contract, so any program that can speak HTTP (in any language) can process files: transcription, scene detection, a blur, a better proxy. The worker never gets database access, storage credentials or storage URLs. It reads the input from the app, sends one output back to the app, and the app stores that output as a **processed version** of the file, next to the untouched original.
 

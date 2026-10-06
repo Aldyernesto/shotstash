@@ -1,0 +1,62 @@
+---
+title: Upgrading and rollback
+description: Move to a new release with published images or from source, and go back when you need to.
+---
+
+Every upgrade is the same three steps: back up, get the new version, start it. Migrations run when the app starts, so there is no separate migrate command.
+
+<Callout type="warn" title="Before version 1.0.0">
+  Until 1.0.0, databases are throwaway: a pre-release upgrade may ask you to start with an empty database and an empty `./data/media`. The [changelog](/docs/changelog/) says so in the release that needs it. Keep a [backup](/docs/backup/) of anything you care about.
+</Callout>
+
+## The migration rule
+
+Every database migration stays compatible with the previous release. After an upgrade the previous version still runs on the upgraded database, which is what makes rollback a matter of starting the older version. A change that cannot follow this rule is a breaking change and ships in a major release with migration notes.
+
+## With published images
+
+Every release publishes `ghcr.io/%OWNER_LC%/shotstash` and `ghcr.io/%OWNER_LC%/shotstash-worker` for linux/amd64 and linux/arm64, tagged `X.Y.Z`, `X.Y` and `latest`. Add the override file `docker-compose.images.yml` to every compose command so compose pulls these images instead of building:
+
+```bash
+alias dc='docker compose -f docker-compose.yml -f docker-compose.images.yml'
+dc pull
+dc up -d
+```
+
+`IMAGE_TAG` in `.env` picks the release (default `latest`). Pin `IMAGE_TAG=1.4` to get fixes but no new minor version, or `IMAGE_TAG=1.4.2` to change nothing until you edit it. Update the checkout too (`git pull`), so the compose file matches the images.
+
+<Callout title="Images arrive with the first release">
+  Until the first release is published, these images do not exist yet: upgrade from source as below.
+</Callout>
+
+## From source
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+To move to a specific release instead of the latest commit, check out its tag first (`git checkout v1.4.2`).
+
+## Upgrade notes
+
+Read the release notes before you upgrade. Notes that apply to existing installs:
+
+- **Processing worker:** before pulling a version that has the `worker` service, add `WORKER_BOOTSTRAP_TOKEN` to your `.env` (`openssl rand -hex 32`, its own value). Docker compose refuses to start without it.
+- **Storage keys:** from migration `0006_storage_keys_uploads` on, files live under hierarchy-free keys and older bytes are not moved. Reset pre-1.0 development data after upgrading (an empty database and `./data/media`).
+
+## Rollback
+
+1. Stop the app: `docker compose stop app worker`.
+2. Start the previous version:
+   - with images, set `IMAGE_TAG` to the previous release in `.env`, then `dc up -d`;
+   - from source, `git checkout v<previous>` and `docker compose up -d --build`.
+3. Check `docker compose ps` and sign in.
+
+Because of the migration rule, the previous release runs on the database as it is. If you skipped several releases and something is wrong, restore the backup you took before the upgrade instead (see [Backup and restore](/docs/backup/)).
+
+## Checking the running version
+
+`GET /api/health` answers `{ ok, setupRequired, version }`, and a super admin sees the version, storage, database, cache, live workers and queued jobs at `/status`.
+
+How releases are cut and what gets published: [Releasing](/docs/contributing/releasing/).

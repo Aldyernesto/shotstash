@@ -182,6 +182,8 @@ const eslintConfig = defineConfig([
     "src/generated/**",
     // Compiled custom server (npm run build:server).
     "dist/**",
+    // The docs site is a separate app with its own dependencies (docs/package.json).
+    "docs/**",
   ]),
 ]);
 

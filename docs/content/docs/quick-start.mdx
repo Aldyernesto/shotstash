@@ -1,0 +1,133 @@
+---
+title: Quick start
+description: From a fresh Linux machine to your first upload with Docker Compose, in about ten minutes.
+---
+
+This guide installs Shotstash with Docker Compose on one machine and ends with a file uploaded and viewed. The target is ten minutes on a machine that already has Docker, plus the first image build (a few minutes, only until official images are published).
+
+<Callout title="Timing">
+  The ten-minute target is measured from `git clone` to the first upload on a Linux x64 machine with Docker installed. An owner-timed run on a fresh machine is still pending; until then treat the number as a target, not a promise.
+</Callout>
+
+## What you need
+
+- A Linux x64 machine (or arm64), WSL2 on Windows, or macOS with Docker Desktop.
+- Docker Engine with the Docker Compose plugin, and git.
+- About 2 GB of free memory (4 GB if you add the optional search service).
+- Free disk space for your media. Files live in `./data/media` next to the compose file unless you choose an [S3-compatible bucket](/docs/storage/).
+
+## Install
+
+<Steps>
+<Step>
+
+### Get the code
+
+```bash
+git clone https://github.com/%REPO%.git shotstash
+cd shotstash
+cp .env.example .env
+```
+
+</Step>
+<Step>
+
+### Fill in three secrets
+
+Open `.env` and give each of these its own random value:
+
+```bash
+openssl rand -hex 32   # paste as SESSION_SECRET
+openssl rand -hex 32   # paste as POSTGRES_PASSWORD
+openssl rand -hex 32   # paste as WORKER_BOOTSTRAP_TOKEN
+```
+
+`POSTGRES_PASSWORD` is fixed when the database is first created. Changing it in `.env` later does not change the database, and the app can no longer connect: keep the first value, or start over with `docker compose down -v`.
+
+</Step>
+<Step>
+
+### Set the address people open
+
+Set `APP_URL` in `.env` to the address people will type, because emails and share links use it:
+
+- `http://192.168.1.20:3005` for a server on your LAN,
+- `https://media.example.com` behind a domain (see [Networking](/docs/networking/)).
+
+Left empty, it is `http://localhost:3005`, which only works on the server itself.
+
+</Step>
+<Step>
+
+### Check the machine and start
+
+```bash
+sh docker/preflight.sh   # Docker present, secrets valid, port free
+docker compose up -d
+```
+
+The first start builds the app and worker images. `docker compose ps` lists the services; the app is ready when it reports `healthy`.
+
+</Step>
+<Step>
+
+### Create the owner account
+
+Open `http://localhost:3005` (or `http://<server-ip>:3005`). You land on `/setup`: it checks that storage is writable and creates the first super admin. Whoever submits it first becomes the owner, so finish it before the instance is reachable by others, or set `SETUP_TOKEN` in `.env` first (the form then asks for it).
+
+</Step>
+<Step>
+
+### Upload a file
+
+Create a project, open it, and drop a photo or a video on the page (or use **Upload**). The upload runs in parts, survives a reload and shows a thumbnail when it is done. Click the file to open the viewer. The [user guide](/docs/user-guide/) walks through the rest.
+
+</Step>
+</Steps>
+
+## What runs
+
+| Service | What it is | Reachable from |
+| --- | --- | --- |
+| `app` | Shotstash with ffmpeg | the host, on `SHOTSTASH_PORT` (default 3005) |
+| `db` | PostgreSQL 17 (volume `db-data`) | the compose network only |
+| `cache` | Dragonfly (rate limits, realtime events) | the compose network only |
+| `worker` | the reference processing worker (720p video proxies) | makes outgoing calls only |
+
+Database migrations run every time the app starts. Every setting is an environment variable read at start: change `.env` and run `docker compose up -d` again, no rebuild needed. The full list is in [Configuration](/docs/configuration/).
+
+## Platform notes
+
+<Tabs items={['Linux', 'WSL2 (Windows)', 'macOS']}>
+<Tab value="Linux">
+
+Docker Engine and the Compose plugin from your distribution or from Docker's repository both work. The app runs as uid 1000 and fixes the owner of `./data/media` at start. On NFS with `root_squash` or an SMB share it cannot, and the app stops with a message: make the folder writable by uid 1000 on the host (`sudo chown -R 1000:1000 ./data/media`, or mount the share with `uid=1000,gid=1000`).
+
+</Tab>
+<Tab value="WSL2 (Windows)">
+
+Run everything inside the Linux distribution and keep the checkout in the Linux file system (for example `~/shotstash`), not under `/mnt/c`: files on the Windows drive are slow and their permissions do not map, so uploads and the database suffer. Docker Desktop with the WSL2 backend, or Docker Engine installed in the distribution, both work. Open the app at `http://localhost:3005` from Windows.
+
+</Tab>
+<Tab value="macOS">
+
+Keep the checkout inside a folder Docker Desktop shares (your home folder is shared by default; see Settings, Resources, File sharing). Give Docker at least 4 GB of memory in Settings, Resources when you build the image or use search.
+
+</Tab>
+</Tabs>
+
+## Common problems
+
+- **Port already taken.** `docker/preflight.sh` tells you. Set `SHOTSTASH_PORT=8080` (any free port) in `.env`, set `APP_URL=http://localhost:8080` to match, and start again.
+- **The app does not start.** `docker compose logs app` names every bad variable; fix it in `.env` and run `docker compose up -d`.
+- **Share links point at localhost.** Set `APP_URL` to the address people open.
+
+## Optional: search
+
+`docker compose --profile search up -d` adds Elasticsearch (about 1 GB of memory). Then set `ELASTICSEARCH_NODE_URL=http://elasticsearch:9200` in `.env` and run `docker compose up -d`. Without it, search runs in PostgreSQL with the same results. After enabling it on an existing install, run `npm run search:reindex` once.
+
+## Next steps
+
+- Put it behind HTTPS: [Networking](/docs/networking/).
+- Plan your backups before you upload real work: [Backup and restore](/docs/backup/).
+- Use a bucket instead of a disk: [Storage](/docs/storage/).
