@@ -22,7 +22,7 @@ curl -s -X POST http://localhost:3005/api/v1/auth/login \
   -d '{"email":"you@example.com","password":"..."}'
 ```
 
-The answer carries a session `token`. Send it as `Authorization: Bearer <token>` to `/api/graphql` and `/api/v1/*`. The same login also sets the `shotstash_session` cookie (`HttpOnly`, `Path=/media`), which is how browsers load media bytes; a script sends it the same way (`curl --cookie shotstash_session=<token>`). Processing workers use their own tokens; see [Bring your own AI](/docs/byo-ai/).
+The answer carries a session `token`. Send it as `Authorization: Bearer <token>` to `/api/graphql` and `/api/v1/*`. The same login also sets the `shotstash_session` cookie, which carries the same token for the media routes under `/media` only; that is how browsers load media bytes, and a script sends it the same way (`curl --cookie shotstash_session=<token>`). Processing workers use their own tokens; see [Bring your own AI](/docs/byo-ai/).
 
 ## GraphQL
 
@@ -50,4 +50,4 @@ Every error is JSON with a stable code: `{ "code": "SETUP_REQUIRED", "message": 
 
 ## Limits
 
-Requests are rate limited per IP and per account (login 10 per 15 minutes per IP, share unlock 5 per 15 minutes, worker calls 600 per minute per worker). A limited request answers `429 RATE_LIMITED` with a `Retry-After` header.
+Sign-in, password reset, share unlocking, share link creation, uploads, setup and the worker routes are rate limited per IP, per account or per worker. A limited request answers `429 RATE_LIMITED` with a `Retry-After` header that says how many seconds to wait; act on that header rather than on fixed numbers.

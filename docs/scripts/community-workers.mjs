@@ -4,6 +4,8 @@
  */
 const KIND = /^[a-z0-9._-]{1,64}\/[a-z0-9._-]{1,64}$/;
 const SPDX = /^[A-Za-z0-9.+-]+( (AND|OR) [A-Za-z0-9.+-]+)*$/;
+/** GitHub user or organisation names: letters, digits and single inner hyphens, at most 39 characters. */
+const HANDLE = /^@(?=.{1,39}$)[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9]))*$/;
 const FIELDS = ['name', 'description', 'repository', 'kinds', 'contract', 'license', 'maintainer'];
 
 export function validateWorkers(list) {
@@ -27,14 +29,17 @@ export function validateWorkers(list) {
       /* reported below */
     }
     if (!url || url.protocol !== 'https:') problems.push(`${at}: repository must be an https:// URL`);
-    else if (seen.has(url.href)) problems.push(`${at}: repository is listed twice`);
-    else seen.add(url.href);
+    else {
+      const key = `${url.host}${url.pathname}`.toLowerCase().replace(/\/+$/, '').replace(/\.git$/, '');
+      if (seen.has(key)) problems.push(`${at}: repository is listed twice`);
+      else seen.add(key);
+    }
     if (!Array.isArray(w.kinds) || w.kinds.length < 1 || w.kinds.length > 32 || !w.kinds.every((k) => typeof k === 'string' && KIND.test(k)))
       problems.push(`${at}: kinds must be 1 to 32 names like "acme/transcript"`);
     else if (w.kinds.some((k) => k.startsWith('shotstash/'))) problems.push(`${at}: kinds must use your own namespace, not shotstash/`);
-    if (!Number.isInteger(w.contract) || w.contract < 1) problems.push(`${at}: contract must be a contract major (1)`);
+    if (w.contract !== 1) problems.push(`${at}: contract must be 1 (the only contract major so far)`);
     if (typeof w.license !== 'string' || !SPDX.test(w.license)) problems.push(`${at}: license must be an SPDX identifier`);
-    if (typeof w.maintainer !== 'string' || !/^@[A-Za-z0-9-]{1,39}$/.test(w.maintainer))
+    if (typeof w.maintainer !== 'string' || !HANDLE.test(w.maintainer))
       problems.push(`${at}: maintainer must be a GitHub handle such as @name`);
   });
   return problems;

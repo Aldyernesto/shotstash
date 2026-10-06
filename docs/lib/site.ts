@@ -1,10 +1,12 @@
 /**
- * Site facts, fixed at build time by next.config.mjs. The repository comes from
- * GitHub Actions (or the root package.json), so a move to another owner or an
- * organisation needs no change here.
+ * Site facts, fixed at build time by next.config.mjs (from lib/repository.mjs).
+ * The repository comes from GitHub Actions (or the root package.json), so a
+ * move to another owner or an organisation needs no change here.
  */
 export const basePath = process.env.DOCS_BASE_PATH ?? '';
 export const repository = process.env.DOCS_REPOSITORY ?? '';
+/** Public address of the site, with a trailing slash. */
+export const siteUrl = process.env.DOCS_SITE_URL ?? 'http://localhost:3100/';
 export const repoUrl = `https://github.com/${repository}`;
 export const productName = 'Shotstash';
 export const tagline = 'Self-hosted media cloud for creators. Your footage, your hardware, your cloud.';
@@ -12,9 +14,4 @@ export const tagline = 'Self-hosted media cloud for creators. Your footage, your
 /** Prefix a path inside `public/` with the base path (plain <img> and fetch URLs). */
 export function asset(path: string): string {
   return `${basePath}${path}`;
-}
-
-/** A file in the repository on GitHub (main branch). */
-export function sourceUrl(path: string): string {
-  return `${repoUrl}/blob/main/${path.replace(/^\/+/, '')}`;
 }

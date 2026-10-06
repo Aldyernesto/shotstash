@@ -1,12 +1,12 @@
-// Shotstash: Email Service (transaksional)
+// Shotstash: transactional email.
 // Provider: Resend over its HTTP API (not SMTP). Email settings: docs/configuration.md (Email).
 //
-// Env:
-//   RESEND_API_KEY   — API key Resend. Tanpa ini (dan tanpa EMAIL_TRANSPORT=log) fitur email dianggap belum aktif.
-//   EMAIL_FROM       — opsional, default DEFAULT_EMAIL_FROM.
-//   EMAIL_TRANSPORT  — "log" untuk dev/test: tidak mengirim apa pun, pesan terakhir disimpan di memori.
+// Settings (read through config()):
+//   RESEND_API_KEY   the Resend API key. Without it (and without EMAIL_TRANSPORT=log) email is off.
+//   EMAIL_FROM       optional sender, default DEFAULT_EMAIL_FROM.
+//   EMAIL_TRANSPORT  "log" for development and tests: nothing is sent, the last message is kept in memory.
 //
-// JANGAN pernah me-log isi pesan (subject/html/text bisa berisi kode reset).
+// Never log a message body: subject, html and text can hold a reset code.
 
 import { brand } from '@/lib/brand';
 import { config } from '@/lib/config';
@@ -49,7 +49,7 @@ export function clearLastLoggedEmail() {
   lastLoggedEmail = null;
 }
 
-/** "budi@example.com" → "b***@example.com" — untuk log tanpa membocorkan alamat lengkap. */
+/** "budi@example.com" becomes "b***@example.com": for logs, without the full address. */
 export function maskEmail(email: string): string {
   const [local, domain] = email.split('@');
   if (!domain) return '***';
@@ -89,7 +89,7 @@ export async function sendEmail(message: EmailMessage): Promise<SendEmailResult>
     });
 
     if (!res.ok) {
-      // Hanya status + nama error dari Resend — tanpa isi pesan.
+      // Only the status and the error name from Resend, never the message body.
       let errorName = '';
       try {
         const body = (await res.json()) as { name?: unknown };

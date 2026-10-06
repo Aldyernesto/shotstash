@@ -53,7 +53,7 @@ Next.js 16 · React 19 · TypeScript · Apollo GraphQL + graphql-ws · Prisma 7 
 
 The short version follows; the [full quick start](https://aldyernesto.github.io/shotstash/docs/quick-start/) adds platform notes and troubleshooting.
 
-You need a Linux x64 machine (or WSL2, or macOS with Docker Desktop) with Docker Engine and the Docker Compose plugin, git, and about 2 GB of free memory. The first start builds the app image, which takes a few minutes; official images arrive with the first release.
+Linux x64 is the primary platform; linux/arm64 images are built too, on a best-effort basis. WSL2 on Windows and macOS with Docker Desktop work as well. You need Docker Engine with the Docker Compose plugin, git, and about 2 GB of free memory. The first start builds the app image, which takes a few minutes; official images arrive with the first release.
 
 ```bash
 git clone https://github.com/Aldyernesto/shotstash.git

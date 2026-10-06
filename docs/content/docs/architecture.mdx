@@ -9,6 +9,7 @@ Shotstash is a **modular monolith**: one Next.js application owns every capabili
 
 ```mermaid
 flowchart LR
+  accTitle: Browser, app, database, cache, storage and workers
   subgraph Browser
     UI[App UI]
     Share[Share page /s/slug]
@@ -44,6 +45,7 @@ One container runs the app: the Next.js App Router plus a small custom Node serv
 
 ```mermaid
 graph TD
+  accTitle: Layers and the direction of their dependencies
   APP[App shell] --> MOD[Domain modules via index.ts]
   MOD --> LIB[lib]
   APP --> LIB
@@ -56,6 +58,7 @@ The modules today: `activity`, `auth`, `errors`, `i18n`, `library`, `media`, `pi
 
 ```mermaid
 erDiagram
+  accTitle: The data model
   User ||--o{ Session : has
   User ||--o{ Project : owns
   Project ||--o{ Folder : contains
@@ -90,7 +93,7 @@ All bytes (originals, thumbnails, covers, processed versions, upload parts) go t
 
 ### AD-4: One session, carried two ways; bytes leave only through /media [#ad-4]
 
-`POST /api/v1/auth/login` issues one session token, used as a Bearer token for `/api/graphql` and `/api/v1/*`, and as the `shotstash_session` cookie (`HttpOnly`, `SameSite=Lax`, `Path=/media`) for media routes. Tokens never travel in query strings. The `Secure` flag follows the observed request scheme, not `APP_URL`. Every route handler declares its auth mode (`session`, `cookie`, `worker`, `signed` or `public`) through `defineRoute()`; a test fails on any route without one, and the generated table is committed as `docs/security/route-matrix.md`. Share pages get short-lived HMAC-signed media URLs; private links are unlocked with an access code that sets a signed cookie scoped to the share path.
+`POST /api/v1/auth/login` issues one session token, used as a Bearer token for `/api/graphql` and `/api/v1/*`, and as the `shotstash_session` cookie, which the browser sends to the media routes under `/media` only. Tokens never travel in query strings. Whether the cookie is marked secure follows the observed request scheme, not `APP_URL`. Every route handler declares its auth mode (`session`, `cookie`, `worker`, `signed` or `public`) through `defineRoute()`; a test fails on any route without one, and the generated table is committed as `docs/security/route-matrix.md`. Share pages get short-lived HMAC-signed media URLs; private links are unlocked with an access code that sets a signed cookie scoped to the share path.
 
 ### AD-5: Authorization is one function [#ad-5]
 
@@ -134,7 +137,7 @@ The CI workflow runs lint (including the import direction), type checks, the gen
 
 ### AD-15: Edge hardening in one place [#ad-15]
 
-`src/lib/request.ts` is the only reader of forwarded headers and honours them only with `TRUST_PROXY=true`. `src/lib/rateLimit.ts` is the only throttle (sliding windows on Dragonfly: login 10 per 15 minutes per IP, share unlock 5 per 15 minutes, worker calls 600 per minute per worker, and so on). The custom server sets the security headers for every response, with `Strict-Transport-Security` only over HTTPS. See [Networking](/docs/networking/).
+`src/lib/request.ts` is the only reader of forwarded headers and honours them only with `TRUST_PROXY=true`. `src/lib/rateLimit.ts` is the only throttle: sliding windows on Dragonfly, keyed by IP, account or worker, with the limits defined in that file. The custom server sets the security headers for every response, with `Strict-Transport-Security` only over HTTPS. See [Networking](/docs/networking/).
 
 ### AD-16: Trash, deletion and links [#ad-16]
 

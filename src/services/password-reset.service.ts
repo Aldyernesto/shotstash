@@ -1,14 +1,15 @@
-// Shotstash: Reset password mandiri via email (kode OTP)
+// Shotstash: self-service password reset by email (one-time code).
 // Email settings for the reset codes: docs/configuration.md (Email).
 //
-// Alur: requestReset(email) → kode 6 karakter via email → verifyCode(email, code) → resetToken
-//       → completeReset(resetToken, newPassword, confirmPassword) → password baru, semua sesi dicabut.
+// Flow: requestReset(email) sends a 6-character code by email; verifyCode(email, code) returns a
+//       resetToken; completeReset(resetToken, newPassword, confirmPassword) sets the new password
+//       and revokes every session.
 //
-// Keamanan:
-// - Respons requestReset SERAGAM untuk email terdaftar/tidak/nonaktif/kena limit. Semua kerja DB +
-//   pengiriman email jalan di belakang (tidak ditunggu), jadi waktu responsnya juga sama.
-// - Kode & token hanya disimpan sebagai hash; dibandingkan dengan timingSafeEqual.
-// - JANGAN log kode, token, atau password.
+// Security:
+// - requestReset answers the same way for a known, unknown, deactivated or rate-limited email. The
+//   database work and the email run in the background (not awaited), so the timing is the same too.
+// - Codes and tokens are stored only as hashes and compared with timingSafeEqual.
+// - Never log a code, a token or a password.
 
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'crypto';
 import prisma from '@/lib/prisma';
@@ -33,7 +34,7 @@ export const MAX_CODE_ATTEMPTS = 5;
 export const RESEND_COOLDOWN_MS = 60 * 1000;
 export const MAX_REQUESTS_PER_EMAIL = 3;
 export const EMAIL_WINDOW_MS = 15 * 60 * 1000;
-// Batas harian per email (jendela 24 jam bergulir) — cegah spam ke inbox user & reputasi pengirim.
+// Daily limit per email (rolling 24 hour window): protects the inbox and the sender reputation.
 export const MAX_REQUESTS_PER_EMAIL_PER_DAY = 10;
 export const DAY_WINDOW_MS = 24 * 60 * 60 * 1000;
 // Nilai expiresAt untuk kode yang dibatalkan/terpakai/terkunci: selalu di masa lalu untuk `now` mana pun.
@@ -195,9 +196,9 @@ export async function waitForPendingResetWork() {
 // ============================================
 
 /**
- * Selalu selesai dengan cara yang sama (tidak membocorkan apakah email terdaftar), kecuali:
- * fitur belum aktif, format email jelas salah, atau limit per IP — ketiganya tidak bergantung akun.
- * Email hanya dikirim bila user ada, aktif, bukan REJECTED, dan belum kena cooldown/limit per email.
+ * Always ends the same way (it never reveals whether the email is registered), except when
+ * the feature is off, the email is clearly malformed, or the per-IP limit is hit: none depends on the account.
+ * The email is sent only when the user exists, is active, is not REJECTED and is within the per-email cooldown and limit.
  */
 export async function requestReset(email: string, meta: { ip?: string } = {}): Promise<void> {
   assertAvailable();
@@ -212,7 +213,7 @@ export async function requestReset(email: string, meta: { ip?: string } = {}): P
 
 async function processResetRequest(email: string, ip?: string) {
   const now = new Date();
-  // Bersih-bersih baris terbengkalai (berisi requestIp). Hanya yang > 24 jam — di luar jendela batas harian.
+  // Remove abandoned rows (they hold requestIp), only those older than 24 hours: outside the daily window.
   await prisma.passwordResetRequest.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - DAY_WINDOW_MS) } } });
 
   const user = await findUserByEmail(email);
@@ -397,7 +398,7 @@ export async function completeReset(resetToken: string, newPassword: string, con
   const userId = request.user.id;
 
   const sessionsRevoked = await prisma.$transaction(async (tx) => {
-    // Klaim token secara atomik — pemakaian kedua (paralel) gagal di sini.
+    // Claim the token atomically: a second (parallel) use fails here.
     const consumed = await tx.passwordResetRequest.deleteMany({
       where: { id: request.id, resetTokenHash: tokenHash, resetTokenExpiresAt: { gt: now } },
     });

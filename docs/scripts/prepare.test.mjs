@@ -1,39 +1,118 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { IMPORTS, rewriteHref, rewriteLinks, toPage } from './prepare.mjs';
+import { IMPORTS, changelogPage, rewriteHref, rewriteLinks, stripFirstH1, toPage } from './prepare.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const repo = 'someone/shotstash';
+
+/** A throwaway repository tree for existence checks. */
+function fakeRoot() {
+  const root = mkdtempSync(path.join(tmpdir(), 'docs-prepare-'));
+  for (const f of ['README.md', 'LICENSE', 'docs/a b.md', 'public/brand/logo.png', 'worker/src/main.mjs']) {
+    mkdirSync(path.dirname(path.join(root, f)), { recursive: true });
+    writeFileSync(path.join(root, f), 'x');
+  }
+  return root;
+}
+const root = fakeRoot();
+const href = (h, from = 'README.md', image = false) => rewriteHref(h, from, repo, { root, image });
 
 test('every imported guide exists in the repository', () => {
   for (const entry of IMPORTS) assert.ok(existsSync(path.join(ROOT, entry.from)), entry.from);
 });
 
-test('links to imported guides become site pages, others GitHub URLs', () => {
-  assert.equal(rewriteHref('configuration.md', 'docs/storage.md', repo), '/docs/configuration/');
-  assert.equal(rewriteHref('docs/i18n.md#adding-a-locale', 'CONTRIBUTING.md', repo), '/docs/contributing/i18n/#adding-a-locale');
-  assert.equal(rewriteHref('SECURITY.md', 'CONTRIBUTING.md', repo), '/docs/contributing/security/');
-  assert.equal(rewriteHref('README.md', 'CONTRIBUTING.md', repo), 'https://github.com/someone/shotstash/blob/main/README.md');
-  assert.equal(rewriteHref('worker/', 'README.md', repo), 'https://github.com/someone/shotstash/tree/main/worker');
-  assert.equal(rewriteHref('../../security/advisories/new', 'SECURITY.md', repo), 'https://github.com/someone/shotstash/security/advisories/new');
-  assert.equal(rewriteHref('https://example.com/x', 'README.md', repo), 'https://example.com/x');
-  assert.equal(rewriteHref('#top', 'README.md', repo), '#top');
+test('links to imported guides become site pages', () => {
+  assert.equal(href('docs/storage.md'), '/docs/storage/');
+  assert.equal(href('configuration.md', 'docs/storage.md'), '/docs/configuration/');
+  assert.equal(href('docs/i18n.md#adding-a-locale', 'CONTRIBUTING.md'), '/docs/contributing/i18n/#adding-a-locale');
+  assert.equal(href('SECURITY.md', 'CONTRIBUTING.md'), '/docs/contributing/security/');
 });
 
-test('code blocks are left alone', () => {
-  const md = 'See [x](storage.md).\n\n```md\n[x](storage.md)\n```\n';
-  const out = rewriteLinks(md, 'docs/byo-ai.md', repo);
-  assert.match(out, /See \[x\]\(\/docs\/storage\/\)/);
-  assert.match(out, /```md\n\[x\]\(storage\.md\)\n```/);
+test('root-relative links resolve from the repository root', () => {
+  assert.equal(href('/docs/storage.md', 'docs/byo-ai.md'), '/docs/storage/');
+  assert.equal(href('/README.md', 'docs/byo-ai.md'), 'https://github.com/someone/shotstash/blob/main/README.md');
+});
+
+test('other repository files become GitHub URLs of the right kind', () => {
+  assert.equal(href('README.md', 'CONTRIBUTING.md'), 'https://github.com/someone/shotstash/blob/main/README.md');
+  assert.equal(href('LICENSE'), 'https://github.com/someone/shotstash/blob/main/LICENSE');
+  assert.equal(href('worker/'), 'https://github.com/someone/shotstash/tree/main/worker');
+  assert.equal(href('worker'), 'https://github.com/someone/shotstash/tree/main/worker');
+  assert.equal(href('docs/a%20b.md'), 'https://github.com/someone/shotstash/blob/main/docs/a%20b.md');
+  assert.equal(href('public/brand/logo.png', 'README.md', true), 'https://raw.githubusercontent.com/someone/shotstash/main/public/brand/logo.png');
+});
+
+test('external links, anchors and the GitHub ../../ convention stay usable', () => {
+  assert.equal(href('https://example.com/x'), 'https://example.com/x');
+  assert.equal(href('mailto:a@example.com'), 'mailto:a@example.com');
+  assert.equal(href('#top'), '#top');
+  assert.equal(href('../../security/advisories/new', 'SECURITY.md'), 'https://github.com/someone/shotstash/security/advisories/new');
+});
+
+test('a missing target or a path out of the repository fails', () => {
+  assert.throws(() => href('docs/nope.md'), /does not exist/);
+  assert.throws(() => href('../outside.md'), /leaves the repository/);
+  assert.throws(() => href('../../../x'), /leaves the repository/);
+});
+
+test('inline links, images, angle targets and reference definitions are rewritten', () => {
+  const md = [
+    'See [s](docs/storage.md "Storage") and ![logo](public/brand/logo.png).',
+    'Spaces: [ab](<docs/a b.md>).',
+    '[ref]: docs/storage.md "title"',
+    '  [w]: <worker/>',
+  ].join('\n');
+  const out = rewriteLinks(md, 'README.md', repo, { root }).split('\n');
+  assert.equal(out[0], 'See [s](/docs/storage/ "Storage") and ![logo](https://raw.githubusercontent.com/someone/shotstash/main/public/brand/logo.png).');
+  assert.equal(out[1], 'Spaces: [ab](<https://github.com/someone/shotstash/blob/main/docs/a%20b.md>).');
+  assert.equal(out[2], '[ref]: /docs/storage/ "title"');
+  assert.equal(out[3], '  [w]: <https://github.com/someone/shotstash/tree/main/worker>');
+});
+
+test('fences close only with the same character and at least the same length', () => {
+  const md = [
+    '````md',
+    '```',
+    '[x](missing.md)',
+    '```',
+    '````',
+    '~~~',
+    '```',
+    '[y](missing.md)',
+    '~~~',
+    '[z](docs/storage.md)',
+  ].join('\n');
+  const out = rewriteLinks(md, 'README.md', repo, { root }).split('\n');
+  assert.equal(out[2], '[x](missing.md)');
+  assert.equal(out[7], '[y](missing.md)');
+  assert.equal(out[9], '[z](/docs/storage/)');
+});
+
+test('only the first H1 outside fences is dropped', () => {
+  const md = '```sh\n# a shell comment\n```\n\n# Title\n\nBody\n\n# Second\n';
+  const out = stripFirstH1(md);
+  assert.match(out, /# a shell comment/);
+  assert.doesNotMatch(out, /# Title/);
+  assert.match(out, /# Second/);
 });
 
 test('a page gets frontmatter, loses its first heading and names its source', () => {
-  const page = toPage('# Storage\r\n\r\nBody [c](configuration.md).\r\n', IMPORTS.find((i) => i.from === 'docs/storage.md'), repo);
+  const page = toPage('# Storage\r\n\r\nBody [c](configuration.md).\r\n', IMPORTS.find((i) => i.from === 'docs/storage.md'), repo, { root });
   assert.match(page, /^---\ntitle: "Storage backends"\n/);
   assert.doesNotMatch(page, /# Storage/);
   assert.match(page, /Body \[c\]\(\/docs\/configuration\/\)/);
   assert.match(page, /generated from \[`docs\/storage\.md`\]\(https:\/\/github\.com\/someone\/shotstash\/blob\/main\/docs\/storage\.md\)/);
+});
+
+test('the changelog page names its source when CHANGELOG.md exists', () => {
+  assert.match(changelogPage(repo, root), /No release has been published yet/);
+  const withLog = fakeRoot();
+  writeFileSync(path.join(withLog, 'CHANGELOG.md'), '# Changelog\n\n## 0.2.0\n\n- [notes](README.md)\n');
+  const page = changelogPage(repo, withLog);
+  assert.doesNotMatch(page, /# Changelog/);
+  assert.match(page, /generated from \[`CHANGELOG\.md`\]/);
 });

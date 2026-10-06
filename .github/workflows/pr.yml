@@ -141,20 +141,29 @@ jobs:
       - name: Install docs dependencies
         run: npm ci --prefix docs
 
+      - name: Docs lint
+        run: npm run lint --prefix docs
+
       - name: Docs tests
         run: npm test --prefix docs
 
       - name: Docs dependency audit
         run: npm run audit:check --prefix docs
 
-      # The project site path (https://<owner>.github.io/<repo>/), as docs.yml builds it.
-      - name: Build the docs with a project base path
-        run: DOCS_BASE_PATH="/${GITHUB_REPOSITORY#*/}" npm run build --prefix docs
+      # The GitHub Pages address (project site /<repo>, user site or DOCS_DOMAIN root).
+      - name: Site address
+        run: node docs/lib/repository.mjs | tee -a "$GITHUB_ENV"
+
+      - name: Build the docs
+        run: npm run build --prefix docs
+
+      - name: No placeholders left, search index present
+        run: npm run check:export --prefix docs
 
       - name: Lay out the export under its base path
         run: |
-          mkdir -p /tmp/site
-          cp -r docs/out "/tmp/site/${GITHUB_REPOSITORY#*/}"
+          mkdir -p "/tmp/site${DOCS_BASE_PATH}"
+          cp -r docs/out/. "/tmp/site${DOCS_BASE_PATH}/"
 
       # Offline: every internal link and image must resolve inside the export.
       - name: Internal links resolve
@@ -361,36 +370,53 @@ jobs:
       # Story 7.4: the backup and restore procedure of the docs
       # (docs/content/docs/backup.mdx), end to end: data is created, dumped and
       # copied, the stack is wiped with down -v, restored, and the restored
-      # instance signs in and serves the same file bytes.
+      # instance signs in, serves the same file bytes and thumbnail, and a share
+      # link from before the backup still opens (the restored .env keeps the secrets).
       - name: Backup and restore rehearsal
         run: |
           e2e_backup() {
-            docker run --rm --network "container:$(docker compose ps -q app)"               -v "$PWD:/w" -w /w               -e E2E_BASE_URL=http://127.0.0.1:3005               -e E2E_EMAIL=owner@example.com,other@example.com               -e E2E_PASSWORD=owner-password-1               node:24-bookworm-slim node scripts/e2e-backup.mjs "$@"
+            docker run --rm --network "container:$(docker compose ps -q app)" \
+              -v "$PWD:/w" -w /w \
+              -e E2E_BASE_URL=http://127.0.0.1:3005 \
+              -e E2E_EMAIL=owner@example.com,other@example.com \
+              -e E2E_PASSWORD=owner-password-1 \
+              node:24-bookworm-slim node scripts/e2e-backup.mjs "$@"
           }
-          media_sums() { (cd data/media && sudo find . -type f -print0 | sort -z | sudo xargs -0 -r sha256sum); }
+          media_sums() { (cd "$1" && sudo find . -type f -print0 | sort -z | sudo xargs -0 -r sha256sum); }
+          backup=ci-out/backup
           docker compose exec -T cache redis-cli FLUSHALL
           e2e_backup snapshot ci-out/backup-state.json
 
-          echo "--- back up"
+          echo "--- back up (app and worker stopped: nothing writes until the restore is checked)"
           docker compose stop app worker
-          docker compose exec -T db pg_dump -U shotstash shotstash > ci-out/shotstash.sql
-          sudo cp -a data/media ci-out/media-backup
-          media_sums > ci-out/media-before.txt
-          test -s ci-out/shotstash.sql
+          mkdir -p "$backup"
+          docker compose exec -T db pg_dump -U shotstash shotstash > "$backup/shotstash.sql"
+          sudo rsync -a --delete data/media/ "$backup/media/"
+          cp .env "$backup/env"
+
+          echo "--- verify the backup before deleting anything"
+          test -s "$backup/shotstash.sql"
+          grep -q "PostgreSQL database dump complete" "$backup/shotstash.sql"
+          media_sums data/media > ci-out/media-before.txt
+          media_sums "$backup/media" > ci-out/media-backup.txt
+          diff ci-out/media-before.txt ci-out/media-backup.txt
+          echo "$(wc -l < ci-out/media-before.txt) media files in the backup"
+          cmp .env "$backup/env"
 
           echo "--- lose everything"
           docker compose down -v
           sudo rm -rf data/media
+          rm .env
 
-          echo "--- restore"
-          sudo cp -a ci-out/media-backup data/media
-          docker compose up -d db
-          docker compose exec -T db sh -c 'until pg_isready -h 127.0.0.1 -U shotstash -d shotstash; do sleep 1; done'
-          docker compose exec -T db psql -v ON_ERROR_STOP=1 -q -U shotstash shotstash < ci-out/shotstash.sql
-          docker compose up -d --wait --wait-timeout 300
-
-          media_sums > ci-out/media-after.txt
+          echo "--- restore (.env, media, database, then the app)"
+          cp "$backup/env" .env
+          sudo rsync -a --delete "$backup/media/" data/media/
+          media_sums data/media > ci-out/media-after.txt
           diff ci-out/media-before.txt ci-out/media-after.txt
+          docker compose up -d db
+          timeout 120 docker compose exec -T db sh -c 'until pg_isready -h 127.0.0.1 -U shotstash -d shotstash; do sleep 1; done'
+          docker compose exec -T db psql --single-transaction -v ON_ERROR_STOP=1 -q -U shotstash shotstash < "$backup/shotstash.sql"
+          docker compose up -d --wait --wait-timeout 300
           docker compose logs app | grep -q "No pending migrations"
           e2e_backup verify ci-out/backup-state.json
 
