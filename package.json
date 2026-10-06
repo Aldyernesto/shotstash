@@ -29,7 +29,7 @@
     "build:folder-shell": "node scripts/build-folder-shell-geometry.mjs",
     "check:folder-shell": "node scripts/check-folder-shell.mjs",
     "start": "NODE_ENV=production node dist/server.js",
-    "lint": "eslint --max-warnings 283",
+    "lint": "eslint --max-warnings 282",
     "check:tokens": "node scripts/check-design-tokens.mjs",
     "check:legacy": "node scripts/check-legacy-allowlist.mjs",
     "brand:css": "tsx scripts/gen-brand-css.ts",
