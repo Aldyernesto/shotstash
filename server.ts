@@ -23,7 +23,7 @@ import { purgeExpired } from './src/modules/trash';
 import { checkSearchIndex } from './src/modules/library';
 import { expireSessions } from './src/modules/upload';
 import { sweepExpiredClaims } from './src/modules/pipeline';
-import { demoResetDue, resetDemo } from './src/modules/demo';
+import { DEMO_LOCK, DEMO_LOCK_TTL_MS, nightlyDemoTick, resetDemo, type MarkerStore } from './src/modules/demo';
 import { corsDecision } from './src/lib/cors';
 import { PIPELINE_CONTRACT_VERSION, PIPELINE_HEADER, PIPELINE_PATH_PREFIX } from './src/lib/pipelineContract';
 import { ConfigError, assertConfig, config } from './src/lib/config';
@@ -227,30 +227,26 @@ function applyCors(req: IncomingMessage, res: ServerResponse, pathname: string):
 /* minute; runs once per local date at 03:00 in                        */
 /* SHOTSTASH_DEFAULT_TIMEZONE, on the instance holding the lock.       */
 /* ------------------------------------------------------------------ */
-const DEMO_RESET_LOCK = 'shotstash:lock:demo-reset';
-const DEMO_RESET_LOCK_TTL_MS = 30 * 60 * 1000;
-let demoResetDate: string | null = null;
-let demoResetRunning = false;
+let demoTickRunning = false;
 
 async function nightlyDemoReset() {
-  const date = demoResetDue(new Date(), config().SHOTSTASH_DEFAULT_TIMEZONE, demoResetDate);
-  if (!date || demoResetRunning) return;
-  demoResetRunning = true;
-  demoResetDate = date;
+  if (demoTickRunning) return;
+  demoTickRunning = true;
   try {
-    const locked = await withLock(DEMO_RESET_LOCK, DEMO_RESET_LOCK_TTL_MS, () => resetDemo());
-    let result;
-    if (locked.ran) result = locked.value;
-    else if (locked.reason === 'unavailable') result = await resetDemo();
-    else {
-      demoLog.info('skipped: another instance holds the lock');
-      return;
-    }
-    demoLog.info('demo data reset', { date, files: result.files });
+    const r = await nightlyDemoTick({
+      now: new Date(),
+      timeZone: config().SHOTSTASH_DEFAULT_TIMEZONE,
+      store: dfClient() as unknown as MarkerStore,
+      runLocked: (fn) => withLock(DEMO_LOCK, DEMO_LOCK_TTL_MS, fn),
+      reset: () => resetDemo(),
+    });
+    if (r.outcome === 'ran') demoLog.info('demo data reset', { date: r.date });
+    else if (r.outcome === 'unavailable') demoLog.warn('skipped: no lock store (Dragonfly unavailable)', { date: r.date });
+    else if (r.outcome === 'failed') demoLog.error('failed, retrying on the next tick of the hour', { date: r.date, err: errMessage(r.error) });
   } catch (err) {
     demoLog.error('failed', { err: errMessage(err) });
   } finally {
-    demoResetRunning = false;
+    demoTickRunning = false;
   }
 }
 

@@ -129,6 +129,8 @@ model Session {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
+  // Story 8.2: true only for a demo try-it session; it never slides.
+  fixedExpiry Boolean @default(false) @map("fixed_expiry")
   ipAddress String?
   userAgent String?
   createdAt DateTime @default(now())

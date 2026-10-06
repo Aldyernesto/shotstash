@@ -306,12 +306,20 @@ jobs:
       - name: The demo command ships in the image and refuses outside demo mode
         run: |
           set +e
-          out=$(docker compose exec -T app node dist/demo.js seed 2>&1)
+          out=$(docker compose exec -T -u node app node dist/demo.js seed 2>&1)
           status=$?
           set -e
           echo "$out"
           test "$status" -eq 2
           echo "$out" | grep -q "SHOTSTASH_DEMO_MODE=true"
+          # As root on local storage it refuses and names the right command.
+          set +e
+          out=$(docker compose exec -T app node dist/demo.js seed 2>&1)
+          status=$?
+          set -e
+          echo "$out"
+          test "$status" -eq 2
+          echo "$out" | grep -q "exec -u node app"
 
       - name: Install dependencies for the e2e script
         run: npm ci

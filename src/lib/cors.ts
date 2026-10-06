@@ -29,8 +29,9 @@ export function normaliseOrigin(value: string): string | null {
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
   if (url.username || url.password) return null;
-  // An origin has no path, query or fragment (one trailing slash is tolerated).
-  if (raw.replace(/\/$/, '').toLowerCase() !== url.origin.toLowerCase()) return null;
+  // An origin has no path, query or fragment (one trailing slash is tolerated);
+  // an explicit default port (https://x:443) normalises to the URL origin.
+  if (url.pathname !== '/' || /[?#]/.test(raw)) return null;
   return url.origin;
 }
 

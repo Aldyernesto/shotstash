@@ -76,6 +76,24 @@ test('init.sh never overwrites an existing .env and still runs the preflight', {
   }
 });
 
+test('init.sh keeps a .env directory or symlink (even a broken one)', { skip: !hasSh && 'no sh' }, () => {
+  for (const kind of ['dir', 'symlink']) {
+    const dir = checkout();
+    try {
+      if (kind === 'dir') mkdirSync(path.join(dir, '.env'));
+      else {
+        const made = spawnSync('sh', ['-c', 'ln -s missing-target .env && [ -L .env ]'], { cwd: dir });
+        if (made.status !== 0) continue; // no real symlinks (Windows without developer mode)
+      }
+      const r = run(dir);
+      assert.match(r.stdout, /already exists/, kind);
+      assert.doesNotMatch(r.stdout, /Created \.env/, kind);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+});
+
 test('init.sh exits with the preflight status and leaves no temporary file', { skip: !hasSh && 'no sh' }, () => {
   const dir = checkout(1);
   try {

@@ -2,7 +2,7 @@
 # (and docker-compose.images.yml once images are published):
 #
 #   docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d
-#   docker compose -f docker-compose.yml -f docker-compose.demo.yml exec app node dist/demo.js seed
+#   docker compose -f docker-compose.yml -f docker-compose.demo.yml exec -u node app node dist/demo.js seed
 #
 # Demo mode lists the read-only demo accounts and their password on the
 # sign-in page, turns sign-up off, shows a demo banner, hands out short

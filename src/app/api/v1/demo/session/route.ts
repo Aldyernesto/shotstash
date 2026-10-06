@@ -14,7 +14,25 @@ import { originAllowed } from '@/lib/cors';
 import { defineRoute, jsonError } from '@/lib/defineRoute';
 import { limitBy, rateLimitedResponse } from '@/lib/rateLimit';
 import { clientIp } from '@/lib/request';
-import { createDemoSession } from '@/modules/demo';
+import { createHash } from 'crypto';
+import { logger } from '@/lib/logger';
+import { createDemoSession, findDemoViewer } from '@/modules/demo';
+
+let warnedUnknownIp = false;
+
+/**
+ * The rate-limit key: the client IP, or (when the server cannot tell it, for
+ * example a proxy without TRUST_PROXY) a hash of the user agent, so one
+ * unknown address never shares a single budget with everybody.
+ */
+function demoLimitKey(ip: string | undefined, userAgent: string | undefined): string {
+  if (ip) return `ip:${ip}`;
+  if (!warnedUnknownIp) {
+    warnedUnknownIp = true;
+    logger('demo').warn('client IP unknown: demo sessions are limited per user agent (set TRUST_PROXY=true behind a proxy)');
+  }
+  return `ua:${createHash('sha256').update(`unknown|${userAgent ?? ''}`).digest('hex').slice(0, 32)}`;
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -39,11 +57,14 @@ export const POST = defineRoute({
     if (origin && origin !== new URL(c.appUrl).origin && !originAllowed(origin, c.SHOTSTASH_CORS_ORIGINS ?? [])) {
       return jsonError(403, 'ORIGIN_NOT_ALLOWED', 'This origin may not open demo sessions');
     }
-    const ip = clientIp(req.headers) ?? 'unknown';
-    const limited = await limitBy('demoSession', ip);
+    // Before spending a rate-limit slot: nothing to hand out until the seed ran.
+    const viewer = await findDemoViewer();
+    if (!viewer) return jsonError(503, 'DEMO_NOT_SEEDED', 'The demo accounts do not exist yet');
+    const ip = clientIp(req.headers);
+    const userAgent = req.headers.get('user-agent') ?? undefined;
+    const limited = await limitBy('demoSession', demoLimitKey(ip, userAgent));
     if (!limited.ok) return rateLimitedResponse(limited.retryAfter);
-    const session = await createDemoSession({ ip, userAgent: req.headers.get('user-agent') ?? undefined });
-    if (!session) return jsonError(503, 'DEMO_NOT_SEEDED', 'The demo accounts do not exist yet');
+    const session = await createDemoSession(viewer.id, { ip, userAgent });
     return NextResponse.json(
       { token: session.token, expiresAt: session.expiresAt.toISOString() } satisfies Wire<DemoSessionResponse>,
       { headers: { 'Cache-Control': 'no-store' } },

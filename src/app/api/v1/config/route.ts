@@ -9,6 +9,7 @@
 import { NextResponse } from 'next/server';
 import { defineRoute } from '@/lib/defineRoute';
 import { publicConfig } from '@/lib/config';
+import { publishedDemoAccounts } from '@/modules/demo';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,5 +24,14 @@ export const dynamic = 'force-dynamic';
 export const GET = defineRoute({
   auth: 'public',
   allowBeforeSetup: true,
-  handler: () => NextResponse.json(publicConfig(), { headers: { 'Cache-Control': 'no-store' } }),
+  handler: async () => {
+    const body = publicConfig();
+    // Story 8.2: publish only demo accounts that exist as read-only accounts
+    // (before setup or the seed there are none, and nothing is published).
+    if (body.demo) {
+      const accounts = await publishedDemoAccounts().catch(() => []);
+      body.demo = accounts.length ? { ...body.demo, accounts } : null;
+    }
+    return NextResponse.json(body, { headers: { 'Cache-Control': 'no-store' } });
+  },
 });

@@ -360,3 +360,14 @@ test('logger emits one JSON line per event with level, time, scope and message',
   assert.equal(second.level, 'error');
   assert.equal(second.err.message, 'boom');
 });
+
+test('DEMO_ADMIN_PASSWORD is the single variable published in demo mode (Story 8.2)', () => {
+  const pub = Object.entries(cfg.VARIABLES).filter(([, d]) => d.publicInDemo).map(([n]) => n);
+  assert.deepEqual(pub, ['DEMO_ADMIN_PASSWORD']);
+  // Still kept out of examples like a secret.
+  assert.equal(cfg.VARIABLES.DEMO_ADMIN_PASSWORD.secret, true);
+  assert.equal(cfg.VARIABLES.DEMO_ADMIN_PASSWORD.example, undefined);
+  const example = readFileSync(path.join(ROOT, '.env.example'), 'utf8');
+  assert.match(example, /# Public in demo mode: shown on the sign-in page, never in logs\.\nDEMO_ADMIN_PASSWORD=\n/);
+  assert.match(readFileSync(path.join(ROOT, 'docs/configuration.md'), 'utf8'), /\| `DEMO_ADMIN_PASSWORD` \|.*Public in demo mode/);
+});

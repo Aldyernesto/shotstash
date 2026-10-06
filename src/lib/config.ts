@@ -25,6 +25,7 @@ import { isValidTimeZone, resolveLocale } from '../i18n/config.ts';
 import { brand } from './brand.ts';
 import { parseCorsOrigins } from './cors.ts';
 import { DEMO_ACCOUNTS } from './demoAccounts.ts';
+import type { DemoSignIn } from './apiContract/system.ts';
 import { HEARTBEAT_SECONDS } from './pipelineContract.ts';
 
 /* ------------------------------------------------------------------ */
@@ -66,6 +67,11 @@ export type VarDef<T = unknown, Always extends boolean = boolean> = {
   required?: boolean;
   /** Never shown with a value: `.env.example` leaves it empty. */
   secret?: boolean;
+  /**
+   * Story 8.2: kept out of examples and logs like a secret, but published on
+   * the sign-in page in demo mode. Only DEMO_ADMIN_PASSWORD carries it.
+   */
+  publicInDemo?: boolean;
   /** A secret the operator generates (`.env.example` shows the command). Default true for secrets. */
   generate?: boolean;
   /** Set by the Docker image: `.env.example` shows it commented out so an empty line never overrides the image. */
@@ -456,13 +462,14 @@ export const VARIABLES = {
     description:
       'Public demo instances only. With true: the sign-in page lists the read-only demo accounts and their password, ' +
       'sign-up is off, a demo banner shows, POST /api/v1/demo/session hands out short read-only sessions and the demo data ' +
-      'is reset every night at 03:00 (SHOTSTASH_DEFAULT_TIMEZONE). Seed it once after setup with `node dist/demo.js seed` ' +
+      'is reset every night at 03:00 (SHOTSTASH_DEFAULT_TIMEZONE). Seed it once after setup with `docker compose exec -u node app node dist/demo.js seed` ' +
       '(`npm run demo:seed` from source). Needs DEMO_ADMIN_PASSWORD.',
   }),
   DEMO_ADMIN_PASSWORD: opt({
     group: 'Demo',
     kind: 'infra',
     secret: true,
+    publicInDemo: true,
     schema: z.string().min(10, 'must be at least 10 characters'),
     generate: false,
     description:
@@ -650,22 +657,22 @@ export function resetConfig(): void {
   memo = null;
 }
 
-/** How to sign in to a public demo (demo mode only). */
-export type DemoSignIn = { accounts: { email: string; role: string }[]; password: string };
-
 /** Settings the browser may read (`GET /api/v1/config`). Never includes a secret. */
 export function publicConfig() {
   const c = config();
+  // Demo mode only: the demo accounts are read-only, so their shared password
+  // is meant to be public. GET /api/v1/config narrows `accounts` to those that exist.
+  const demo: DemoSignIn | null =
+    c.features.demo && c.DEMO_ADMIN_PASSWORD
+      ? { accounts: DEMO_ACCOUNTS.map(({ email, role }) => ({ email, role })), password: c.DEMO_ADMIN_PASSWORD }
+      : null;
   return {
     appUrl: c.appUrl,
     googleClientId: c.GOOGLE_CLIENT_ID ?? null,
     features: c.features,
     version: c.version,
     defaultLocale: c.defaultLocale,
-    // Demo mode only: the demo accounts are read-only, so their shared password is meant to be public.
-    demo: (c.features.demo && c.DEMO_ADMIN_PASSWORD
-      ? { accounts: DEMO_ACCOUNTS.map(({ email, role }) => ({ email, role })), password: c.DEMO_ADMIN_PASSWORD }
-      : null) as DemoSignIn | null,
+    demo,
   };
 }
 

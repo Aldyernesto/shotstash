@@ -24,7 +24,7 @@ export function DemoToken() {
     try {
       const res = await fetch(`${demoOrigin}/api/v1/demo/session`, { method: 'POST' });
       const body = (await res.json().catch(() => ({}))) as { token?: string; expiresAt?: string; code?: string };
-      if (!res.ok || !body.token || !body.expiresAt) {
+      if (!res.ok || !body.token || !body.expiresAt || Number.isNaN(Date.parse(body.expiresAt))) {
         setState({
           kind: 'error',
           message: body.code === 'RATE_LIMITED' ? 'Too many tokens from this address; try again later.' : 'The demo did not answer; try again later.',
@@ -58,7 +58,11 @@ export function DemoToken() {
             type="button"
             className="rounded-lg border px-2 py-1"
             onClick={() => {
-              void navigator.clipboard?.writeText(state.token).then(() => setCopied(true));
+              // A denied or missing clipboard leaves the token selectable by hand.
+              navigator.clipboard?.writeText(state.token).then(
+                () => setCopied(true),
+                () => setCopied(false),
+              );
             }}
           >
             {copied ? 'Copied' : 'Copy'}

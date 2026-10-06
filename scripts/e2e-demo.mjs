@@ -127,6 +127,11 @@ const cfg = await (await fetch(`${B}/api/v1/config`)).json();
 ok(cfg.features?.demo === true, 'config: features.demo is true');
 ok(cfg.features?.signup === false, 'config: sign-up is off in demo mode');
 ok(cfg.demo?.password === PASSWORD && cfg.demo?.accounts?.map((a) => a.email).join() === DEMO.join(), 'config: demo accounts and password are published', json(cfg.demo?.accounts));
+// An address a real (writable) account owns is never published.
+await q(`update users set read_only = false where email = 'demo-editor@example.com'`);
+const narrowed = await (await fetch(`${B}/api/v1/config`)).json();
+ok(narrowed.demo?.accounts?.map((a) => a.email).join() === 'demo-admin@example.com,demo-viewer@example.com', 'config: a demo address owned by a writable account is not published', json(narrowed.demo?.accounts));
+await q(`update users set read_only = true where email = 'demo-editor@example.com'`);
 const otherCfg = await (await fetch(`${OTHER}/api/v1/config`)).json();
 ok(otherCfg.features?.demo === false && otherCfg.demo === null, 'config: a normal instance publishes no demo data');
 const off = await fetch(`${OTHER}/api/v1/demo/session`, { method: 'POST' });
@@ -159,15 +164,22 @@ const seeded = (await gql(viewer.token, PROJECT_QUERY, { p: PROJECT_ID })).data?
 ok(seeded?.files?.length === 10, 'demo Project has 10 files', String(seeded?.files?.length));
 ok(seeded?.folders?.length === 3 && seeded?.chats?.length === 3, 'demo Project has 3 sections and a discussion');
 const media = seeded?.files ?? [];
+if (!media.length) {
+  ok(false, 'the seed lists media');
+  await closeDb();
+  console.log(`\n${fails} FAILED`);
+  process.exit(1);
+}
 ok(media.filter((f) => f.mimeType === 'video/mp4').length === 3 && media.some((f) => f.mimeType === 'application/pdf'), 'clips and a document are there');
-ok(media.filter((f) => f.thumbnailUrl).length === 9, 'every still and clip has a thumbnail', String(media.filter((f) => f.thumbnailUrl).length));
+const noThumb = media.filter((f) => f.mimeType !== 'application/pdf' && !f.thumbnailUrl);
+ok(media.filter((f) => f.thumbnailUrl).length === 9 && noThumb.length === 0, 'every still and clip has a thumbnail', noThumb.map((f) => f.originalName).join(' '));
 for (const f of media) {
   const got = await md5Of(f.downloadUrl, viewer.cookie);
   if (got.status !== 200 || got.md5 !== f.md5Checksum) ok(false, `bytes of ${f.originalName}`, `${got.status} ${got.md5}`);
 }
 ok(true, 'every original downloads with its MD5');
 const thumb = media.find((f) => f.thumbnailUrl);
-ok((await md5Of(thumb.thumbnailUrl, viewer.cookie)).status === 200, 'a thumbnail loads');
+ok(thumb && (await md5Of(thumb.thumbnailUrl, viewer.cookie)).status === 200, 'a thumbnail loads');
 const clip = media.find((f) => f.originalName.includes('harbor-wide'));
 const versions = (await gql(viewer.token, 'query($f: ID!){ processedVersions(fileId:$f){ kind mimeType downloadUrl } }', { f: clip?.id })).data?.processedVersions ?? [];
 ok(versions.length === 1 && versions[0].kind === 'shotstash/proxy-720p', 'the wide clip has one 720p proxy', json(versions));
@@ -176,6 +188,7 @@ const [share] = await q(`select s.slug from share_links s join folders f on f.id
 const sharePage = share ? await fetch(`${B}/s/${share.slug}/items?offset=0&limit=12`) : null;
 const shareBody = sharePage?.ok ? await sharePage.json() : null;
 ok(shareBody?.files?.length === 6, 'the public share link shows the six stills', String(sharePage?.status));
+ok(share?.slug === 'demo-coastline-stills', 'the seeded share link has its fixed slug', share?.slug);
 
 /* ---------------- every write class is refused for demo accounts ---------------- */
 
@@ -194,15 +207,53 @@ const writes = [
   ['enqueueJob', `mutation { enqueueJob(fileId:"${clip?.id}", kind:"shotstash/proxy-720p") { id } }`],
   ['initiateUpload', `mutation { initiateUpload(input:{ filename:"x.jpg", totalSize:10, projectId:"${PROJECT_ID}", folderId:"${folderId}" }) { id } }`],
   ['updateProfile', 'mutation { updateProfile(name:"x") { id } }'],
+  ['updateProfile (avatar)', 'mutation { updateProfile(avatarUrl:"/media/c/user/x.jpg") { id } }'],
+  ['updateProfile (locale)', 'mutation { updateProfile(locale:"en") { id } }'],
   ['markNotificationsRead', 'mutation { markNotificationsRead }'],
+  ['completeOnboarding', 'mutation { completeOnboarding(requestedRole:EDITOR) { id } }'],
+  ['deleteProject', `mutation { deleteProject(id:"${PROJECT_ID}") }`],
+  ['moveFile', `mutation { moveFile(fileId:"${fileId}", targetFolderId:"${folderId}") { id } }`],
+  ['copyFile', `mutation { copyFile(fileId:"${fileId}", targetFolderId:"${folderId}") { id } }`],
+  ['moveFolder', `mutation { moveFolder(folderId:"${folderId}", targetProjectId:"${PROJECT_ID}") { id } }`],
+  ['moveFolderToTrash', `mutation { moveFolderToTrash(folderId:"${folderId}") }`],
+  ['restoreFile', `mutation { restoreFile(fileId:"${fileId}") { id } }`],
+  ['restoreFolder', `mutation { restoreFolder(folderId:"${folderId}") { id } }`],
+  ['permanentDeleteFolder', `mutation { permanentDeleteFolder(folderId:"${folderId}") }`],
+  ['revokeShareLink', 'mutation { revokeShareLink(id:"00000000-0000-4000-8000-000000000000") }'],
+  ['cancelJob', 'mutation { cancelJob(id:"00000000-0000-4000-8000-000000000000") { id } }'],
+  ['revokeWorker', 'mutation { revokeWorker(id:"00000000-0000-4000-8000-000000000000") { id } }'],
 ];
-for (const who of [admin, editor]) {
+// Account and credential writes, on the account itself and on another demo account.
+for (const target of ['demo-admin@example.com', 'demo-viewer@example.com']) {
+  const [{ id }] = await q('select id from users where email = $1', [target]);
+  writes.push(
+    [`adminSetPassword ${target}`, `mutation { adminSetPassword(userId:"${id}", newPassword:"another-password-1") { success } }`],
+    [`updateUserRole ${target}`, `mutation { updateUserRole(userId:"${id}", role:VIEWER) { id } }`],
+    [`approveUser ${target}`, `mutation { approveUser(userId:"${id}", role:VIEWER) { id } }`],
+    [`rejectUser ${target}`, `mutation { rejectUser(userId:"${id}") { id } }`],
+    [`deactivateUser ${target}`, `mutation { deactivateUser(id:"${id}") { id } }`],
+    [`reactivateUser ${target}`, `mutation { reactivateUser(id:"${id}") { id } }`],
+    [`deleteUser ${target}`, `mutation { deleteUser(id:"${id}") { success } }`],
+  );
+}
+const credsBefore = await q(`select email, "passwordHash", role, active, "accountStatus", name, "avatarUrl", locale from users where email = any($1::text[]) order by email`, [DEMO]);
+let refused = 0;
+for (const who of [admin, editor, viewer]) {
   for (const [name, mutation] of writes) {
     const r = await gql(who.token, mutation);
-    if (code(r) !== 'FORBIDDEN') ok(false, `${name} is refused`, json(r));
+    if (code(r) === 'FORBIDDEN') refused++;
+    else ok(false, `${name} is refused`, json(r));
   }
 }
-ok(true, 'every GraphQL write is refused with FORBIDDEN (demo admin and editor)');
+ok(refused === writes.length * 3, `every GraphQL write is refused with FORBIDDEN (${refused} tries, demo admin, editor and viewer)`);
+const credsAfter = await q(`select email, "passwordHash", role, active, "accountStatus", name, "avatarUrl", locale from users where email = any($1::text[]) order by email`, [DEMO]);
+ok(JSON.stringify(credsAfter) === JSON.stringify(credsBefore), 'no demo account changed (password, role, status, profile)');
+const sessionsLeft = await q('select count(*)::int as n from sessions where token = any($1::text[])', [[admin.token, editor.token, viewer.token]]);
+ok(sessionsLeft[0].n === 3, 'every demo session survived the refused writes');
+// Password reset is never offered for a read-only account: no reset row, same public answer.
+const resetAsk = await gql(null, 'mutation { requestPasswordReset(email:"demo-admin@example.com") { success } }');
+const resetRows = await q(`select count(*)::int as n from password_reset_requests r join users u on u.id = r."userId" where u.email = any($1::text[])`, [DEMO]);
+ok(!resetAsk.errors && resetRows[0].n === 0, 'password reset for a demo account starts nothing', json(resetAsk.errors));
 
 const form = new FormData();
 form.append('kind', 'user');
@@ -225,6 +276,42 @@ const put = await fetch(`${B}/api/v1/uploads/${ownerSession}/parts/1`, {
 ok(ownerSession && put.status === 403, 'upload parts are refused for a demo account', `${put.status}`);
 await gql(owner.token, 'mutation($s: ID!){ cancelUpload(sessionId:$s) }', { s: ownerSession });
 ok(JSON.stringify(await projectRows()) === JSON.stringify(rowsBefore), 'nothing was written', json(await projectRows()));
+
+/* ---------------- privacy: the owner is invisible to demo accounts ---------------- */
+
+const [ownerRow] = await q(`select id, email, name from users where role = 'SUPER_ADMIN' order by "createdAt" limit 1`);
+// The owner leaves traces a demo account can reach: a message and a share link in the demo Project.
+const ownerMsg = await gql(owner.token, `mutation { sendMessage(projectId:"${PROJECT_ID}", message:"Owner note for the demo") { id } }`);
+ok(ownerMsg.data?.sendMessage?.id, 'the owner writes in the demo discussion', json(ownerMsg.errors));
+const ownerShare = await gql(owner.token, `mutation { createShareLink(input:{ fileId:"${fileId}", mode:PUBLIC }) { id slug } }`);
+ok(ownerShare.data?.createShareLink?.id, 'the owner shares a demo file', json(ownerShare.errors));
+const PRIVACY_QUERIES = [
+  '{ me { id name email } }',
+  '{ users { id name email role } }',
+  '{ pendingUsers { id name email } }',
+  '{ pipelineWorkers { id name } }',
+  '{ storageStats { backend totalFiles } }',
+  '{ notifications { id title body } }',
+  '{ shareLinks { id createdBy { id name email } } }',
+  `{ project(id:"${PROJECT_ID}") { chats { message sender { id name email avatarUrl } } files { uploadedBy { id name email } } } }`,
+  `{ mentionPeople(projectId:"${PROJECT_ID}", query:"") { id name handle } }`,
+];
+const leaks = [];
+for (const [email, who] of Object.entries(sessions)) {
+  for (const query of PRIVACY_QUERIES) {
+    const text = JSON.stringify(await gql(who.token, query));
+    if (text.includes(ownerRow.email) || text.includes(ownerRow.name)) leaks.push(`${email}: ${query.slice(0, 40)} ${text.slice(0, 200)}`);
+  }
+  // Instance status is hidden (404). Health details depend on the TCP peer, not the session, so they are not checked here.
+  const status = await fetch(`${B}/api/v1/status`, { headers: { authorization: `Bearer ${who.token}` } });
+  if (status.status !== 404) leaks.push(`${email}: /api/v1/status ${status.status}`);
+}
+ok(leaks.length === 0, "no demo account sees the owner's account, email or instance details", leaks.join('; '));
+const chats = (await gql(viewer.token, `{ project(id:"${PROJECT_ID}") { chats { message sender { name email } } } }`)).data?.project?.chats ?? [];
+const ownerChat = chats.find((c) => c.message === 'Owner note for the demo');
+ok(ownerChat?.sender?.email === 'hidden@demo.invalid', 'the owner shows as a hidden account', json(ownerChat?.sender));
+await gql(owner.token, `mutation { revokeShareLink(id:"${ownerShare.data?.createShareLink?.id}") }`);
+await q('delete from project_chats where id = $1', [ownerMsg.data?.sendMessage?.id]);
 
 const reg = await gql(null, 'mutation { register(input:{ name:"New", email:"new-demo-user@example.com", password:"long-enough-pw" }) { success errorCode } }');
 ok(reg.data?.register?.errorCode === 'FEATURE_DISABLED', 'sign-up answers FEATURE_DISABLED', json(reg));
@@ -265,6 +352,20 @@ ok(tryMe.data?.me?.email === 'demo-viewer@example.com' && tryMe.data.me.readOnly
 ok(code(await gql(tryBody.token, `mutation { createFolder(projectId:"${PROJECT_ID}", name:"x") { id } }`)) === 'FORBIDDEN', 'the try-it token cannot write');
 const [row] = await q('select "expiresAt" from sessions where token = $1', [tryBody.token]);
 ok(row && new Date(row.expiresAt).getTime() === new Date(tryBody.expiresAt).getTime(), 'the try-it session does not slide');
+// Even close to its end: a fixed expiry is never extended.
+const soon = new Date(Math.floor(Date.now() / 1000) * 1000 + 10 * 60_000);
+const utc = (d) => d.toISOString().replace('T', ' ').replace('Z', '');
+await q('update sessions set "expiresAt" = $2 where token = $1', [tryBody.token, utc(soon)]);
+await gql(tryBody.token, '{ me { id } }');
+const [rowSoon] = await q('select "expiresAt", fixed_expiry from sessions where token = $1', [tryBody.token]);
+ok(rowSoon?.fixed_expiry === true && new Date(rowSoon.expiresAt).getTime() === soon.getTime(), 'a fixed-expiry session is never extended', json(rowSoon));
+// A normal session with less than half of its lifetime left is extended to 7 days.
+const normal = await login('superadmin@example.com', DEV_PASSWORD, OTHER);
+await q('update sessions set "expiresAt" = $2 where token = $1', [normal.token, utc(new Date(Date.now() + 24 * 3600_000))]);
+await gql(normal.token, '{ me { id } }', undefined, OTHER);
+const [rowNormal] = await q('select "expiresAt", fixed_expiry from sessions where token = $1', [normal.token]);
+const days = (new Date(rowNormal?.expiresAt).getTime() - Date.now()) / 86400_000;
+ok(rowNormal?.fixed_expiry === false && days > 6.9, 'a normal session past half its lifetime is extended', days.toFixed(2));
 
 /* ---------------- reset restores what was changed or deleted ---------------- */
 
@@ -293,6 +394,8 @@ for (const f of restored?.files ?? []) {
 }
 ok(bytesOk, 'restored files download with their MD5');
 ok(!restored?.files.some((f) => media.some((m) => m.id === f.id)), 'old rows were replaced, not kept');
+const [shareAfter] = await q(`select s.slug from share_links s join folders f on f.id = s."folderId" where f."projectId" = $1 and s.revoked_at is null`, [PROJECT_ID]);
+ok(shareAfter?.slug === 'demo-coastline-stills', 'the share link keeps its slug across the reset', shareAfter?.slug);
 if ((process.env.STORAGE_BACKEND ?? 'local') === 'local') {
   const root = process.env.STORAGE_LOCAL_ROOT || './data/media';
   const left = media.filter((f) => existsSync(path.join(root, 'files', f.id)));

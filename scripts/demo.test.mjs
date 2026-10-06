@@ -30,6 +30,9 @@ test('CORS origins: exact origins only, normalised, never a wildcard', () => {
     assert.equal(r.problems.length, 1, bad);
   }
   assert.deepEqual(cors.parseCorsOrigins(' , '), { origins: [], problems: [] });
+  // An explicit default port is the same origin.
+  assert.deepEqual(cors.parseCorsOrigins('https://docs.example.com:443, http://localhost:80/').origins, ['https://docs.example.com', 'http://localhost']);
+  assert.equal(cors.originAllowed('https://docs.example.com:443', ['https://docs.example.com']), true);
 });
 
 test('CORS decisions: echo an allowed origin, nothing for others, nothing without a list', () => {
@@ -70,15 +73,151 @@ test('SHOTSTASH_CORS_ORIGINS is parsed by the config and a wildcard stops the bo
 
 /* ---------------- schedule ---------------- */
 
-test('nightly reset: once per local date, in the 03:00 hour of the instance time zone', () => {
+const { withLockOn } = await import('../src/lib/lock.ts');
+
+/** In-memory stand-in for Dragonfly: SET NX PX/EX, GET, compare-and-delete. */
+function fakeStore({ status = 'ready' } = {}) {
+  const data = new Map();
+  return {
+    data,
+    status,
+    async get(key) {
+      return data.has(key) ? data.get(key) : null;
+    },
+    async set(key, value, _mode, _ttl, nx) {
+      if (nx === 'NX' && data.has(key)) return null;
+      data.set(key, value);
+      return 'OK';
+    },
+    async eval(_script, _n, key, token) {
+      if (data.get(key) === token) {
+        data.delete(key);
+        return 1;
+      }
+      return 0;
+    },
+  };
+}
+
+function tick(store, reset, now = new Date('2026-10-07T03:05:00Z')) {
+  return schedule.nightlyDemoTick({
+    now,
+    timeZone: 'UTC',
+    store,
+    runLocked: (fn) => withLockOn(store, schedule.DEMO_LOCK, schedule.DEMO_LOCK_TTL_MS, fn),
+    reset,
+  });
+}
+
+test('nightly reset: due in the 03:00 hour of the instance time zone only', () => {
   // 20:15 UTC is 03:15 in Asia/Jakarta (UTC+7).
-  const at = new Date('2026-10-07T20:15:00Z');
-  assert.equal(schedule.demoResetDue(at, 'Asia/Jakarta', null), '2026-10-08');
-  assert.equal(schedule.demoResetDue(at, 'Asia/Jakarta', '2026-10-08'), null, 'already done for that date');
-  assert.equal(schedule.demoResetDue(at, 'UTC', null), null, '20:15 in UTC is not due');
-  assert.equal(schedule.demoResetDue(new Date('2026-10-07T03:59:00Z'), 'UTC', '2026-10-06'), '2026-10-07');
-  assert.equal(schedule.demoResetDue(new Date('2026-10-07T04:00:00Z'), 'UTC', '2026-10-06'), null, 'a missed hour is skipped');
+  assert.equal(schedule.demoResetDate(new Date('2026-10-07T20:15:00Z'), 'Asia/Jakarta'), '2026-10-08');
+  assert.equal(schedule.demoResetDate(new Date('2026-10-07T20:15:00Z'), 'UTC'), null);
+  assert.equal(schedule.demoResetDate(new Date('2026-10-07T03:59:00Z'), 'UTC'), '2026-10-07');
+  assert.equal(schedule.demoResetDate(new Date('2026-10-07T04:00:00Z'), 'UTC'), null, 'a missed hour is skipped');
   assert.deepEqual(schedule.localClock(new Date('2026-10-07T00:30:00Z'), 'UTC'), { date: '2026-10-07', hour: 0 });
+});
+
+test('nightly reset: runs under the lock and records the date marker', async () => {
+  const store = fakeStore();
+  let resets = 0;
+  const r = await tick(store, async () => resets++);
+  assert.equal(r.outcome, 'ran');
+  assert.equal(resets, 1);
+  assert.equal(store.data.get(schedule.demoMarkerKey('2026-10-07')), '1');
+  assert.equal(store.data.has(schedule.DEMO_LOCK), false, 'lock released');
+  assert.equal((await tick(store, async () => resets++, new Date('2026-10-07T10:00:00Z'))).outcome, 'not-due');
+});
+
+test('nightly reset: a second tick on the same date does nothing', async () => {
+  const store = fakeStore();
+  let resets = 0;
+  await tick(store, async () => resets++);
+  const again = await tick(store, async () => resets++, new Date('2026-10-07T03:06:00Z'));
+  assert.equal(again.outcome, 'done');
+  assert.equal(resets, 1);
+});
+
+test('nightly reset: skipped while another holder has the lock', async () => {
+  const store = fakeStore();
+  store.data.set(schedule.DEMO_LOCK, 'someone-else');
+  let resets = 0;
+  const r = await tick(store, async () => resets++);
+  assert.equal(r.outcome, 'held');
+  assert.equal(resets, 0);
+  assert.equal(store.data.has(schedule.demoMarkerKey('2026-10-07')), false);
+});
+
+test('nightly reset: skipped with no ready lock store (never everywhere at once)', async () => {
+  let resets = 0;
+  assert.equal((await tick(fakeStore({ status: 'reconnecting' }), async () => resets++)).outcome, 'unavailable');
+  assert.equal((await tick(null, async () => resets++)).outcome, 'unavailable');
+  assert.equal(resets, 0);
+});
+
+test('nightly reset: a failed run writes no marker and retries on the next tick', async () => {
+  const store = fakeStore();
+  let calls = 0;
+  const reset = async () => {
+    calls++;
+    if (calls === 1) throw new Error('disk full');
+  };
+  const first = await tick(store, reset);
+  assert.equal(first.outcome, 'failed');
+  assert.match(String(first.error), /disk full/);
+  assert.equal(store.data.has(schedule.demoMarkerKey('2026-10-07')), false);
+  assert.equal(store.data.has(schedule.DEMO_LOCK), false, 'lock released after a failure');
+  const second = await tick(store, reset, new Date('2026-10-07T03:06:00Z'));
+  assert.equal(second.outcome, 'ran');
+  assert.equal(calls, 2);
+});
+
+/* ---------------- login limit ---------------- */
+
+test('published demo accounts have no per-account login budget; the per-IP limit stays', async () => {
+  const rl = await import('../src/lib/rateLimit.ts');
+  const saved = { ...process.env };
+  try {
+    Object.assign(process.env, GOOD, { SHOTSTASH_DEMO_MODE: 'true', DEMO_ADMIN_PASSWORD: 'demo-password-1' });
+    cfg.resetConfig();
+    rl.setRateLimitStore(null);
+    rl.resetMemoryLimits();
+    // Many addresses hammering one demo account never lock it.
+    for (let i = 0; i < 30; i++) assert.equal(await rl.loginLimit(`10.0.0.${i}`, 'Demo-Viewer@example.com'), null, `attempt ${i}`);
+    // A real account still gets its per-account limit.
+    let limited = null;
+    for (let i = 0; i < 12 && limited === null; i++) limited = await rl.loginLimit(`10.1.0.${i}`, 'owner@example.com');
+    assert.ok(limited > 0);
+    // One address is still limited, demo account or not.
+    let byIp = null;
+    for (let i = 0; i < 12 && byIp === null; i++) byIp = await rl.loginLimit('10.2.0.1', 'demo-admin@example.com');
+    assert.ok(byIp > 0);
+    // Outside demo mode the demo addresses are ordinary addresses.
+    process.env.SHOTSTASH_DEMO_MODE = 'false';
+    cfg.resetConfig();
+    assert.equal(rl.isPublishedDemoAccount('demo-admin@example.com'), false);
+  } finally {
+    process.env = saved;
+    cfg.resetConfig();
+    rl.resetMemoryLimits();
+  }
+});
+
+/* ---------------- demo privacy ---------------- */
+
+test('a read-only demo viewer never sees a real account', () => {
+  const viewer = { id: 'v', readOnly: true };
+  const owner = { id: 'o', email: 'owner@example.com' };
+  const demo = { id: 'd', email: 'demo-editor@example.com' };
+  assert.equal(accounts.hiddenFromDemoViewer(true, viewer, owner), true);
+  assert.equal(accounts.hiddenFromDemoViewer(true, viewer, demo), false);
+  assert.equal(accounts.hiddenFromDemoViewer(true, viewer, { id: 'v', email: 'x@example.com' }), false, 'itself');
+  assert.equal(accounts.hiddenFromDemoViewer(true, { id: 'a', readOnly: false }, owner), false, 'the owner sees everyone');
+  assert.equal(accounts.hiddenFromDemoViewer(false, viewer, owner), false, 'only in demo mode');
+  const resolvers = read('src/graphql/resolvers.ts');
+  for (const field of ['name', 'email', 'avatarUrl', 'signupAnswers']) {
+    assert.match(resolvers, new RegExp(`\\n    ${field}: \\(parent: UserParent, _: unknown, context: GraphQLContext\\) =>\\n      hiddenFromDemoViewer\\(`), field);
+  }
 });
 
 /* ---------------- config ---------------- */
@@ -140,12 +279,16 @@ test('the try-it route exists only in demo mode, is rate limited, origin-checked
   assert.match(route, /@openapi/);
   const server = read('server.ts');
   assert.match(server, /applyCors\(req, res/);
-  assert.match(server, /nightlyDemoReset/);
+  assert.match(server, /nightlyDemoTick\(/);
+  // The viewer is looked up before a rate-limit slot is spent.
+  assert.ok(route.indexOf('findDemoViewer()') < route.indexOf("limitBy('demoSession'"));
 });
 
-test('short sessions never slide (the try-it token stays 60 minutes)', () => {
+test('only sessions with a fixed expiry skip sliding (the try-it token stays 60 minutes)', () => {
   const store = read('src/lib/sessionStore.ts');
-  assert.match(store, /const slides = expiresAt\.getTime\(\) - session\.createdAt\.getTime\(\) >= SESSION_TTL_MS \/ 2;/);
+  assert.match(store, /if \(!session\.fixedExpiry && expiresAt\.getTime\(\) - now < SESSION_TTL_MS \/ 2\)/);
+  assert.match(read('prisma/schema.prisma'), /fixedExpiry Boolean @default\(false\) @map\("fixed_expiry"\)/);
+  assert.match(read('src/modules/demo/service.ts'), /createSessionRow\(viewerId, meta, \{ ttlMs: DEMO_SESSION_MINUTES \* 60_000 \}\)/);
 });
 
 test('the synthetic document is a valid one-page PDF', async () => {

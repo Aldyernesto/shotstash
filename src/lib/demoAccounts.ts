@@ -21,3 +21,21 @@ export const DEMO_PROJECT_ID = 'd0000000-0000-4000-8000-000000000001';
 
 /** Lifetime of a try-it session (minutes); it never slides. */
 export const DEMO_SESSION_MINUTES = 60;
+
+/** What a read-only demo visitor sees instead of an account that is not a demo account. */
+export const HIDDEN_ACCOUNT = { name: 'Instance owner', email: 'hidden@demo.invalid' } as const;
+
+/**
+ * True when `user` must be hidden from `viewer`: in demo mode, a read-only
+ * viewer sees itself and the demo accounts only (never the owner's name or
+ * email, or any other real account).
+ */
+export function hiddenFromDemoViewer(
+  demoOn: boolean,
+  viewer: { id: string; readOnly?: boolean | null } | null | undefined,
+  user: { id?: string | null; email?: string | null },
+): boolean {
+  if (!demoOn || !viewer?.readOnly) return false;
+  if (user.id && user.id === viewer.id) return false;
+  return !(user.email && DEMO_EMAILS.includes(user.email));
+}

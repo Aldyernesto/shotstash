@@ -190,16 +190,13 @@ export async function sampleFiles(): Promise<SampleFile[]> {
     still('studio-coral-06.jpg', 1350, 1080, 'coral', 6),
   ]);
 
-  const [wide, vertical, pattern] = await Promise.all([
-    // 1080p wide shot: slow colour drift (the proxy is made from it).
-    clip('gradients=s=1920x1080:r=30:speed=0.01:n=4:c0=0x1b2a5c:c1=0x3563f2:c2=0xf08a5d:c3=0x8aa5ff:seed=7', 6, 220),
-    // Portrait clip for the portrait-aware viewer.
-    clip('mandelbrot=s=720x1280:r=30:end_scale=0.05:maxiter=1500', 5, 330),
-    // Short motion test.
-    clip('life=s=640x360:r=25:mold=10:ratio=0.2:life_color=#8aa5ff:death_color=#0f0f0d:mold_color=#3563f2', 4, 440, [
-      '-vf', 'scale=1280:720:flags=neighbor',
-    ]),
-  ]);
+  // One ffmpeg at a time and small sources: a 2 GB host makes all three in seconds.
+  // 1080p wide shot: slow colour drift (the proxy is made from it).
+  const wide = await clip('gradients=s=1920x1080:r=24:speed=0.01:n=4:c0=0x1b2a5c:c1=0x3563f2:c2=0xf08a5d:c3=0x8aa5ff:seed=7', 6, 220);
+  // Portrait clip for the portrait-aware viewer (a light fractal zoom).
+  const vertical = await clip('mandelbrot=s=540x960:r=24:end_scale=0.1:maxiter=250', 4, 330);
+  // Short motion test.
+  const pattern = await clip('life=s=640x360:r=24:mold=10:ratio=0.2:life_color=#8aa5ff:death_color=#0f0f0d:mold_color=#3563f2', 4, 440);
   const clips: SampleFile[] = [
     { name: 'A001_C003_harbor-wide.mp4', mimeType: 'video/mp4', ext: 'mp4', bytes: wide, section: 'footage', proxy: true },
     { name: 'A001_C007_vertical-detail.mp4', mimeType: 'video/mp4', ext: 'mp4', bytes: vertical, section: 'footage' },

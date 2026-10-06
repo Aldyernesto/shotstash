@@ -20,7 +20,7 @@ Work top to bottom; do not post anything until every box above "Posts" is ticked
 7. [ ] **Demo live** (owner), following the docs guide "Run a public demo" (https://aldyernesto.github.io/shotstash/docs/demo/):
    - [ ] server up with TLS on the demo domain, behind the reverse proxy from the networking guide, `TRUST_PROXY=true`;
    - [ ] `SHOTSTASH_DEMO_MODE=true`, a `DEMO_ADMIN_PASSWORD`, and `SETUP_TOKEN` set; first-run setup done by the owner;
-   - [ ] demo data seeded inside the container (`node dist/demo.js seed`), the sign-in page shows the demo accounts;
+   - [ ] demo data seeded inside the container (`docker compose exec -u node app node dist/demo.js seed`), the sign-in page shows the demo accounts;
    - [ ] the nightly reset is scheduled (check the next morning that it ran);
    - [ ] `SHOTSTASH_CORS_ORIGINS` set to the docs origin only (`https://aldyernesto.github.io`, or the docs domain);
    - [ ] repository variable `DEMO_ORIGIN` set to the demo origin, `docs.yml` rerun, and the REST reference try-it console answers from the demo;

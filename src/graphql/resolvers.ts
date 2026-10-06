@@ -14,6 +14,7 @@ import * as PasswordReset from '../services/password-reset.service';
 import prisma from '../lib/prisma';
 import { config } from '../lib/config';
 import { publicSignupRefusal } from '../lib/signupGuard';
+import { DEMO_EMAILS, HIDDEN_ACCOUNT, hiddenFromDemoViewer } from '../lib/demoAccounts';
 import { validateSessionToken } from '../lib/sessionStore';
 import { assignMentionHandles } from '../lib/mentions';
 import { isRenderableImageUrl, mediaUrl } from '../lib/mediaUrls';
@@ -639,12 +640,25 @@ function decorateShareLink<
   };
 }
 
+/** The fields of a user row the User field resolvers read. */
+type UserParent = { id?: string; email?: string; name?: string; avatarUrl?: string | null; signupAnswers?: unknown };
+
+/** Story 8.2: a read-only account on a public demo instance. */
+function isDemoReader(context: GraphQLContext): boolean {
+  return config().features.demo && Boolean(context.actor?.readOnly);
+}
+
+/** Prisma filter scoping user lists to the demo accounts for a demo reader. */
+function demoScope(context: GraphQLContext) {
+  return isDemoReader(context) ? { email: { in: [...DEMO_EMAILS] } } : {};
+}
+
 const rawResolvers = {
   Query: {
     pendingUsers: async (_: any, __: any, context: GraphQLContext) => {
       assertCan(context.actor, 'users.manage');
       return prisma.user.findMany({
-        where: { accountStatus: 'PENDING' },
+        where: { accountStatus: 'PENDING', ...demoScope(context) },
         orderBy: { createdAt: 'desc' },
       });
     },
@@ -659,7 +673,9 @@ const rawResolvers = {
 
     users: async (_: any, __: any, context: GraphQLContext) => {
       assertCan(context.actor, 'users.manage');
-      return AuthService.getUsers();
+      const all = await AuthService.getUsers();
+      // Story 8.2: a read-only demo visitor sees the demo accounts only (unreachable today: users.manage is a write).
+      return isDemoReader(context) ? all.filter((u: { email: string }) => DEMO_EMAILS.includes(u.email)) : all;
     },
 
     projects: async (_: any, __: any, context: GraphQLContext) => {
@@ -723,6 +739,8 @@ const rawResolvers = {
 
     pipelineWorkers: async (_: unknown, __: unknown, context: GraphQLContext) => {
       assertCan(context.actor, 'instance.configure');
+      // Story 8.2: no worker names, hosts or token hints for a read-only demo visitor.
+      if (isDemoReader(context)) return [];
       return Pipeline.listWorkers();
     },
 
@@ -1549,6 +1567,15 @@ const rawResolvers = {
   },
 
   User: {
+    // Story 8.2: a read-only demo visitor never sees a real account (the owner's name, email or avatar).
+    name: (parent: UserParent, _: unknown, context: GraphQLContext) =>
+      hiddenFromDemoViewer(config().features.demo, context?.actor, parent) ? HIDDEN_ACCOUNT.name : parent.name,
+    email: (parent: UserParent, _: unknown, context: GraphQLContext) =>
+      hiddenFromDemoViewer(config().features.demo, context?.actor, parent) ? HIDDEN_ACCOUNT.email : parent.email,
+    avatarUrl: (parent: UserParent, _: unknown, context: GraphQLContext) =>
+      hiddenFromDemoViewer(config().features.demo, context?.actor, parent) ? null : (parent.avatarUrl ?? null),
+    signupAnswers: (parent: UserParent, _: unknown, context: GraphQLContext) =>
+      hiddenFromDemoViewer(config().features.demo, context?.actor, parent) || !parent.signupAnswers ? null : JSON.stringify(parent.signupAnswers),
     accountStatus: (parent: any) => parent.accountStatus || 'ACTIVE',
     // Story 2.4: the UI reads this list and never re-implements role rules.
     permissions: (parent: any) =>
@@ -1559,7 +1586,6 @@ const rawResolvers = {
         accountStatus: parent.accountStatus,
         readOnly: parent.readOnly,
       }),
-    signupAnswers: (parent: any) => parent.signupAnswers ? JSON.stringify(parent.signupAnswers) : null,
     hasPassword: (parent: { passwordHash?: string | null }) => !!parent.passwordHash,
     readOnly: (parent: { readOnly?: boolean | null }) => !!parent.readOnly,
     // Story 6.3: instance feature toggles; the schema is the same whatever they are.

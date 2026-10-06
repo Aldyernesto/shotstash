@@ -65,7 +65,8 @@ export function renderEnvExample() {
       for (const l of wrap(v.description)) out.push(`# ${l}`);
       const notes = [];
       if (v.required) notes.push('Required.');
-      if (v.secret) notes.push(v.generate === false ? 'Secret.' : `Secret: generate with \`${SECRET_HINT}\`.`);
+      if (v.publicInDemo) notes.push('Public in demo mode: shown on the sign-in page, never in logs.');
+      else if (v.secret) notes.push(v.generate === false ? 'Secret.' : `Secret: generate with \`${SECRET_HINT}\`.`);
       if (v.default !== undefined) notes.push(`Default: ${defaultText(v)}.`);
       if (notes.length) out.push(`# ${notes.join(' ')}`);
       const line = `${v.name}=${v.secret ? '' : (v.example ?? '')}`;
@@ -110,7 +111,7 @@ export function renderConfigDoc() {
     for (const v of vars) {
       const def = v.default !== undefined ? `\`${defaultText(v)}\`` : '';
       const required = v.required ? 'yes' : '';
-      const secret = v.secret ? ' Secret.' : '';
+      const secret = v.publicInDemo ? ' Public in demo mode (shown on the sign-in page).' : v.secret ? ' Secret.' : '';
       out.push(`| \`${v.name}\` | ${cell(def)} | ${required} | ${cell(v.description)}${secret} |`);
     }
   }

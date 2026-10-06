@@ -217,7 +217,8 @@ async function processResetRequest(email: string, ip?: string) {
   await prisma.passwordResetRequest.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - DAY_WINDOW_MS) } } });
 
   const user = await findUserByEmail(email);
-  if (!user || !user.active || user.accountStatus === 'REJECTED') return;
+  // Read-only accounts (a public demo's) never change their password: answer as for an unknown address.
+  if (!user || !user.active || user.accountStatus === 'REJECTED' || user.readOnly) return;
 
   const recentDay = await prisma.passwordResetRequest.findMany({
     where: { userId: user.id, createdAt: { gt: new Date(now.getTime() - DAY_WINDOW_MS) } },
@@ -296,7 +297,7 @@ export async function verifyCode(email: string, codeInput: string): Promise<{ re
   const invalid = () => new PasswordResetError('INVALID_CODE', `${PASSWORD_RESET_MESSAGES.invalidCode}.`);
 
   const user = await findUserByEmail(normalizedEmail);
-  if (!user || !user.active || user.accountStatus === 'REJECTED') throw invalid();
+  if (!user || !user.active || user.accountStatus === 'REJECTED' || user.readOnly) throw invalid();
 
   const now = new Date();
   const active = await prisma.passwordResetRequest.findFirst({
@@ -380,7 +381,7 @@ export async function completeReset(resetToken: string, newPassword: string, con
   const now = new Date();
   const request = await prisma.passwordResetRequest.findUnique({
     where: { resetTokenHash: tokenHash },
-    include: { user: { select: { id: true, email: true, active: true, accountStatus: true } } },
+    include: { user: { select: { id: true, email: true, active: true, accountStatus: true, readOnly: true } } },
   });
   if (
     !request?.resetTokenHash ||
@@ -388,6 +389,7 @@ export async function completeReset(resetToken: string, newPassword: string, con
     !request.resetTokenExpiresAt ||
     request.resetTokenExpiresAt <= now ||
     !request.user.active ||
+    request.user.readOnly ||
     request.user.accountStatus === 'REJECTED'
   ) {
     throw tokenInvalid();

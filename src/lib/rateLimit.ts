@@ -17,6 +17,8 @@
  */
 
 import { randomBytes } from 'crypto';
+import { config } from './config.ts';
+import { DEMO_EMAILS } from './demoAccounts.ts';
 
 export type RateLimitResult = { ok: boolean; remaining: number; retryAfter: number };
 
@@ -189,6 +191,11 @@ export function limitBy(name: keyof typeof LIMITS, subject: string, now?: number
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
+/** True for a demo account address while demo mode is on. */
+export function isPublishedDemoAccount(email: string): boolean {
+  return config().features.demo && DEMO_EMAILS.includes(normalizeEmail(email));
+}
+
 /**
  * Login throttle shared by REST and GraphQL login, Google sign-in and public
  * registration: 10 per 15 min per IP, plus per normalized email for password
@@ -197,7 +204,9 @@ const normalizeEmail = (email: string) => email.trim().toLowerCase();
 export async function loginLimit(ip: string | undefined, email?: string | null): Promise<number | null> {
   const byIp = await limitBy('login', `ip:${ip ?? 'unknown'}`);
   if (!byIp.ok) return byIp.retryAfter;
-  if (email) {
+  // Story 8.2: the published demo accounts have no per-account budget, so
+  // nobody can lock them for everyone; the per-IP limit above still applies.
+  if (email && !isPublishedDemoAccount(email)) {
     const byEmail = await limitBy('login', `email:${normalizeEmail(email)}`);
     if (!byEmail.ok) return byEmail.retryAfter;
   }

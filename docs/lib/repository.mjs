@@ -66,7 +66,8 @@ export function normaliseDemoOrigin(raw) {
   } catch {
     throw new Error(`docs: DEMO_ORIGIN is not a URL: ${value}`);
   }
-  const exact = value.replace(/\/$/, '').toLowerCase() === url.origin.toLowerCase();
+  // No path, query or fragment; an explicit default port normalises away.
+  const exact = url.pathname === '/' && !/[?#]/.test(value);
   if (!['https:', 'http:'].includes(url.protocol) || !exact || value.includes('*') || url.username) {
     throw new Error(`docs: DEMO_ORIGIN must be an origin such as https://demo.example.com (no path): ${value}`);
   }

@@ -110,8 +110,8 @@ client id, enabled features, version, default language) from
 
 | Variable | Default | Required | Description |
 | --- | --- | --- | --- |
-| `SHOTSTASH_DEMO_MODE` | `false` |  | Public demo instances only. With true: the sign-in page lists the read-only demo accounts and their password, sign-up is off, a demo banner shows, POST /api/v1/demo/session hands out short read-only sessions and the demo data is reset every night at 03:00 (SHOTSTASH_DEFAULT_TIMEZONE). Seed it once after setup with `node dist/demo.js seed` (`npm run demo:seed` from source). Needs DEMO_ADMIN_PASSWORD. |
-| `DEMO_ADMIN_PASSWORD` |  |  | Public demo instances only. Password of every demo account, at least 10 characters. It is shown on the sign-in page in demo mode (the accounts are read-only), so never reuse a real password. Secret. |
+| `SHOTSTASH_DEMO_MODE` | `false` |  | Public demo instances only. With true: the sign-in page lists the read-only demo accounts and their password, sign-up is off, a demo banner shows, POST /api/v1/demo/session hands out short read-only sessions and the demo data is reset every night at 03:00 (SHOTSTASH_DEFAULT_TIMEZONE). Seed it once after setup with `docker compose exec -u node app node dist/demo.js seed` (`npm run demo:seed` from source). Needs DEMO_ADMIN_PASSWORD. |
+| `DEMO_ADMIN_PASSWORD` |  |  | Public demo instances only. Password of every demo account, at least 10 characters. It is shown on the sign-in page in demo mode (the accounts are read-only), so never reuse a real password. Public in demo mode (shown on the sign-in page). |
 
 ## Docker Compose
 

@@ -27,7 +27,7 @@ Demo mode is on when the app starts with `SHOTSTASH_DEMO_MODE=true` and `DEMO_AD
 
 ## What you need
 
-- A small Linux server with Docker Engine and the Compose plugin. 2 GB of memory is enough.
+- A small Linux server with Docker Engine and the Compose plugin 2.24.4 or later (the demo override uses `!override`). 2 GB of memory is enough.
 - A domain name pointing at it, for example `demo.example.com`.
 - A TLS reverse proxy in front of the app. The [Networking](/docs/networking/) guide has Caddy and nginx examples; Caddy gets certificates by itself.
 
@@ -86,10 +86,10 @@ grep SETUP_TOKEN .env
 ## 4. Seed the demo
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.demo.yml exec app node dist/demo.js seed
+docker compose -f docker-compose.yml -f docker-compose.demo.yml exec -u node app node dist/demo.js seed
 ```
 
-The seed runs inside the app container and generates everything on the server. It creates the three demo accounts and a sample project with:
+The seed runs inside the app container as the app user (`-u node`: as root it refuses, so the media files keep the right owner) and generates everything on the server. It creates the three demo accounts and a sample project with:
 
 - images made with sharp and short ffmpeg test clips, plus a PDF document;
 - thumbnails and one 720p proxy version;
@@ -106,18 +106,20 @@ Sign out, sign in as `demo-viewer@example.com` with the demo password, and check
 **By hand.**
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.demo.yml exec app node dist/demo.js reset
+docker compose -f docker-compose.yml -f docker-compose.demo.yml exec -u node app node dist/demo.js reset
 ```
 
 A reset deletes the demo project's rows and bytes, the demo accounts' sessions and notifications, then seeds again. It never touches `instance_settings` (so setup never reopens), your super admin or any account that is not a demo account.
 
-**Without Docker** (a source checkout with `npm run dev` or `npm start`): `npm run demo:seed` and `npm run demo:reset` do the same with the variables in `.env`.
+**Without Docker** (a source checkout with `npm run dev` or `npm start`): set `SHOTSTASH_DEMO_MODE=true` and `DEMO_ADMIN_PASSWORD` in `.env` (the override sets the first one for Docker only), then `npm run demo:seed` and `npm run demo:reset` do the same.
+
+A seed or reset and the nightly reset never run at the same time: they share one Dragonfly lock. Without a reachable Dragonfly the nightly reset is skipped with a warning in the log.
 
 ## The docs try-it console
 
 The [REST reference](/docs/api/rest/) can show a try-it console that sends requests to your demo. It is off unless the docs site is built with `DEMO_ORIGIN`, and when it is on it talks to that origin only, never to a visitor's own install.
 
-1. **Allow the docs origin on the demo.** `SHOTSTASH_CORS_ORIGINS` takes comma-separated exact origins (`scheme://host[:port]`, no path, no wildcard; empty by default). For the default GitHub Pages site the origin is `https://aldyernesto.github.io`: an origin never has a path, so not `.../shotstash/`. Matching origins get `Access-Control-Allow-Origin` echoed on `/api/*`, with credentials off and an answer to the preflight. Any other origin gets no CORS headers.
+1. **Allow the docs origin on the demo.** `SHOTSTASH_CORS_ORIGINS` takes comma-separated exact origins (`scheme://host[:port]`, no path, no wildcard; empty by default). For the default GitHub Pages site the origin is `https://aldyernesto.github.io`: an origin never has a path, so not `.../shotstash/`. Note that `https://<owner>.github.io` covers every Pages site of that user, not only these docs; a custom docs domain (`DOCS_DOMAIN`) is a tighter origin. Matching origins get `Access-Control-Allow-Origin` echoed on `/api/*`, with credentials off and an answer to the preflight. Any other origin gets no CORS headers.
 2. **Build the docs with the demo origin.** In the repository settings, set the variable `DEMO_ORIGIN` (for example `https://demo.example.com`) and rerun the `docs.yml` workflow. The REST reference then shows the console pointed at that origin, with a **Get a demo token** button.
 
 The button calls `POST /api/v1/demo/session`, which:

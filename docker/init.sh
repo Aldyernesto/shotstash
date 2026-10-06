@@ -26,7 +26,16 @@ random_hex() {
   fi
 }
 
-if [ -f .env ]; then
+tmp=""
+cleanup() {
+  if [ -n "$tmp" ]; then rm -f "$tmp" "$tmp.next"; fi
+}
+trap cleanup EXIT
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
+
+# Anything already named .env (a file, a directory or a symlink, even a broken one) is kept.
+if [ -e .env ] || [ -L .env ]; then
   echo ".env already exists: kept as it is (delete it first to start over)."
 else
   if [ ! -f .env.example ]; then
@@ -38,27 +47,22 @@ else
   cp .env.example "$tmp" || exit 1
   for name in $SECRETS; do
     value="$(random_hex)" || {
-      rm -f "$tmp"
       echo "Cannot generate random values: install openssl."
       exit 1
     }
     if [ "${#value}" -ne 64 ]; then
-      rm -f "$tmp"
       echo "Cannot generate random values: install openssl."
       exit 1
     fi
-    # Replace the empty assignment of the example (first match only).
-    sed "s/^$name=\$/$name=$value/" "$tmp" > "$tmp.next" && mv "$tmp.next" "$tmp" || {
-      rm -f "$tmp" "$tmp.next"
-      exit 1
-    }
+    # Replace the empty assignment of the example (the first one only).
+    awk -v n="$name" -v v="$value" '!done && $0 == n "=" { print n "=" v; done = 1; next } { print }' "$tmp" > "$tmp.next" && mv "$tmp.next" "$tmp" || exit 1
     if ! grep -q "^$name=$value\$" "$tmp"; then
-      rm -f "$tmp"
       echo "Could not set $name in .env (is .env.example from this version?)."
       exit 1
     fi
   done
   mv "$tmp" .env || exit 1
+  tmp=""
   echo "Created .env with random secrets (SESSION_SECRET, MEDIA_SIGNING_SECRET, SETUP_TOKEN, WORKER_BOOTSTRAP_TOKEN, POSTGRES_PASSWORD)."
   echo "First-run setup asks for SETUP_TOKEN: read it with  grep SETUP_TOKEN .env"
   echo "Set APP_URL in .env to the address people open (LAN IP or domain) before you share links."

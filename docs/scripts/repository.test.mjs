@@ -55,6 +55,7 @@ test('DEMO_ORIGIN: an exact origin or nothing (Story 8.2)', async () => {
   assert.equal(normaliseDemoOrigin(undefined), '');
   assert.equal(normaliseDemoOrigin(' https://Demo.Example.com/ '), 'https://demo.example.com');
   assert.equal(normaliseDemoOrigin('http://localhost:3005'), 'http://localhost:3005');
+  assert.equal(normaliseDemoOrigin('https://demo.example.com:443'), 'https://demo.example.com');
   for (const bad of ['demo.example.com', 'https://demo.example.com/app', 'https://*.example.com', 'ftp://demo.example.com', 'https://u:p@demo.example.com']) {
     assert.throws(() => normaliseDemoOrigin(bad), /DEMO_ORIGIN/, bad);
   }

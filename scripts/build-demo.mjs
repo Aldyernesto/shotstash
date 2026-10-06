@@ -4,7 +4,7 @@
  * `dist/demo.js` with the same settings as the server (scripts/build-server.mjs),
  * so a public demo can be seeded and reset inside the image:
  *
- *   docker compose exec app node dist/demo.js seed|reset
+ *   docker compose exec -u node app node dist/demo.js seed|reset
  *
  *   npm run build:demo
  */
