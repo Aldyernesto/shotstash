@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Shotstash REST API",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "REST routes of a Shotstash instance: auth, uploads, media, share pages, health and the processing worker contract (v1). Everything else (projects, files, sharing, discussion, jobs in the UI) is GraphQL at /api/graphql; see schema.graphql. Errors answer `{ code, message }` with a stable code. Until first-run setup is done every route except health, config and setup answers 503 SETUP_REQUIRED.",
     "license": {
       "name": "MIT",

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/Aldyernesto/shotstash/compare/v0.3.0...v0.4.0) (2026-10-07)
+
+
+### Features
+
+* **install:** the one-line install pulls the published images ([d6d8682](https://github.com/Aldyernesto/shotstash/commit/d6d86824950de7b2676f7b93ebb684286c452074))
+* **promo:** 30-second launch trailer, playable in the browser ([bc9efc6](https://github.com/Aldyernesto/shotstash/commit/bc9efc6a8ed63f201f84c1d2d8a4b5374c4bcecd))
+
 ## [0.3.0](https://github.com/Aldyernesto/shotstash/compare/v0.2.0...v0.3.0) (2026-10-07)
 
 
