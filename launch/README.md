@@ -12,6 +12,6 @@ Everything needed on launch day, written ahead so the day is execution, not writ
 | [awesome-selfhosted.md](awesome-selfhosted.md) | The awesome-selfhosted rules, quoted, and when Shotstash becomes eligible. |
 | [product-hunt.md](product-hunt.md) | Optional Product Hunt draft. |
 
-Placeholders look like `<demo-url>` or `<date>`. Fill every one before posting; `grep -rn "<demo-url>\|<date>" launch/` finds them.
+Every placeholder is filled: the demo is https://demostash.aldyernesto.my.id and the dates are in [schedule.md](schedule.md). If you add a new placeholder (angle brackets, such as a demo URL or a date), fill it before posting and grep `launch/` to make sure none is left.
 
 Wording rules for every text: the tagline is "Your footage, your hardware, your cloud"; Shotstash is a media cloud for creators, never a general file store or a stand-in for a consumer drive; English, short and warm; no em dash.

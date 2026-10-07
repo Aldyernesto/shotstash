@@ -1,12 +1,17 @@
-# Published images instead of local builds (Story 6.4). Use it together with
-# docker-compose.yml, after the first release exists:
+# Published images instead of local builds (Story 6.4), the default: the
+# .env that docker/init.sh writes sets
 #
-#   docker compose -f docker-compose.yml -f docker-compose.images.yml pull
-#   docker compose -f docker-compose.yml -f docker-compose.images.yml up -d
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.images.yml
+#
+# so plain `docker compose pull` and `docker compose up -d` use these images.
+# Needs Docker Compose 2.24.4 or newer (`!reset`; docker/preflight.sh checks).
+# To build from source instead, set COMPOSE_FILE=docker-compose.yml in .env
+# and run `docker compose up -d --build`.
 #
 # IMAGE_TAG picks the release (default latest; pin X.Y.Z or X.Y in .env for
-# controlled upgrades and rollbacks). IMAGE_REGISTRY is where the images
-# live; change it only if the project moves (see docs/releasing.md).
+# controlled upgrades and rollbacks, without the v of the git tag: 0.3.0).
+# IMAGE_REGISTRY is where the images live; change it only if the project
+# moves (see docs/releasing.md).
 
 services:
   app:

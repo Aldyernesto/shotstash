@@ -54,7 +54,10 @@ export function renderEnvExample() {
     '# SESSION_SECRET, MEDIA_SIGNING_SECRET, SETUP_TOKEN, WORKER_BOOTSTRAP_TOKEN',
     '# and POSTGRES_PASSWORD (it never overwrites an existing .env), then run',
     '# `docker compose up -d`. The compose file sets DATABASE_URL, DRAGONFLY_HOST,',
-    '# STORAGE_LOCAL_ROOT and PORT for the app container itself.',
+    '# STORAGE_LOCAL_ROOT and PORT for the app container itself. COMPOSE_FILE',
+    '# (last section) makes compose pull the published images; set it to',
+    '# docker-compose.yml to build from source instead. While COMPOSE_FILE is set,',
+    '# docker-compose.override.yml is not loaded by itself: append it there.',
   ];
   for (const group of GROUPS) {
     const vars = entries().filter((v) => v.group === group);

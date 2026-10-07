@@ -1,0 +1,70 @@
+name: Published images smoke test
+
+# The README one-line install with the published images, as a stranger runs
+# it: no registry login, a fresh checkout, `sh docker/init.sh`, then pull and
+# start. Proves the GHCR packages are public and that latest boots to
+# first-run setup. CI (pr.yml) builds each change from source instead, so
+# this is the only check of what users actually pull.
+#
+# Releases are created by the release workflow with GITHUB_TOKEN, and such
+# events start no other workflow, so `release: published` covers releases
+# made by hand only; `workflow_run` on Release covers the automated ones.
+# The weekly run catches a package turned private or a broken latest tag.
+
+on:
+  release:
+    types: [published]
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Fresh install with the published images
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BASE: http://localhost:3005
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Pull anonymously, as a new user would
+        run: docker logout ghcr.io || true
+
+      - name: docker/init.sh writes .env with the images override
+        run: |
+          sh docker/init.sh
+          grep -qx 'COMPOSE_FILE=docker-compose.yml:docker-compose.images.yml' .env
+
+      - name: Pull the published images
+        run: |
+          docker compose config --images
+          docker compose pull
+
+      - name: Start the stack
+        run: docker compose up -d --wait --wait-timeout 300
+
+      - name: Health answers ok and asks for first-run setup
+        run: |
+          curl -fsS "$BASE/api/health" | tee /tmp/health.json; echo
+          jq -e '.ok == true and .setupRequired == true' /tmp/health.json
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

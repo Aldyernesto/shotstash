@@ -23,12 +23,23 @@ Both headers are believed as they arrive, so the proxy in front must **replace**
 - set `X-Forwarded-For` to the client address only, not append to a client-supplied list (the app reads the leftmost entry, which a client controls in an appended list);
 - set `X-Forwarded-Proto` to the scheme the client used.
 
-Keep `TRUST_PROXY=false` unless **every** request comes through such a proxy. If the app port is also reachable directly (or through a second path that passes headers on), anyone can send those headers and pick their own IP and scheme. Bind the published port to the loopback address when the proxy runs on the same machine, so the app is not reachable around it. In `docker-compose.yml`:
+Keep `TRUST_PROXY=false` unless **every** request comes through such a proxy. If the app port is also reachable directly (or through a second path that passes headers on), anyone can send those headers and pick their own IP and scheme. Bind the published port to the loopback address when the proxy runs on the same machine, so the app is not reachable around it. Put it in an override file of your own rather than editing `docker-compose.yml` (which `git pull` updates):
 
 ```yaml
-    ports:
+# docker-compose.override.yml
+services:
+  app:
+    ports: !override
       - "127.0.0.1:${SHOTSTASH_PORT:-3005}:3005"
 ```
+
+Then append the file to `COMPOSE_FILE` in `.env`. While `COMPOSE_FILE` is set (`docker/init.sh` sets it to the published images), Compose does not load `docker-compose.override.yml` by itself:
+
+```bash
+COMPOSE_FILE=docker-compose.yml:docker-compose.images.yml:docker-compose.override.yml
+```
+
+Entries are relative paths separated by `:`, with no Windows drive letters. `!override` needs Docker Compose 2.24.4 or newer.
 
 With `TRUST_PROXY=false` the app uses the TCP peer as the client IP and the plain `http` scheme of its own port.
 

@@ -4,8 +4,10 @@
 #   docker compose up -d
 #
 # Only the app is published on the host (SHOTSTASH_PORT, default 3005);
-# PostgreSQL, Dragonfly and the worker stay on the compose network. Official
-# images arrive with the first release; until then both images are built here.
+# PostgreSQL, Dragonfly and the worker stay on the compose network. The .env
+# from docker/init.sh adds docker-compose.images.yml (COMPOSE_FILE), which
+# pulls the published images; with COMPOSE_FILE=docker-compose.yml both
+# images are built here from source.
 
 name: shotstash
 

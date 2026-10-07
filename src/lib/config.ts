@@ -495,6 +495,47 @@ export const VARIABLES = {
     example: '3005',
     description: 'docker compose only: host port published for the app. Change it when 3005 is taken.',
   }),
+  COMPOSE_FILE: opt({
+    group: 'Docker Compose',
+    kind: 'compose',
+    schema: text,
+    example: 'docker-compose.yml:docker-compose.images.yml',
+    description:
+      'docker compose only: the compose files every docker compose command reads, as relative paths separated by : ' +
+      '(no Windows drive letters). Set by docker/init.sh to the published images (docker-compose.images.yml); ' +
+      "unset means Compose's own fallback, docker-compose.yml plus docker-compose.override.yml. While it is set, " +
+      'Compose no longer loads docker-compose.override.yml by itself: append your override to the list instead. ' +
+      'To build from source, set it to docker-compose.yml and run `docker compose up -d --build`. A public demo ' +
+      'appends :docker-compose.demo.yml. The images and demo overrides need Docker Compose 2.24.4 or newer.',
+  }),
+  COMPOSE_PATH_SEPARATOR: opt({
+    group: 'Docker Compose',
+    kind: 'compose',
+    schema: text,
+    example: ':',
+    description:
+      'docker compose only: separator between the files in COMPOSE_FILE. Compose uses ; on Windows and : ' +
+      'elsewhere; setting : keeps the same COMPOSE_FILE working with Docker Desktop on Windows.',
+  }),
+  IMAGE_TAG: withDefault({
+    group: 'Docker Compose',
+    kind: 'compose',
+    schema: text,
+    default: 'latest',
+    description:
+      'docker compose only, with the published images: the release to run, without the leading v of the git tag ' +
+      '(0.3.0, not v0.3.0). latest is the newest release; pin X.Y to get fixes but no new minor version, X.Y.Z ' +
+      'to change nothing until you edit it, or the previous release to roll back.',
+  }),
+  IMAGE_REGISTRY: withDefault({
+    group: 'Docker Compose',
+    kind: 'compose',
+    schema: text,
+    default: 'ghcr.io/aldyernesto',
+    description:
+      'docker compose only, with the published images: the registry and owner the images come from. Change it ' +
+      'only if the project moves or you publish your own images.',
+  }),
 } satisfies Record<string, VarDef>;
 
 export type VarName = keyof typeof VARIABLES;

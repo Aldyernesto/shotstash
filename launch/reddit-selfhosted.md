@@ -27,13 +27,13 @@ It is aimed at people who shoot video for work, alone or in a small team, and ne
 
     git clone https://github.com/Aldyernesto/shotstash.git && cd shotstash && sh docker/init.sh && docker compose up -d
 
-The init script writes `.env` with random secrets and checks your machine first. The app, PostgreSQL, Dragonfly and the worker run in Compose; only the app port is published. Linux x64 first, arm64 best effort, about 2 GB of RAM.
+The init script writes `.env` with random secrets and checks your machine first; Compose then pulls the published images (amd64 and arm64), so nothing builds on your machine. The app, PostgreSQL, Dragonfly and the worker run in Compose; only the app port is published. Linux x64 first, arm64 best effort, about 2 GB of RAM.
 
 **Links**
 
 - Repository: https://github.com/Aldyernesto/shotstash
 - Docs: https://aldyernesto.github.io/shotstash/
-- Read-only demo (resets every night): <demo-url>
+- Read-only demo (resets every night): https://demostash.aldyernesto.my.id
 
 Born in production: it has run a real media library with thousands of files every day since 2026.
 

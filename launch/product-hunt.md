@@ -22,7 +22,7 @@ A self-hosted media cloud for creators. Projects and sections, resumable uploads
 
 - Website: https://aldyernesto.github.io/shotstash/
 - Source: https://github.com/Aldyernesto/shotstash
-- Demo: <demo-url>
+- Demo: https://demostash.aldyernesto.my.id
 
 ## Gallery
 

@@ -12,11 +12,13 @@ git clone https://github.com/Aldyernesto/shotstash.git && cd shotstash && sh doc
 
 `docker/init.sh` writes `.env` with fresh random secrets (it never overwrites an existing one) and runs the preflight check.
 
+That line runs the published images of the latest release, not the code in your checkout. To run your own changes in Docker, build them: set `COMPOSE_FILE=docker-compose.yml` in `.env` (or export it in the shell, which wins over `.env`) and start with `docker compose up -d --build`. If you create `.env` by hand with `cp .env.example .env` instead of `docker/init.sh`, it carries the same images line, so change it the same way.
+
 To work on the code, you need Node.js 24. Follow "Development" in the [README](README.md); in short:
 
 ```bash
 npm install
-cp .env.example .env   # set SESSION_SECRET (openssl rand -hex 32)
+cp .env.example .env   # set SESSION_SECRET (openssl rand -hex 32); COMPOSE_FILE only matters for docker compose
 npx prisma generate
 npm run dev:db              # embedded PostgreSQL on port 55433; keep it running
 npx prisma migrate deploy   # in a second terminal

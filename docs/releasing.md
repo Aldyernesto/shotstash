@@ -83,23 +83,35 @@ docker pull ghcr.io/<owner>/shotstash:latest
 docker pull ghcr.io/<owner>/shotstash-worker:latest
 ```
 
-With compose, add the override file `docker-compose.images.yml`, which replaces the local builds with the published images:
+With compose, a fresh install already uses them: `.env.example` (and so the `.env` that `docker/init.sh` writes) sets `COMPOSE_FILE=docker-compose.yml:docker-compose.images.yml`, and the override file `docker-compose.images.yml` replaces the local builds with the published images. It needs Docker Compose 2.24.4 or newer (`!reset`); `docker/preflight.sh` checks that. Upgrading is:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.images.yml pull
-docker compose -f docker-compose.yml -f docker-compose.images.yml up -d
+git pull && docker compose pull && docker compose up -d
 ```
 
-`IMAGE_TAG` in `.env` picks the release (default `latest`; pin `X.Y.Z` for controlled upgrades). `IMAGE_REGISTRY` defaults to `ghcr.io/aldyernesto`; set it if the project moves (see below).
+`IMAGE_TAG` in `.env` picks the release (default `latest`). `IMAGE_REGISTRY` defaults to `ghcr.io/aldyernesto`; set it if the project moves (see below). To build from source instead, set `COMPOSE_FILE=docker-compose.yml` and run `docker compose up -d --build`. CI does exactly that (the `docker` job sets `COMPOSE_FILE` in its env), so every pull request tests its own code, never the published images.
+
+**Image tags have no leading `v`.** The git tag is `v0.3.0`; the image tags are `0.3.0`, `0.3` and `latest`. Write `IMAGE_TAG=0.3.0`, never `IMAGE_TAG=v0.3.0`.
+
+**`latest` and `main` can differ.** `latest` is the newest release, while `main` (what `git pull` fetches) can be ahead of it with compose changes that release has not shipped yet. `git pull` does not keep the checkout in step with the images. For a stable install, check out the release tag and pin the image to the same version:
+
+```bash
+git fetch --tags && git checkout vX.Y.Z
+# in .env:
+IMAGE_TAG=X.Y.Z
+docker compose pull && docker compose up -d
+```
 
 ## Rolling back
 
-Set `IMAGE_TAG` to the previous release (`X.Y.(Z-1)`) and run the `up -d` command above. Every migration stays compatible with the previous release, so the older version runs on the upgraded database. Before 1.0, databases are throwaway: a pre-release may need an empty database. Never move or delete a published tag; publish a fix as a new release instead.
+Set `IMAGE_TAG` to the previous release in `.env` (`X.Y.(Z-1)`, without the `v`), check out the matching git tag (`git checkout vX.Y.(Z-1)`), and run `docker compose up -d`. Every migration stays compatible with the previous release, so the older version runs on the upgraded database. Before 1.0, databases are throwaway: a pre-release may need an empty database. Never move or delete a published tag; publish a fix as a new release instead.
 
 ## Moving the repository to an organisation
 
-Nothing in the workflows or Dockerfiles names the owner: image paths come from `github.repository_owner` and the source label from `github.server_url` and `github.repository`. After a transfer, the next release publishes under `ghcr.io/<new owner>/...` automatically (link and publish the new packages as above). Update the README badges and links and the `IMAGE_REGISTRY` default in `docker-compose.images.yml`, and point users at the new image path in the release notes; the old packages stay where they are.
+Nothing in the workflows or Dockerfiles names the owner: image paths come from `github.repository_owner` and the source label from `github.server_url` and `github.repository`. After a transfer, the next release publishes under `ghcr.io/<new owner>/...` automatically (link and publish the new packages as above). Update the README badges and links and the `IMAGE_REGISTRY` default in `docker-compose.images.yml` and `src/lib/config.ts` (then `npm run env:example`), and point users at the new image path in the release notes; the old packages stay where they are.
 
 ## Checks that guard a release
 
 `pr.yml` runs on every pull request and push to `main`: lint (including module import direction), typecheck, design tokens, legacy allowlist, brand CSS, route matrix, `.env.example`, `schema.graphql` (`npm run sdl:check`), `openapi.json` (`npm run openapi:check`, validated as OpenAPI 3.1), the dependency audit (`npm run audit:check`, exceptions in `audit-allowlist.json` with a reason and an expiry at most 90 days ahead), unit tests, ZIP64, i18n, the privacy scan, the build, the Docker quick start, the S3 contract, the end-to-end legs and the multi-arch image build.
+
+`images-smoke.yml` checks what users actually pull. After every release (and when a release is published by hand), once a week and on demand, it runs the one-line install on a clean runner without logging in to GHCR: `sh docker/init.sh`, `docker compose pull`, `docker compose up -d --wait`. It then checks that `/api/health` answers `ok` and `setupRequired: true`. A package turned private or a broken `latest` fails it.

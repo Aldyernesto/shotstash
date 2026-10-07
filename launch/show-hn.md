@@ -34,7 +34,9 @@ Install is one line with Docker Compose:
 
     git clone https://github.com/Aldyernesto/shotstash.git && cd shotstash && sh docker/init.sh && docker compose up -d
 
-There is a read-only demo at <demo-url> (it resets every night) and docs at https://aldyernesto.github.io/shotstash/.
+It pulls the published images (amd64 and arm64), so nothing is built on your machine.
+
+There is a read-only demo at https://demostash.aldyernesto.my.id (it resets every night) and docs at https://aldyernesto.github.io/shotstash/.
 
 What it is not: not a Frame.io-style review tool, not a camera-roll backup, and there is no mobile app in v1.
 

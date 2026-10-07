@@ -13,23 +13,45 @@ Every upgrade is the same three steps: back up, get the new version, start it. M
 
 Every database migration stays compatible with the previous release. After an upgrade the previous version still runs on the upgraded database, which is what makes rollback a matter of starting the older version. A change that cannot follow this rule is a breaking change and ships in a major release with migration notes.
 
-## With published images
+## With published images (the default)
 
-Every release publishes `ghcr.io/%OWNER_LC%/shotstash` and `ghcr.io/%OWNER_LC%/shotstash-worker` for linux/amd64 and linux/arm64, tagged `X.Y.Z`, `X.Y` and `latest`. Add the override file `docker-compose.images.yml` to every compose command so compose pulls these images instead of building:
+Every release publishes `ghcr.io/%OWNER_LC%/shotstash` and `ghcr.io/%OWNER_LC%/shotstash-worker` for linux/amd64 and linux/arm64, tagged `X.Y.Z`, `X.Y` and `latest`. A fresh install uses them: `docker/init.sh` copies the line `COMPOSE_FILE=docker-compose.yml:docker-compose.images.yml` from `.env.example` into `.env`, and the override file `docker-compose.images.yml` swaps the local builds for these images. Upgrade with:
 
 ```bash
-alias dc='docker compose -f docker-compose.yml -f docker-compose.images.yml'
-dc pull
-dc up -d
+git pull && docker compose pull && docker compose up -d
 ```
 
-`IMAGE_TAG` in `.env` picks the release (default `latest`). Pin `IMAGE_TAG=1.4` to get fixes but no new minor version, or `IMAGE_TAG=1.4.2` to change nothing until you edit it. Update the checkout too (`git pull`), so the compose file matches the images.
+`IMAGE_TAG` in `.env` picks the release (default `latest`). Pin `IMAGE_TAG=1.4` to get fixes but no new minor version, or `IMAGE_TAG=1.4.2` to change nothing until you edit it. Image tags have no leading `v`: the git tag `v0.3.0` is the image tag `0.3.0`.
 
-<Callout title="Images arrive with the first release">
-  Until the first release is published, these images do not exist yet: upgrade from source as below.
+### Release versus `main`
+
+`latest` is the newest release. `main`, which `git pull` fetches, can be ahead of it, with compose files for changes no release has shipped yet; `git pull` does not keep the checkout in step with the images. For a stable install, run the checkout and the images at the same release:
+
+```bash
+git fetch --tags && git checkout v0.3.0
+# in .env:
+IMAGE_TAG=0.3.0
+docker compose pull && docker compose up -d
+```
+
+To upgrade such an install later, check out the new tag, set `IMAGE_TAG` to the same version without the `v`, and pull again.
+
+<Callout title="Installed before the images were the default?">
+  `docker/init.sh` never touches an existing `.env`. Without a `COMPOSE_FILE` line, `docker compose up -d` keeps running the image you built earlier; only `docker compose up -d --build` rebuilds it from the new code. To switch to the published images, add both lines to your `.env`, then run the upgrade command above:
+
+  ```bash
+  COMPOSE_FILE=docker-compose.yml:docker-compose.images.yml
+  COMPOSE_PATH_SEPARATOR=:
+  ```
+</Callout>
+
+<Callout type="warn" title="Using a docker-compose.override.yml?">
+  While `COMPOSE_FILE` is set, Compose no longer loads `docker-compose.override.yml` by itself. Append it to the list: `COMPOSE_FILE=docker-compose.yml:docker-compose.images.yml:docker-compose.override.yml`. Entries are relative paths separated by `:`, with no Windows drive letters.
 </Callout>
 
 ## From source
+
+With `COMPOSE_FILE=docker-compose.yml` in `.env` (see [Build from source](/docs/quick-start/#build-from-source)), compose builds both images from your checkout:
 
 ```bash
 git pull
@@ -49,7 +71,7 @@ Read the release notes before you upgrade. Notes that apply to existing installs
 
 1. Stop the app: `docker compose stop app worker`.
 2. Start the previous version:
-   - with images, set `IMAGE_TAG` to the previous release in `.env`, then `dc up -d`;
+   - with images, pin `IMAGE_TAG` to the previous release in `.env`, without the `v` (for example `IMAGE_TAG=0.2.0` for git tag `v0.2.0`), check out that tag (`git checkout v0.2.0`), then `docker compose up -d`;
    - from source, `git checkout v<previous>` and `docker compose up -d --build`.
 3. Check `docker compose ps` and sign in.
 

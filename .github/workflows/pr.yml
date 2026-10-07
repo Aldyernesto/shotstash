@@ -219,7 +219,10 @@ jobs:
   # fresh machine, migrations run, the app runs as non-root and survives a
   # restart, and first-run setup works against the container. Story 5.3:
   # the reference worker image builds, runs in compose and makes a proxy. CI generates
-  # its own throwaway secrets; nothing here is a real secret.
+  # its own throwaway secrets; nothing here is a real secret. The generated
+  # .env pulls the published images (COMPOSE_FILE); the job env overrides it
+  # (shell env beats .env) so every compose command here builds and tests
+  # this change's own code.
   docker:
     name: Docker image and compose quick start
     runs-on: ubuntu-latest
@@ -227,6 +230,7 @@ jobs:
     env:
       VERSION: ci-${{ github.sha }}
       BASE: http://localhost:3005
+      COMPOSE_FILE: docker-compose.yml
     steps:
       - uses: actions/checkout@v7
 
@@ -246,12 +250,27 @@ jobs:
             echo "$value" | grep -Eq '^[0-9a-f]{64}$' || { echo "$name is not a generated secret"; exit 1; }
             if echo "$out" | grep -qF "$value"; then echo "$name was printed"; exit 1; fi
           done
+          # A fresh install pulls the published images by default.
+          grep -qx 'COMPOSE_FILE=docker-compose.yml:docker-compose.images.yml' .env || { echo ".env lacks the images override"; exit 1; }
+          # Without the job's override, the generated .env resolves to the
+          # published images (ghcr.io/<owner>/shotstash and shotstash-worker, tag latest).
+          images=$(env -u COMPOSE_FILE docker compose config --images)
+          echo "$images"
+          for image in shotstash shotstash-worker; do
+            echo "$images" | grep -Eqx "ghcr\.io/[a-z0-9_.-]+/$image:latest" || { echo "the default install does not use the published $image image"; exit 1; }
+          done
           before=$(sha256sum .env)
           sh docker/init.sh | grep -q "already exists"
           test "$before" = "$(sha256sum .env)"
 
       - name: Build the app and worker images
-        run: docker compose build --build-arg VERSION="$VERSION" app worker
+        run: |
+          # The job env must win over the images override in .env.
+          images=$(docker compose config --images)
+          for image in shotstash:local shotstash-worker:local; do
+            echo "$images" | grep -qx "$image" || { echo "compose would not build $image from this change"; echo "$images"; exit 1; }
+          done
+          docker compose build --build-arg VERSION="$VERSION" app worker
 
       - name: Start the stack
         run: docker compose up -d --wait --wait-timeout 300

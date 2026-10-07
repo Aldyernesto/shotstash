@@ -49,16 +49,18 @@ APP_URL=https://demo.example.com
 TRUST_PROXY=true
 DEMO_ADMIN_PASSWORD=pick-a-friendly-password
 SHOTSTASH_CORS_ORIGINS=https://aldyernesto.github.io
+COMPOSE_FILE=docker-compose.yml:docker-compose.images.yml:docker-compose.demo.yml
 ```
 
 - `APP_URL` and `TRUST_PROXY=true`: the app sits behind your TLS proxy (see [Networking](/docs/networking/) for what the proxy must do before `TRUST_PROXY=true` is safe).
 - `DEMO_ADMIN_PASSWORD`: every visitor sees it, so make it easy to type.
 - `SHOTSTASH_CORS_ORIGINS`: the origin of the docs site, and nothing else. It is only needed for the docs try-it console (see below).
+- `COMPOSE_FILE`: replace the line `.env.example` brought along. It keeps the published images and adds the demo override, so every plain `docker compose` command below uses both.
 
 ## 2. Start with the demo override
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d
+docker compose up -d
 ```
 
 [`docker-compose.demo.yml`](https://github.com/%REPO%/blob/main/docker-compose.demo.yml) sets `SHOTSTASH_DEMO_MODE=true`, refuses to start without `DEMO_ADMIN_PASSWORD` in `.env`, and publishes the app on `127.0.0.1` only, so it is reached through your TLS proxy and nowhere else.
@@ -83,7 +85,7 @@ Docker works inside an unprivileged Proxmox LXC container when nesting is on. Tw
 - The container may not raise the memlock limit, so the cache service fails with "error setting rlimit type 8". Add a local override that drops it (Dragonfly runs fine without):
 
   ```yaml
-  # docker-compose.local.yml, listed after the demo override in COMPOSE_FILE
+  # docker-compose.local.yml, appended to COMPOSE_FILE after the demo override
   services:
     cache:
       ulimits: !reset {}
@@ -102,7 +104,7 @@ grep SETUP_TOKEN .env
 ## 4. Seed the demo
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.demo.yml exec -u node app node dist/demo.js seed
+docker compose exec -u node app node dist/demo.js seed
 ```
 
 The seed runs inside the app container as the app user (`-u node`: as root it refuses, so the media files keep the right owner) and generates everything on the server. It creates the three demo accounts and a sample project with:
@@ -122,7 +124,7 @@ Sign out, sign in as `demo-viewer@example.com` with the demo password, and check
 **By hand.**
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.demo.yml exec -u node app node dist/demo.js reset
+docker compose exec -u node app node dist/demo.js reset
 ```
 
 A reset deletes the demo project's rows and bytes, the demo accounts' sessions and notifications, then seeds again. It never touches `instance_settings` (so setup never reopens), your super admin or any account that is not a demo account.
@@ -149,4 +151,4 @@ The button calls `POST /api/v1/demo/session`, which:
 
 Shotstash has no telemetry and makes no outbound calls. Watch the demo from the outside with your own uptime monitor on `https://demo.example.com/api/health`, which answers `{ ok, setupRequired, version }` and returns `503` when the database, cache or storage is down.
 
-Upgrade a demo like any other install ([Upgrading](/docs/upgrading/)); keep the `-f docker-compose.yml -f docker-compose.demo.yml` pair on every compose command.
+Upgrade a demo like any other install ([Upgrading](/docs/upgrading/)). Keep the demo override in `COMPOSE_FILE`; a command with its own `-f` flags ignores `COMPOSE_FILE`, so name all three files there or none.

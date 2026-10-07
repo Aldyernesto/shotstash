@@ -1,8 +1,12 @@
 # Public demo instance (Story 8.2). Use it together with docker-compose.yml
-# (and docker-compose.images.yml once images are published):
+# and the published images: set in .env
 #
-#   docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d
-#   docker compose -f docker-compose.yml -f docker-compose.demo.yml exec -u node app node dist/demo.js seed
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.images.yml:docker-compose.demo.yml
+#
+# then
+#
+#   docker compose up -d
+#   docker compose exec -u node app node dist/demo.js seed
 #
 # Demo mode lists the read-only demo accounts and their password on the
 # sign-in page, turns sign-up off, shows a demo banner, hands out short

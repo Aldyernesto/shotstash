@@ -57,6 +57,9 @@ test('init.sh creates .env with a distinct random value for every generated secr
     assert.deepEqual(strip(env), strip(example));
     // Secrets the operator brings stay empty.
     for (const name of ['DRAGONFLY_PASSWORD', 'S3_SECRET_ACCESS_KEY', 'RESEND_API_KEY', 'DEMO_ADMIN_PASSWORD']) assert.equal(v[name], '', name);
+    // A fresh install pulls the published images instead of building them.
+    assert.equal(v.COMPOSE_FILE, 'docker-compose.yml:docker-compose.images.yml');
+    assert.equal(v.COMPOSE_PATH_SEPARATOR, ':');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

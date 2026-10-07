@@ -28,6 +28,8 @@ cp .env "$B/env"
 docker compose start app worker
 ```
 
+Note the running version with each backup, before you stop the app (`curl -s http://localhost:3005/api/health` answers it, so does `/status`): a restore goes onto that version.
+
 `pg_dump` runs inside the database container, which keeps running; only the app and the worker stop. `rsync -a` keeps the owner (uid 1000) and the timestamps; the trailing slashes copy the contents of `data/media` into `$B/media`.
 
 ### Check the backup
@@ -68,6 +70,7 @@ docker compose up -d                         # the app starts; its migrations fi
 - The wait checks over TCP on purpose: while PostgreSQL initialises a new volume it runs a temporary server that answers on its socket only, and a restore sent to it races with that initialisation. `timeout` stops the wait after two minutes instead of hanging.
 - `--single-transaction` with `ON_ERROR_STOP` restores everything or nothing: on any error the database stays empty and you can fix the cause and run it again.
 - The `.env` of the backup brings back `SESSION_SECRET` and `MEDIA_SIGNING_SECRET`, so existing sessions and share links keep working. `POSTGRES_PASSWORD` may differ from the old server, because `down -v` creates a new database with whatever `.env` says.
+- The restored `.env` also decides how the app runs: `COMPOSE_FILE` picks published images or a build from source, and `IMAGE_TAG` picks the version. Restore onto the same version the backup was taken with: if `IMAGE_TAG` in the backup is empty or `latest`, pin it in `.env` to the release that was running (the version you noted with the backup, without the leading `v`) before the last `docker compose up -d`. Upgrade afterwards, as a separate step ([Upgrading](/docs/upgrading/)), once the restore checks out. An older backup whose `.env` has no `COMPOSE_FILE` builds from source: run the last step as `docker compose up -d --build`, or add the `COMPOSE_FILE` line to use the published images of the same version.
 
 ### With S3 storage
 

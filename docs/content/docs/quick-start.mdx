@@ -3,16 +3,16 @@ title: Quick start
 description: From a fresh Linux machine to your first upload with Docker Compose, in about ten minutes.
 ---
 
-This guide installs Shotstash with Docker Compose on one machine and ends with a file uploaded and viewed. The target is ten minutes on a machine that already has Docker, plus the first image build (a few minutes, only until official images are published).
+This guide installs Shotstash with Docker Compose on one machine and ends with a file uploaded and viewed. The target is ten minutes on a machine that already has Docker: compose pulls the published images, nothing is built on your machine.
 
 <Callout title="Timing">
-  The ten-minute target is measured from `git clone` to the first upload on a Linux x64 machine with Docker installed. An owner-timed run on a fresh machine is still pending; until then treat the number as a target, not a promise.
+  The ten-minute target is measured from `git clone` to the first upload on a Linux x64 machine with Docker installed, pulling the published images. An owner-timed run on a clean server is still pending; until then treat the number as a target, not a promise.
 </Callout>
 
 ## What you need
 
 - A machine with Docker. Linux x64 is the primary platform; linux/arm64 images are built too, on a best-effort basis. WSL2 on Windows and macOS with Docker Desktop work as well.
-- Docker Engine with the Docker Compose plugin, and git.
+- Docker Engine with the Docker Compose plugin 2.24.4 or newer (`docker compose version`; the preflight checks it), and git.
 - About 2 GB of free memory (4 GB if you add the optional search service).
 - Free disk space for your media. Files live in `./data/media` next to the compose file unless you choose an [S3-compatible bucket](/docs/storage/).
 
@@ -58,7 +58,7 @@ docker compose up -d
 
 After changing `.env`, `sh docker/preflight.sh` checks it again.
 
-The first start builds the app and worker images. `docker compose ps` lists the services; the app is ready when it reports `healthy`.
+The first start pulls the published app and worker images (`ghcr.io/%OWNER_LC%/shotstash` and `shotstash-worker`, tag `latest`); the `COMPOSE_FILE` line that `docker/init.sh` copied into `.env` tells compose to use them. `docker compose ps` lists the services; the app is ready when it reports `healthy`.
 
 </Step>
 <Step>
@@ -103,7 +103,7 @@ Run everything inside the Linux distribution and keep the checkout in the Linux 
 </Tab>
 <Tab value="macOS">
 
-Keep the checkout inside a folder Docker Desktop shares (your home folder is shared by default; see Settings, Resources, File sharing). Give Docker at least 4 GB of memory in Settings, Resources when you build the image or use search.
+Keep the checkout inside a folder Docker Desktop shares (your home folder is shared by default; see Settings, Resources, File sharing). Give Docker at least 4 GB of memory in Settings, Resources when you use search or [build from source](#build-from-source).
 
 </Tab>
 </Tabs>
@@ -113,6 +113,22 @@ Keep the checkout inside a folder Docker Desktop shares (your home folder is sha
 - **Port already taken.** `docker/preflight.sh` tells you. Set `SHOTSTASH_PORT=8080` (any free port) in `.env`, set `APP_URL=http://localhost:8080` to match, and start again.
 - **The app does not start.** `docker compose logs app` names every bad variable; fix it in `.env` and run `docker compose up -d`.
 - **Share links point at localhost.** Set `APP_URL` to the address people open.
+- **The pull fails with "denied" or "unauthorized" from ghcr.io.** The images are public and need no login; an old or expired login gets in the way. Run `docker logout ghcr.io` and `docker compose pull` again.
+- **The pull is slow, times out or hits a rate limit.** Check that the machine reaches `ghcr.io` (proxy, firewall, DNS), wait a few minutes and run `docker compose pull` again. Without network access to the registry, [build from source](#build-from-source).
+- **"no matching manifest" during the pull.** There is no published image for this machine's architecture (images exist for linux/amd64 and linux/arm64; the preflight warns about others). [Build from source](#build-from-source) instead.
+- **The preflight says Docker Compose is too old.** The published images need Docker Compose 2.24.4 or newer. Update Docker Desktop, or the `docker-compose-plugin` package from Docker's repository on Linux, or [build from source](#build-from-source).
+
+## Build from source
+
+The published images are the default. To build the app and worker images on your machine instead (to run a change of your own, or on a platform without images), set this line in `.env`:
+
+```bash
+COMPOSE_FILE=docker-compose.yml
+```
+
+Then start with `docker compose up -d --build`, and add `--build` to every later `up` as well. The first build takes several minutes and about 4 GB of memory. To go back to the published images, restore `COMPOSE_FILE=docker-compose.yml:docker-compose.images.yml`.
+
+`COMPOSE_FILE` lists relative paths separated by `:` (no Windows drive letters; `COMPOSE_PATH_SEPARATOR=:` in `.env` makes that work on Windows too). While it is set, Compose no longer loads a `docker-compose.override.yml` by itself: append your own override to the list instead, for example `COMPOSE_FILE=docker-compose.yml:docker-compose.images.yml:docker-compose.override.yml`.
 
 ## Optional: search
 

@@ -44,7 +44,7 @@ And on curation:
 
 ## What this means for us
 
-1. **Not on launch day.** The clock starts with the first tagged release (v0.2.0, the release PR merged on launch day). Shotstash becomes eligible four months after that release's date: first release on `<date>`, eligible from `<date + 4 months>`. Put the date in [schedule.md](schedule.md) once the release exists.
+1. **Not on launch day.** The clock starts with the first tagged release: v0.2.0, released on 2026-10-06. The rule says more than four months, so Shotstash becomes eligible the day after the four months are up: **from 2027-02-07** (also in [schedule.md](schedule.md)). Launch day ships v0.3.0, which does not reset the clock.
 2. **The submission is the maintainer's own.** The list asks for a submission made by a human and for that attestation to be true, and its contribution guide asks that tools not write the entry or the pull request text for someone to post as their own. So there is deliberately no ready-made entry or PR text here: the maintainer writes the file from `addition.md` and submits it personally.
 3. **Facts to have at hand** when writing it (from the template's field list, all checked against the list's own files on 2026-10-07):
    - required fields: `name`, `website_url`, `source_code_url`, `description` (under 250 characters, sentence case), `licenses`, `platforms`, `tags`;
