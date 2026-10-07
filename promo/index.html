@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shotstash trailer</title>
+<meta name="description" content="The Shotstash launch trailer, played live in your browser.">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<style>
+  @font-face { font-family: "Inter"; src: url("assets/fonts/inter-500.woff2") format("woff2"); font-weight: 500; font-display: block; }
+  :root {
+    --bg: #07080c; --panel: rgba(18, 21, 30, 0.72); --line: rgba(255, 255, 255, 0.12);
+    --fg: #eef1f8; --muted: #9aa3b8; --accent: #3563f2; --accent-hi: #3d6cff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font: 500 15px/1.4 "Inter", sans-serif; }
+  body { display: grid; place-items: center; overflow: hidden; }
+  .stage { position: relative; width: min(100vw, calc(100vh * 16 / 9)); aspect-ratio: 16 / 9; }
+  canvas { display: block; width: 100%; height: 100%; background: #000; touch-action: none; }
+  .bar { position: absolute; left: 16px; right: 16px; bottom: 16px; display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); transition: opacity .25s; }
+  .stage.playing:not(:hover) .bar { opacity: 0; }
+  button { all: unset; cursor: pointer; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%;
+    color: var(--fg); }
+  button:hover { background: rgba(255,255,255,0.08); }
+  button:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
+  button.primary { background: var(--accent); }
+  button.primary:hover { background: var(--accent-hi); }
+  svg { width: 18px; height: 18px; fill: currentColor; }
+  input[type=range] { flex: 1; accent-color: var(--accent); height: 4px; cursor: pointer; }
+  .time { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 88px; text-align: right; font-size: 13px; }
+  .hint { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 999px;
+    background: var(--panel); border: 1px solid var(--line); color: var(--muted); font-size: 13px; opacity: 0; transition: opacity .3s;
+    pointer-events: none; }
+  .stage.paused .hint { opacity: 1; }
+  .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 14px; letter-spacing: .04em; }
+  body.render .bar, body.render .hint, body.render .loading { display: none; }
+  body.render .stage { width: 1920px; height: 1080px; }
+</style>
+</head>
+<body>
+<div class="stage paused" id="stage">
+  <canvas id="c" width="1920" height="1080" aria-label="Shotstash trailer"></canvas>
+  <div class="loading" id="loading">Loading the trailer</div>
+  <div class="bar" role="group" aria-label="Player controls">
+    <button class="primary" id="play" aria-label="Play"><svg viewBox="0 0 24 24" id="play-icon"><path d="M8 5v14l11-7z"/></svg></button>
+    <button id="replay" aria-label="Replay from the start"><svg viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg></button>
+    <input type="range" id="scrub" min="0" max="30" step="0.001" value="0" aria-label="Position">
+    <span class="time" id="time">0:00.0 / 0:30</span>
+    <button id="sound" aria-label="Sound on" aria-pressed="false"><svg viewBox="0 0 24 24" id="sound-icon"><path d="M4 9v6h4l5 4V5L8 9zm12.5 3 2.5 2.5-1.4 1.4-2.5-2.5-2.5 2.5-1.4-1.4 2.5-2.5-2.5-2.5 1.4-1.4 2.5 2.5 2.5-2.5 1.4 1.4z"/></svg></button>
+  </div>
+</div>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

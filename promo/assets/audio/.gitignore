@@ -1,0 +1,8 @@
+# Allow-list. Everything here is ignored except this file, CREDITS.md and CC0 audio.
+# The other files are licensed for use inside the trailer video only (Pixabay
+# Content License, Mixkit Sound Effects Free License) and must never be
+# committed or redistributed on their own. See CREDITS.md.
+*
+!.gitignore
+!CREDITS.md
+!*-cc0.wav

@@ -22,12 +22,18 @@ test('every local README image exists', () => {
   const images = localImages(readme);
   assert.ok(images.includes('.github/assets/banner.png'), 'banner');
   assert.ok(images.includes('.github/assets/demo.gif'), 'GIF');
+  assert.ok(images.includes('promo/out/thumbnail-1280x720.jpg'), 'trailer thumbnail');
   assert.ok(images.some((src) => src.startsWith('docs/public/screenshots/')), 'screenshots');
   const missing = images.filter((src) => !existsSync(path.join(ROOT, src)));
   assert.deepEqual(missing, []);
 });
 
-test('README assets stay light: demo.gif under 5 MB, banner.png under 300 KB', () => {
+test('README assets stay light: demo.gif under 5 MB, banner.png under 300 KB, trailer thumbnail under 400 KB', () => {
   assert.ok(statSync(path.join(ROOT, '.github/assets/demo.gif')).size < 5 * 1024 * 1024);
   assert.ok(statSync(path.join(ROOT, '.github/assets/banner.png')).size < 300 * 1024);
+  assert.ok(statSync(path.join(ROOT, 'promo/out/thumbnail-1280x720.jpg')).size < 400 * 1024);
+});
+
+test('the trailer thumbnail links to the docs trailer page', () => {
+  assert.match(readme, /<a href="https:\/\/[^"]+\/docs\/trailer\/"><img src="promo\/out\/thumbnail-1280x720\.jpg" alt="Watch the 30-second Shotstash trailer"/);
 });

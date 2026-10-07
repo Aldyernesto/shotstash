@@ -23,6 +23,7 @@ on:
       - package.json
       - public/brand/**
       - public/fonts/**
+      - promo/**
       - .github/workflows/docs.yml
   workflow_dispatch:
 

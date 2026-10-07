@@ -116,3 +116,29 @@ test('the changelog page names its source when CHANGELOG.md exists', () => {
   assert.doesNotMatch(page, /# Changelog/);
   assert.match(page, /generated from \[`CHANGELOG\.md`\]/);
 });
+
+test('the trailer copy publishes the film, its licences and no licensed audio', async () => {
+  const { copyTrailer, trailerFiles } = await import('./prepare.mjs');
+  const dest = mkdtempSync(path.join(tmpdir(), 'trailer-'));
+  const files = copyTrailer(dest);
+  for (const f of [
+    'shotstash-trailer-30s.mp4',
+    'poster.jpg',
+    'NOTICE.md',
+    'live/index.html',
+    'live/src/main.js',
+    'live/vendor/three/three.module.js',
+    'live/vendor/three/LICENSE',
+    'live/assets/fonts/OFL-inter.txt',
+    'live/assets/fonts/OFL-inter-tight.txt',
+    'live/assets/fonts/OFL-jetbrains-mono.txt',
+  ]) {
+    assert.ok(existsSync(path.join(dest, f)), `${f} arrives`);
+  }
+  const audio = files.filter((f) => /\.(mp3|wav|ogg|flac|m4a|aac)$/i.test(f));
+  assert.ok(audio.every((f) => f.endsWith('-cc0.wav')), `only CC0 audio: ${audio.join(', ')}`);
+  assert.ok(!existsSync(path.join(dest, 'live', 'assets', 'audio', 'bgm-main.mp3')));
+  // licensed audio is refused even if git were to list it
+  const fake = ['promo/index.html', 'promo/assets/audio/bgm-main.mp3', 'promo/assets/audio/x.ogg', 'promo/assets/audio/sfx-cc0.wav'];
+  assert.deepEqual(trailerFiles(fake), ['assets/audio/sfx-cc0.wav', 'index.html']);
+});

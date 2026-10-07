@@ -6,6 +6,7 @@ import { Mermaid } from './mermaid';
 import { CommunityWorkers } from './community-workers';
 import { Screenshot } from './screenshot';
 import { DemoToken } from './demo-token';
+import { Trailer, TrailerLive } from './trailer';
 
 export function getMDXComponents(components?: MDXComponents) {
   return {
@@ -18,6 +19,8 @@ export function getMDXComponents(components?: MDXComponents) {
     CommunityWorkers,
     Screenshot,
     DemoToken,
+    Trailer,
+    TrailerLive,
     ...components,
   } satisfies MDXComponents;
 }

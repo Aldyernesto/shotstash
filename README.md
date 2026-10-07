@@ -5,6 +5,10 @@
 <p align="center"><b>Your footage, your hardware, your cloud.</b><br>A self-hosted media cloud for creators and small teams, on the PC, NAS or spare drive you already own.</p>
 
 <p align="center">
+  <a href="https://aldyernesto.github.io/shotstash/docs/trailer/"><img src="promo/out/thumbnail-1280x720.jpg" alt="Watch the 30-second Shotstash trailer" width="640"></a>
+</p>
+
+<p align="center">
   <a href="https://github.com/Aldyernesto/shotstash/actions/workflows/pr.yml"><img src="https://github.com/Aldyernesto/shotstash/actions/workflows/pr.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://github.com/Aldyernesto/shotstash/releases"><img src="https://img.shields.io/github/v/release/Aldyernesto/shotstash?include_prereleases&amp;sort=semver&amp;label=release" alt="Latest release"></a>
   <a href="https://github.com/Aldyernesto/shotstash/pkgs/container/shotstash"><img src="https://img.shields.io/badge/container-ghcr.io%2Faldyernesto%2Fshotstash-3563f2" alt="Container image"></a>

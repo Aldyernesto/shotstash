@@ -19,3 +19,5 @@ docs/*
 !docs/design
 # Launch texts (Story 8.3) are not part of any image.
 launch
+# The promo trailer (page, renderer, vendored three.js, videos) is not part of any image.
+promo

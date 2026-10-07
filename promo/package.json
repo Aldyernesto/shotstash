@@ -1,0 +1,6 @@
+{
+  "name": "shotstash-promo",
+  "private": true,
+  "type": "module",
+  "description": "The Shotstash launch trailer: a live Three.js page and its frame-exact renderer. Not part of the app build."
+}

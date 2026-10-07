@@ -1,0 +1,47 @@
+---
+title: Trailer
+description: Shotstash in 30 seconds. Upload, organize, play and share your footage on hardware you own.
+---
+
+<Trailer />
+
+Prefer to see it rendered live? <TrailerLive>Open the playable version</TrailerLive> (at `/shotstash/trailer/live/` on this site): the same film, drawn frame by frame in your browser, with play, pause, scrub and an optional soundtrack.
+
+## What the trailer says
+
+The on-screen text, in order (kept in sync with `promo/src/timeline.js` by a test):
+
+{/* trailer-lines:start */}
+- Your footage shouldn't live everywhere.
+- + New Project
+- Resumable. Checksum-verified.
+- Your projects, organized.
+- A viewer made for video.
+- Share with clients in seconds.
+- Upload
+- Organize
+- Share
+- Your hardware
+- Your footage.
+- Your cloud.
+- PC · NAS · S3 · Docker
+- Free and open source. Self-host in minutes.
+- github.com/Aldyernesto/shotstash
+{/* trailer-lines:end */}
+
+## How it was made
+
+The trailer is built in code, not edited from screen recordings. One deterministic function of time draws every frame with the HTML canvas, and three.js composites the layers on the GPU (motion blur and glow). The UI you see is the real app: the screenshots from this documentation, made from synthetic demo data. The source lives in [`promo/`](https://github.com/%REPO%/tree/main/promo) in the repository, with the frame-exact renderer (`render.mjs`, headless Chrome and ffmpeg) and notes on changing the copy and the timing.
+
+## Music and sound credits
+
+The video file uses licensed music and sound effects; the playable page uses an original procedural soundtrack instead.
+
+- Music: "Sci-Fi Cyberpunk Trailer" by [ArctSound](https://pixabay.com/users/arctsound-27113883/), [Pixabay Content License](https://pixabay.com/service/license-summary/).
+- Impacts: "Huge Cinematic Reverb Impact" by Black_Kumizhi and "Sub drop short" by BRVHRTZ, via Pixabay ([Pixabay Content License](https://pixabay.com/service/license-summary/)).
+- Whooshes, interface clicks, a glitch and a riser by [Mixkit](https://mixkit.co/free-sound-effects/) (items 1490, 2608, 2568, 2946 and 790; [Mixkit Sound Effects Free License](https://mixkit.co/license/#sfxFree)).
+- "air woosh move" by Almitory and "Click" by qubodup, both CC0 via [OpenGameArt.org](https://opengameart.org/).
+
+**Licence.** The code in `promo/` is MIT licensed, but the rendered MP4 contains this third-party audio under the Pixabay Content License and the Mixkit Sound Effects Free License. That audio is not covered by MIT and may not be extracted from the video or redistributed on its own; share the video as it is. See [`promo/out/NOTICE.md`](https://github.com/%REPO%/blob/main/promo/out/NOTICE.md).
+
+The full list, with sources and licences, is in [`promo/assets/audio/CREDITS.md`](https://github.com/%REPO%/blob/main/promo/assets/audio/CREDITS.md).

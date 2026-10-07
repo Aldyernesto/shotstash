@@ -184,6 +184,8 @@ const eslintConfig = defineConfig([
     "dist/**",
     // The docs site is a separate app with its own dependencies (docs/package.json).
     "docs/**",
+    // The promo trailer is a standalone page with vendored three.js, not app code.
+    "promo/**",
   ]),
 ]);
 

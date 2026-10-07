@@ -37,3 +37,15 @@ next-env.d.ts
 # local development database (PGlite) and local media storage
 /.devdb/
 /data/
+
+# promo trailer: only the source, the trailer MP4, its 1280x720 thumbnail, the
+# poster and NOTICE.md are committed; the loop and the 1920x1080 thumbnail go
+# up as GitHub Release assets
+/promo/out/v*/
+/promo/out/frames/
+/promo/out/*.wav
+/promo/out/**/*.wav
+/promo/out/**/keyframes/
+/promo/out/**/thumbnail-alt-*.png
+/promo/out/shotstash-loop-8s.mp4
+/promo/out/thumbnail-1920x1080.png

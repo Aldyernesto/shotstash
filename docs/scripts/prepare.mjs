@@ -6,14 +6,20 @@
  *   - the Markdown guides (docs/*.md, CONTRIBUTING.md, SECURITY.md, CHANGELOG.md)
  *     become pages under content/docs, with frontmatter and links rewritten to
  *     site paths (other repository files link to GitHub);
- *   - the brand files (logo, icon, Poppins Black) are copied from public/.
+ *   - the brand files (logo, icon, Poppins Black) are copied from public/;
+ *   - the trailer is copied to public/trailer/: the MP4, its poster and the
+ *     licence notice from promo/out, and the live, playable page (promo/: the
+ *     page, scripts, vendored three.js with its LICENSE, screenshots, fonts
+ *     with their OFL files). Only files git commits are copied, and no audio
+ *     except CC0 files (the page plays a procedural soundtrack).
  *
  * Everything written here is ignored by git (docs/.gitignore). Reads only
  * committed files; never imports app code, Prisma or the app's environment.
  *
  *   node scripts/prepare.mjs
  */
-import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { repository } from '../lib/repository.mjs';
@@ -217,6 +223,53 @@ function copy(from, to) {
   copyFileSync(from, to);
 }
 
+/** Audio may reach the site only as a CC0 file that git would commit. */
+export const AUDIO_EXT = /\.(mp3|wav|ogg|flac|m4a|aac)$/i;
+
+/**
+ * Repository files under promo/ that git commits or would commit: tracked
+ * files plus untracked files that are not ignored. Ignored files (the licensed
+ * audio, render folders) never appear, so they can never be published.
+ */
+export function promoGitFiles(root = ROOT) {
+  const r = spawnSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', 'promo'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  if (r.status !== 0) throw new Error(`docs: git ls-files failed: ${r.stderr}`);
+  return [...new Set(r.stdout.split('\0').filter(Boolean))].filter((f) => existsSync(path.join(root, f)));
+}
+
+/**
+ * Files of the live trailer page (paths relative to promo/): the page, its
+ * scripts, the vendored three.js and the assets. Audio is refused unless it
+ * is a CC0 file (`*-cc0.wav`); the page itself plays a procedural soundtrack.
+ */
+export function trailerFiles(gitFiles = promoGitFiles()) {
+  const rel = gitFiles.map((f) => f.replace(/^promo\//, ''));
+  return rel
+    .filter((f) => f === 'index.html' || /^(src|vendor|assets)\//.test(f))
+    .filter((f) => !AUDIO_EXT.test(f) || f.endsWith('-cc0.wav'))
+    .sort();
+}
+
+/**
+ * Copies the trailer into `dest` (default docs/public/trailer): the MP4 and
+ * its poster from promo/out, and the live page under live/.
+ */
+export function copyTrailer(dest = path.join(DOCS, 'public', 'trailer'), root = ROOT) {
+  const gitFiles = promoGitFiles(root);
+  rmSync(dest, { recursive: true, force: true });
+  for (const name of ['shotstash-trailer-30s.mp4', 'poster.jpg', 'NOTICE.md']) {
+    const rel = `promo/out/${name}`;
+    if (!gitFiles.includes(rel)) throw new Error(`docs: ${rel} is missing or ignored`);
+    copy(path.join(root, rel), path.join(dest, name));
+  }
+  const files = trailerFiles(gitFiles);
+  for (const f of files) copy(path.join(root, 'promo', f), path.join(dest, 'live', f));
+  return files;
+}
+
 function main() {
   const repo = repository();
   for (const entry of IMPORTS) {
@@ -233,7 +286,8 @@ function main() {
   for (const name of ['poppins-black-900.woff2', 'poppins-black-900-italic.woff2']) {
     copy(path.join(ROOT, 'public', 'fonts', name), path.join(DOCS, 'assets', 'fonts', name));
   }
-  console.log(`docs: imported ${IMPORTS.length + 1} pages and the brand files (${repo})`);
+  const live = copyTrailer();
+  console.log(`docs: imported ${IMPORTS.length + 1} pages, the brand files and the trailer (${live.length} live page files) (${repo})`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
