@@ -75,6 +75,21 @@ demo.example.com {
 }
 ```
 
+### Running inside an unprivileged LXC container
+
+Docker works inside an unprivileged Proxmox LXC container when nesting is on. Two differences from a plain host:
+
+- The container may not raise the memlock limit, so the cache service fails with "error setting rlimit type 8". Add a local override that drops it (Dragonfly runs fine without):
+
+  ```yaml
+  # docker-compose.local.yml, listed after the demo override in COMPOSE_FILE
+  services:
+    cache:
+      ulimits: !reset {}
+  ```
+
+- When other sites share the host, give the demo memory and CPU limits in the same override (`mem_limit`, `cpus` per service) so it never starves them.
+
 ## 3. Finish setup
 
 Open `https://demo.example.com`. You land on `/setup`, which creates your owner account (the super admin). `docker/init.sh` set a `SETUP_TOKEN`, so the form asks for it:

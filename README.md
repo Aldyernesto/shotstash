@@ -17,9 +17,7 @@ git clone https://github.com/Aldyernesto/shotstash.git && cd shotstash && sh doc
 
 Then open `http://localhost:3005` and create the owner account. Linux x64 with Docker; the [quick start](https://aldyernesto.github.io/shotstash/docs/quick-start/) covers WSL2, macOS and LAN access.
 
-<!-- Public demo: uncomment once the demo instance is live (see launch/checklist.md).
-**[Try the live demo](<demo-url>)**: read-only accounts, resets every night.
--->
+**[Try the live demo](https://demostash.aldyernesto.my.id)**: read-only accounts (credentials on the sign-in page), resets every night.
 
 <p align="center">
   <img src=".github/assets/demo.gif" alt="Uploading footage, opening it in the viewer and creating a share link" width="100%">
