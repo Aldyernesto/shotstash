@@ -292,7 +292,7 @@ ok(!!file.id, 'uploaded a file to process');
   const winner = r1.status === 200 ? r1 : r2;
   ok(winner.json?.job?.id === q.data.enqueueJob.id && winner.json.job.attempt === 1 && typeof winner.json.job.claimToken === 'string', 'the claim answers the job, attempt 1 and a claim token');
   // The file name is random test data and may contain "s3" by chance, so it is left out of the check.
-  const { name: _inputName, ...inputFields } = winner.json.job.input ?? {};
+  const inputFields = Object.fromEntries(Object.entries(winner.json.job.input ?? {}).filter(([key]) => key !== 'name'));
   ok(!/files\/|storage|s3|secret/i.test(JSON.stringify(inputFields)), 'the claim carries no storage key or credential', JSON.stringify(winner.json.job.input));
   const row = await jobRow(q.data.enqueueJob.id);
   ok(row.status === 'claimed' && row.attempts === 1, 'job is claimed with one attempt', JSON.stringify(row));
