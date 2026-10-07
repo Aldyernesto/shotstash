@@ -63,7 +63,7 @@ on `worker` routes they name the credential (`bootstrap token`, `registered work
 | `Query.mentionPeople` | session | discussion.use |
 | `Query.notifications` | session | self |
 | `Query.passwordResetAvailable` | public |  |
-| `Query.pendingUsers` | session | users.manage |
+| `Query.pendingUsers` | session | users.view |
 | `Query.pipelineJob` | session | project.view |
 | `Query.pipelineWorkers` | session | instance.configure |
 | `Query.processedVersions` | session | project.view |
@@ -76,7 +76,7 @@ on `worker` routes they name the credential (`bootstrap token`, `registered work
 | `Query.storageStats` | session | instance.configure |
 | `Query.unreadNotificationCount` | session | self |
 | `Query.uploadSession` | session | upload |
-| `Query.users` | session | users.manage |
+| `Query.users` | session | users.view |
 | `Mutation.adminSetPassword` | session | users.manage |
 | `Mutation.approveUser` | session | users.manage |
 | `Mutation.cancelJob` | session | pipeline.trigger |

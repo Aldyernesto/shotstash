@@ -1310,6 +1310,7 @@
     "subtitle": "Manage users, keep an eye on activity and look after storage.",
     "working": "Working…",
     "closeNotice": "Close message",
+    "viewOnly": "View only: this account can see how people and roles are managed, but changes are switched off.",
     "column": {
       "name": "Name",
       "email": "Email",

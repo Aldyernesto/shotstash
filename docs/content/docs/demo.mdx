@@ -20,6 +20,7 @@ Demo mode is on when the app starts with `SHOTSTASH_DEMO_MODE=true` and `DEMO_AD
   | `demo-viewer@example.com` | Viewer |
 
 - **Read-only.** All three are read-only: every write, upload and profile change answers `FORBIDDEN`. Demo accounts cannot upload at all, so there is no upload limit to tune.
+- **The roles still show.** The demo admin opens the Admin Panel in view-only mode (the demo accounts only, controls switched off), so visitors see what an admin can do that an editor cannot.
 - **Password on the sign-in page.** In demo mode the sign-in page lists the demo accounts and their password. That is the point: the accounts cannot change anything, so the password is not a secret.
 - **No sign-up.** Public sign-up is forced off and `register` answers `FEATURE_DISABLED`, whatever `SHOTSTASH_FEATURE_SIGNUP` says.
 - **A banner** in the app says it is a public demo, read-only, reset every night.

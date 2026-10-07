@@ -312,6 +312,14 @@ for (const [email, who] of Object.entries(sessions)) {
   const list = await gql(who.token, '{ shareLinks { slug } }');
   ok(!list.errors && list.data.shareLinks.some((l) => l.slug === 'demo-coastline-stills'), `${email} lists the demo share links`, json(list.errors ?? list.data));
 }
+// demo-admin opens the Admin Panel to look: the demo accounts only, no changes.
+const adminView = await gql(admin.token, '{ users { email } pendingUsers { id } me { permissions } }');
+ok(!adminView.errors && adminView.data.users.map((u) => u.email).sort().join() === [...DEMO].sort().join(), 'demo-admin lists exactly the demo accounts', json(adminView.errors ?? adminView.data?.users));
+ok(Array.isArray(adminView.data?.pendingUsers) && adminView.data.pendingUsers.length === 0, 'demo-admin lists pending sign-ups without an error (none in the demo)', json(adminView.data?.pendingUsers));
+ok(adminView.data?.me?.permissions?.includes('users.view') && !adminView.data.me.permissions.includes('users.manage'), 'demo-admin may view users but not manage them', json(adminView.data?.me));
+for (const who of [editor, viewer]) {
+  ok((await gql(who.token, '{ users { id } }')).errors?.[0]?.extensions?.code === 'FORBIDDEN', 'demo-editor and demo-viewer cannot list users');
+}
 // ...but never a link outside the demo Project.
 const ownerProject = (await gql(owner.token, 'mutation { createProject(input:{ title:"Owner only" }) { id } }')).data?.createProject?.id;
 const outside = (await gql(owner.token, `mutation { createShareLink(input:{ projectId:"${ownerProject}", mode:PUBLIC }) { id slug } }`)).data?.createShareLink;

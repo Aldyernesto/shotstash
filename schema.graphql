@@ -944,7 +944,7 @@ input CreateUserInput {
 
 """Read operations. Every field needs a session unless noted as public."""
 type Query {
-  """Accounts waiting for sign-up approval. Needs users.manage."""
+  """Accounts waiting for sign-up approval. Needs users.view."""
   pendingUsers: [User!]!
 
   """
@@ -1076,7 +1076,9 @@ type Query {
   """Number of the caller's unread notifications."""
   unreadNotificationCount: Int!
 
-  """Every account. Needs users.manage."""
+  """
+  Every account. Needs users.view (an admin role; read-only admins may list but not change).
+  """
   users: [User!]!
 
   """Storage usage of the instance. Needs instance.configure."""

@@ -23,8 +23,8 @@ export const AUTH_MAP: Record<'Query' | 'Mutation' | 'Subscription', Record<stri
   Query: {
     me: { auth: 'public' },
     passwordResetAvailable: { auth: 'public' },
-    pendingUsers: { auth: 'session', action: 'users.manage' },
-    users: { auth: 'session', action: 'users.manage' },
+    pendingUsers: { auth: 'session', action: 'users.view' },
+    users: { auth: 'session', action: 'users.view' },
     storageStats: { auth: 'session', action: 'instance.configure' },
     projects: { auth: 'session', action: 'project.view' },
     project: { auth: 'session', action: 'project.view' },

@@ -666,15 +666,19 @@ function shareLinkScope(context: GraphQLContext, actor: Actor) {
   return isAdminRole(actor.role) ? {} : { createdById: actor.id };
 }
 
-/** Prisma filter scoping user lists to the demo accounts for a demo reader. */
+/**
+ * Prisma filter for user lists. A read-only account (users.view is a read) sees the demo
+ * accounts only, with or without demo mode, so seeded demo logins left behind after demo
+ * mode is switched off never read the real team.
+ */
 function demoScope(context: GraphQLContext) {
-  return isDemoReader(context) ? { email: { in: [...DEMO_EMAILS] } } : {};
+  return context.actor?.readOnly ? { email: { in: [...DEMO_EMAILS] } } : {};
 }
 
 const rawResolvers = {
   Query: {
     pendingUsers: async (_: any, __: any, context: GraphQLContext) => {
-      assertCan(context.actor, 'users.manage');
+      assertCan(context.actor, 'users.view');
       return prisma.user.findMany({
         where: { accountStatus: 'PENDING', ...demoScope(context) },
         orderBy: { createdAt: 'desc' },
@@ -690,10 +694,10 @@ const rawResolvers = {
     },
 
     users: async (_: any, __: any, context: GraphQLContext) => {
-      assertCan(context.actor, 'users.manage');
+      assertCan(context.actor, 'users.view');
       const all = await AuthService.getUsers();
-      // Story 8.2: a read-only demo visitor sees the demo accounts only (unreachable today: users.manage is a write).
-      return isDemoReader(context) ? all.filter((u: { email: string }) => DEMO_EMAILS.includes(u.email)) : all;
+      // A read-only account (demo-admin) sees the demo accounts only, demo mode or not.
+      return context.actor?.readOnly ? all.filter((u: { email: string }) => DEMO_EMAILS.includes(u.email)) : all;
     },
 
     projects: async (_: any, __: any, context: GraphQLContext) => {

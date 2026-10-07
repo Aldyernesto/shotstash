@@ -26,6 +26,7 @@ const EXPECTED = {
   'trash.view': NOT_VIEWER,
   'trash.purge': ['SUPER_ADMIN', 'ADMIN'],
   'pipeline.trigger': ['SUPER_ADMIN', 'ADMIN', 'EDITOR'],
+  'users.view': ['SUPER_ADMIN', 'ADMIN'],
   'users.manage': ['SUPER_ADMIN', 'ADMIN'],
   'instance.configure': ['SUPER_ADMIN'],
 };
@@ -47,7 +48,7 @@ for (const action of Object.keys(EXPECTED)) {
 }
 
 test('read-only accounts keep reads and lose every write', () => {
-  const reads = new Set(['project.view', 'media.download', 'trash.view']);
+  const reads = new Set(['project.view', 'media.download', 'trash.view', 'users.view']);
   for (const role of ALL) {
     const ro = actor(role, { readOnly: true });
     for (const action of ACTIONS) {

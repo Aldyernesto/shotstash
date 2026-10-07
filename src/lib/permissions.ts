@@ -13,12 +13,15 @@
  *   Trash page .............................. trash.view
  *   Delete Forever (purge) .................. trash.purge
  *   Share ................................... share.manage
- *   Admin tools and Admin Panel ............. users.manage
+ *   Admin tools and Admin Panel ............. users.view (changes: users.manage)
  *   Process menu, cancel and retry jobs ..... pipeline.trigger
  *
  * Contract kept from Story 2.18: a denied action is NOT rendered (no
- * disabled twin, no hidden Tab stop). This is a display layer; the server
- * enforces the same rules on every write.
+ * disabled twin, no hidden Tab stop). One exception: the Admin Panel for a
+ * read-only admin (users.view without users.manage) shows its controls
+ * switched off under a view-only note, so the public demo shows what an admin
+ * can do. This is a display layer; the server enforces the same rules on
+ * every write.
  *
  * Role label helpers at the end stay role-based: they name a role, they do
  * not grant anything.
@@ -104,11 +107,16 @@ export function canUseDiscussion(subject: (PermissionSubject & { features?: { di
 
 /** Admin tools in the nav. */
 export function canSeeAdminTools(subject: PermissionSubject): boolean {
-  return hasPermission(subject, "users.manage");
+  return hasPermission(subject, "users.view");
 }
 
-/** Admin Panel (user management). */
+/** Admin Panel (user management). A read-only admin opens it to look. */
 export function canOpenAdminPanel(subject: PermissionSubject): boolean {
+  return hasPermission(subject, "users.view");
+}
+
+/** Changes in the Admin Panel: approve, roles, activation, passwords, delete. */
+export function canManageUsers(subject: PermissionSubject): boolean {
   return hasPermission(subject, "users.manage");
 }
 

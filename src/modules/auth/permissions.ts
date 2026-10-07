@@ -11,7 +11,7 @@
  *   item.move, item.trash, trash.view ............. every role except VIEWER
  *   trash.purge .................................... SUPER_ADMIN, ADMIN
  *   pipeline.trigger ............................... SUPER_ADMIN, ADMIN, EDITOR
- *   users.manage ................................... SUPER_ADMIN, ADMIN
+ *   users.view (read), users.manage ................ SUPER_ADMIN, ADMIN
  *   instance.configure ............................. SUPER_ADMIN
  *
  * Cross-cutting rules:
@@ -44,6 +44,7 @@ export const ACTIONS = [
   'trash.view',
   'pipeline.trigger',
   'discussion.use',
+  'users.view',
   'users.manage',
   'instance.configure',
 ] as const;
@@ -51,7 +52,7 @@ export const ACTIONS = [
 export type Action = (typeof ACTIONS)[number];
 
 /** Actions that only read. Everything else is a write and is denied to read-only accounts. */
-const READ_ACTIONS: ReadonlySet<Action> = new Set<Action>(['project.view', 'media.download', 'trash.view']);
+const READ_ACTIONS: ReadonlySet<Action> = new Set<Action>(['project.view', 'media.download', 'trash.view', 'users.view']);
 
 const ALL: readonly Role[] = ROLES;
 const NOT_VIEWER: readonly Role[] = ['SUPER_ADMIN', 'ADMIN', 'FIELD_CREW', 'EDITOR'];
@@ -69,6 +70,7 @@ export const MATRIX: Readonly<Record<Action, readonly Role[]>> = {
   'trash.view': NOT_VIEWER,
   'trash.purge': ADMINS,
   'pipeline.trigger': ['SUPER_ADMIN', 'ADMIN', 'EDITOR'],
+  'users.view': ADMINS,
   'users.manage': ADMINS,
   'instance.configure': ['SUPER_ADMIN'],
 };

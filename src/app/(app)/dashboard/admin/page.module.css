@@ -714,3 +714,21 @@
   flex-direction: column;
   gap: var(--spine-field-gap);
 }
+
+/* A read-only admin (the public demo admin) looks at every control, switched off. */
+.viewOnlyNote {
+  margin: 16px 0 0;
+  padding: 10px 16px;
+  border: 1px solid var(--app-spine-line);
+  border-radius: var(--spine-radius-lg);
+  background: var(--app-spine-surface-2);
+  color: var(--app-spine-text-soft);
+  width: fit-content;
+  max-width: 100%;
+}
+
+.viewOnly button:disabled,
+.viewOnly select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

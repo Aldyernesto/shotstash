@@ -6,7 +6,7 @@ import { gql } from "@apollo/client";
 import styles from "./page.module.css";
 import { useAuth } from "@/components/AuthContext";
 // Story 2.18: gerbang Admin Panel dari modul bersama.
-import { canOpenAdminPanel, hasPermission, isSuperAdmin } from "@/lib/permissions";
+import { canManageUsers, canOpenAdminPanel, hasPermission, isSuperAdmin } from "@/lib/permissions";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
 // Story 3.18: lapisan bersama — `dialog`/`confirm-sheet`, `notice-bar`,
@@ -317,6 +317,8 @@ export default function AdminPanel() {
     return null;
   }
 
+  /** A read-only admin (the demo admin) sees every control, switched off. */
+  const viewOnly = !canManageUsers(user);
   const users: User[] = data?.users || [];
   const filteredUsers = users.filter((u) => {
     const q = searchQuery.toLowerCase();
@@ -493,12 +495,17 @@ export default function AdminPanel() {
   };
 
   return (
-    <div className={styles.adminContainer}>
+    <div className={`${styles.adminContainer} ${viewOnly ? styles.viewOnly : ""}`}>
       <div className={styles.pageHead}>
         <h1 className={`spine-display-page ${styles.pageTitle}`}>{t("title")}</h1>
         <p className={`spine-body-sub ${styles.pageSub}`}>
           {t("subtitle")}
         </p>
+        {viewOnly && (
+          <p id="admin-view-only" className={`spine-body-sm ${styles.viewOnlyNote}`} role="note">
+            {t("viewOnly")}
+          </p>
+        )}
       </div>
 
       {/* Panel "Menunggu Persetujuan" HANYA tampil bila ada pendaftaran. */}
@@ -570,6 +577,8 @@ export default function AdminPanel() {
                       <select
                         className={`spine-focus-ring ${styles.selectPill}`}
                         aria-label={t("pending.approveAsFor", { name })}
+                        disabled={viewOnly}
+                        aria-describedby={viewOnly ? "admin-view-only" : undefined}
                         value={selRole}
                         onChange={(e) => setApproveRole((v) => ({ ...v, [u.id]: e.target.value }))}
                       >
@@ -585,6 +594,8 @@ export default function AdminPanel() {
                       busy={busy === 'approve'}
                       busyLabel={t("working")}
                       aria-label={t("pending.approveFor", { name })}
+                      disabled={viewOnly}
+                      aria-describedby={viewOnly ? "admin-view-only" : undefined}
                       onClick={() =>
                         runApproval(u, 'approve', () =>
                           approveUser({ variables: { userId: u.id, role: selRole } }),
@@ -598,6 +609,8 @@ export default function AdminPanel() {
                       aria-busy={busy === 'reject' || undefined}
                       aria-disabled={busy === 'reject' || undefined}
                       aria-label={t("pending.rejectFor", { name })}
+                      disabled={viewOnly}
+                      aria-describedby={viewOnly ? "admin-view-only" : undefined}
                       onClick={() => setRejectTarget(u)}
                     >
                       {busy === 'reject' ? t("working") : t("pending.reject")}
@@ -618,7 +631,12 @@ export default function AdminPanel() {
               {f.number(users.length)}
             </span>
           </h2>
-          <PillButton variant="accent" onClick={() => setShowCreateModal(true)}>
+          <PillButton
+            variant="accent"
+            disabled={viewOnly}
+            aria-describedby={viewOnly ? "admin-view-only" : undefined}
+            onClick={() => setShowCreateModal(true)}
+          >
             {t("users.add")}
           </PillButton>
         </div>
@@ -717,6 +735,8 @@ export default function AdminPanel() {
                         <select
                           className={`spine-focus-ring ${styles.selectPill}`}
                           aria-label={t("users.roleFor", { name: u.name })}
+                          disabled={viewOnly}
+                          aria-describedby={viewOnly ? "admin-view-only" : undefined}
                           value={roleValue}
                           onChange={(e) => handleRoleChange(u, e.target.value)}
                         >
@@ -740,6 +760,8 @@ export default function AdminPanel() {
                           busy={rowBusy[u.id]}
                           busyLabel={t("working")}
                           aria-label={u.active ? t("users.deactivateFor", { name: u.name }) : t("users.activateFor", { name: u.name })}
+                          disabled={viewOnly}
+                          aria-describedby={viewOnly ? "admin-view-only" : undefined}
                           onClick={() => handleToggleActive(u)}
                         >
                           {u.active ? t("users.deactivate") : t("users.activate")}
@@ -752,6 +774,8 @@ export default function AdminPanel() {
                             <PillButton
                               variant="surface"
                               aria-label={t("users.resetFor", { name: u.name })}
+                              disabled={viewOnly}
+                              aria-describedby={viewOnly ? "admin-view-only" : undefined}
                               onClick={() => openResetModal(u)}
                             >
                               {t("users.reset")}
@@ -759,6 +783,8 @@ export default function AdminPanel() {
                             <ButtonDanger
                               variant="outline"
                               aria-label={t("users.deleteFor", { name: u.name })}
+                              disabled={viewOnly}
+                              aria-describedby={viewOnly ? "admin-view-only" : undefined}
                               onClick={() => setDeleteTarget(u)}
                             >
                               {t("users.delete")}

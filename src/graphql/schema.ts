@@ -640,7 +640,7 @@ export const typeDefs = `#graphql
 
   "Read operations. Every field needs a session unless noted as public."
   type Query {
-    "Accounts waiting for sign-up approval. Needs users.manage."
+    "Accounts waiting for sign-up approval. Needs users.view."
     pendingUsers: [User!]!
     "The signed-in user. Public: null when the token is missing or expired or the account is deactivated."
     me: User
@@ -733,7 +733,7 @@ export const typeDefs = `#graphql
     ): [Notification!]!
     "Number of the caller's unread notifications."
     unreadNotificationCount: Int!
-    "Every account. Needs users.manage."
+    "Every account. Needs users.view (an admin role; read-only admins may list but not change)."
     users: [User!]!
     "Storage usage of the instance. Needs instance.configure."
     storageStats: StorageStats!

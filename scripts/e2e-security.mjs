@@ -524,6 +524,13 @@ const viewerList = await gql(viewer.token, '{ shareLinks { id } }');
 ok(!viewerList.errors && viewerList.data.shareLinks.length === 0, 'viewer lists share links (own only, none)', JSON.stringify(viewerList.errors ?? viewerList.data));
 const viewerTarget = await gql(viewer.token, `{ shareLinksForTarget(fileId:"${vid.id}") { id } }`);
 ok(!viewerTarget.errors && viewerTarget.data.shareLinksForTarget.length === 0, 'viewer lists links of a target without an error', JSON.stringify(viewerTarget.errors ?? ''));
+// The user list needs users.view (admin roles only).
+const adminUsers = await gql(admin.token, '{ users { email } pendingUsers { id } }');
+ok(!adminUsers.errors && adminUsers.data.users.some((u) => u.email === 'editor@example.com'), 'admin lists users and pending users', JSON.stringify(adminUsers.errors ?? ''));
+for (const [who, s] of [['editor', editor], ['viewer', viewer]]) {
+  ok(code(await gql(s.token, '{ users { id } }')) === 'FORBIDDEN', `${who} cannot list users`);
+  ok(code(await gql(s.token, '{ pendingUsers { id } }')) === 'FORBIDDEN', `${who} cannot list pending users`);
+}
 // A read-only account still lists its own links, but cannot revoke them.
 {
   const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
