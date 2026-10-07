@@ -1,0 +1,46 @@
+name: Demo uptime
+
+# Watches the public demo from outside its network: every 15 minutes it asks
+# the demo's /api/health and fails when the demo does not answer ok. A failed
+# scheduled run makes GitHub email the maintainer, so this is the uptime
+# monitor, with no third-party account.
+#
+# The demo origin comes from the repository variable DEMO_ORIGIN (the same
+# one the docs try-it console uses). Without it, as in a fork, the job skips.
+# GitHub may start scheduled runs a few minutes late; that is fine here.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: demo-uptime
+  cancel-in-progress: false
+
+jobs:
+  health:
+    name: Demo answers /api/health
+    if: vars.DEMO_ORIGIN != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check the demo
+        env:
+          DEMO_ORIGIN: ${{ vars.DEMO_ORIGIN }}
+        run: |
+          # Three tries, 20 s apart, so one slow answer is not an outage.
+          for attempt in 1 2 3; do
+            body=$(curl -fsS --max-time 20 "${DEMO_ORIGIN%/}/api/health" || true)
+            if printf '%s' "$body" | jq -e '.ok == true' >/dev/null 2>&1; then
+              echo "Demo is up: $body"
+              exit 0
+            fi
+            echo "Attempt $attempt: no healthy answer (${body:-no response})"
+            [ "$attempt" -lt 3 ] && sleep 20
+          done
+          echo "::error::The demo at ${DEMO_ORIGIN} is down or unhealthy"
+          exit 1

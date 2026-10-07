@@ -151,4 +151,6 @@ The button calls `POST /api/v1/demo/session`, which:
 
 Shotstash has no telemetry and makes no outbound calls. Watch the demo from the outside with your own uptime monitor on `https://demo.example.com/api/health`, which answers `{ ok, setupRequired, version }` and returns `503` when the database, cache or storage is down.
 
+No monitoring account? The repository includes `.github/workflows/demo-uptime.yml`: set the repository variable `DEMO_ORIGIN` to your demo's address and GitHub checks `/api/health` every 15 minutes from outside your network. A failed run sends you GitHub's usual failed-workflow email.
+
 Upgrade a demo like any other install ([Upgrading](/docs/upgrading/)). Keep the demo override in `COMPOSE_FILE`; a command with its own `-f` flags ignores `COMPOSE_FILE`, so name all three files there or none.
