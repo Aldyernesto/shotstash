@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.0](https://github.com/Aldyernesto/shotstash/compare/v0.2.0...v0.3.0) (2026-10-07)
+
+
+### Features
+
+* **admin:** read-only admins open the Admin Panel to look ([48741e2](https://github.com/Aldyernesto/shotstash/commit/48741e2f47a76c822fe4f7b59d776be1cb947409))
+* repository face, public demo mode and launch kit ([a28beb2](https://github.com/Aldyernesto/shotstash/commit/a28beb2146a54f2bf81dd2dc616b58f98d99a259))
+
+
+### Bug fixes
+
+* **demo:** review fixes for demo privacy, reset, sessions and try-it ([0aaaa62](https://github.com/Aldyernesto/shotstash/commit/0aaaa62fe7028f533b5e5e920f1b7fe796c7dae5))
+* **share:** let every role list share links ([0e8cbcf](https://github.com/Aldyernesto/shotstash/commit/0e8cbcfed981955be9a6e217310e70adf774983b))
+
+
+### Documentation
+
+* link the live demo; note memlock and limits for unprivileged LXC hosts ([f7f35b1](https://github.com/Aldyernesto/shotstash/commit/f7f35b1c5e416470d908228bcb0ae34282c08a5a))
+* quick start and compose header use docker/init.sh ([62ef8f2](https://github.com/Aldyernesto/shotstash/commit/62ef8f220d54e94a94876e1bb55ed0e1bb767ade))
+
 ## [0.2.0](https://github.com/Aldyernesto/shotstash/compare/v0.1.0...v0.2.0) (2026-10-06)
 
 

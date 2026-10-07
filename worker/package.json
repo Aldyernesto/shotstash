@@ -1,6 +1,6 @@
 {
   "name": "shotstash-worker",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Reference worker for the Shotstash processing pipeline: 720p H.264/AAC proxies with ffmpeg.",
   "private": true,
   "license": "MIT",
