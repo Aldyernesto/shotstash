@@ -519,6 +519,26 @@ for (let i = 0; i < 5; i++) {
 }
 ok(statuses.slice(0, 4).every((x) => x === 401) && statuses[4] === 429, 'wrong code 401, 6th attempt 429', statuses.join(','));
 
+// Listing links is a read: a VIEWER gets its own (none), never FORBIDDEN.
+const viewerList = await gql(viewer.token, '{ shareLinks { id } }');
+ok(!viewerList.errors && viewerList.data.shareLinks.length === 0, 'viewer lists share links (own only, none)', JSON.stringify(viewerList.errors ?? viewerList.data));
+const viewerTarget = await gql(viewer.token, `{ shareLinksForTarget(fileId:"${vid.id}") { id } }`);
+ok(!viewerTarget.errors && viewerTarget.data.shareLinksForTarget.length === 0, 'viewer lists links of a target without an error', JSON.stringify(viewerTarget.errors ?? ''));
+// A read-only account still lists its own links, but cannot revoke them.
+{
+  const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await db.connect();
+  await db.query('UPDATE users SET read_only = true WHERE email = $1', ['editor@example.com']);
+  try {
+    const roList = await gql(editor.token, '{ shareLinks { id } }');
+    ok(!roList.errors && roList.data.shareLinks.some((l) => l.id === pubLink.id), 'read-only account lists its own share links', JSON.stringify(roList.errors ?? ''));
+    ok(code(await gql(editor.token, `mutation { revokeShareLink(id:"${pubLink.id}") }`)) === 'FORBIDDEN', 'read-only account cannot revoke');
+  } finally {
+    await db.query('UPDATE users SET read_only = false WHERE email = $1', ['editor@example.com']);
+    await db.end();
+  }
+}
+
 // revoke then everything dies
 ok((await gql(viewer.token, `mutation { revokeShareLink(id:"${pubLink.id}") }`)).errors, 'viewer cannot revoke');
 const rv = await gql(editor.token, `mutation { revokeShareLink(id:"${pubLink.id}") }`);

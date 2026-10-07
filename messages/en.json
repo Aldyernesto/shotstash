@@ -1142,6 +1142,7 @@
     "errorText": "We couldn't get the list of links from the server.",
     "emptyTitle": "No shared links yet.",
     "emptyText": "Create a link from the Share menu on a file, Section or Project.",
+    "emptyTextReadOnly": "Your account can't create share links, so there's nothing to list here yet.",
     "tableLabel": "Shared links",
     "column": {
       "content": "Content",

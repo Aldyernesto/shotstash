@@ -699,7 +699,7 @@ export const typeDefs = `#graphql
       "Only people whose name contains this text."
       query: String
     ): [MentionPerson!]!
-    "Share links: every team link for admins, the caller's own links otherwise. Needs share.manage."
+    "Share links: every team link for admins, the caller's own links otherwise. On a demo instance a read-only account sees the demo Project's links. Any signed-in role may list; creating and revoking need share.manage."
     shareLinks: [ShareLink!]!
     "Share links of exactly one target, newest first, with the same visibility as shareLinks. Set one of the ids."
     shareLinksForTarget(

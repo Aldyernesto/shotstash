@@ -307,6 +307,21 @@ for (const [email, who] of Object.entries(sessions)) {
   if (status.status !== 404) leaks.push(`${email}: /api/v1/status ${status.status}`);
 }
 ok(leaks.length === 0, "no demo account sees the owner's account, email or instance details", leaks.join('; '));
+// The Shared page works for every demo account: the demo Project's links, no error.
+for (const [email, who] of Object.entries(sessions)) {
+  const list = await gql(who.token, '{ shareLinks { slug } }');
+  ok(!list.errors && list.data.shareLinks.some((l) => l.slug === 'demo-coastline-stills'), `${email} lists the demo share links`, json(list.errors ?? list.data));
+}
+// ...but never a link outside the demo Project.
+const ownerProject = (await gql(owner.token, 'mutation { createProject(input:{ title:"Owner only" }) { id } }')).data?.createProject?.id;
+const outside = (await gql(owner.token, `mutation { createShareLink(input:{ projectId:"${ownerProject}", mode:PUBLIC }) { id slug } }`)).data?.createShareLink;
+ok(outside?.id, 'the owner shares a Project outside the demo');
+for (const [email, who] of Object.entries(sessions)) {
+  const list = await gql(who.token, '{ shareLinks { slug } }');
+  const target = await gql(who.token, `{ shareLinksForTarget(projectId:"${ownerProject}") { slug } }`);
+  ok(!list.data?.shareLinks?.some((l) => l.slug === outside.slug) && target.data?.shareLinksForTarget?.length === 0, `${email} never lists a link outside the demo Project`, json(target.errors ?? target.data));
+}
+await gql(owner.token, `mutation { revokeShareLink(id:"${outside.id}") }`);
 const chats = (await gql(viewer.token, `{ project(id:"${PROJECT_ID}") { chats { message sender { name email } } } }`)).data?.project?.chats ?? [];
 const ownerChat = chats.find((c) => c.message === 'Owner note for the demo');
 ok(ownerChat?.sender?.email === 'hidden@demo.invalid', 'the owner shows as a hidden account', json(ownerChat?.sender));

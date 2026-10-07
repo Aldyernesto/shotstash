@@ -14,7 +14,7 @@ import * as PasswordReset from '../services/password-reset.service';
 import prisma from '../lib/prisma';
 import { config } from '../lib/config';
 import { publicSignupRefusal } from '../lib/signupGuard';
-import { DEMO_EMAILS, HIDDEN_ACCOUNT, hiddenFromDemoViewer } from '../lib/demoAccounts';
+import { DEMO_EMAILS, DEMO_PROJECT_ID, HIDDEN_ACCOUNT, hiddenFromDemoViewer } from '../lib/demoAccounts';
 import { validateSessionToken } from '../lib/sessionStore';
 import { assignMentionHandles } from '../lib/mentions';
 import { isRenderableImageUrl, mediaUrl } from '../lib/mediaUrls';
@@ -648,6 +648,24 @@ function isDemoReader(context: GraphQLContext): boolean {
   return config().features.demo && Boolean(context.actor?.readOnly);
 }
 
+/**
+ * Who sees which live share links (Shared page and the share dialog). Listing is a read:
+ * admin roles see every team link, other roles their own. A read-only demo visitor sees
+ * the links in the demo Project only, whatever the role; User masking hides the creator.
+ */
+function shareLinkScope(context: GraphQLContext, actor: Actor) {
+  if (isDemoReader(context)) {
+    return {
+      OR: [
+        { projectId2: DEMO_PROJECT_ID },
+        { folder: { projectId: DEMO_PROJECT_ID } },
+        { file: { projectId: DEMO_PROJECT_ID } },
+      ],
+    };
+  }
+  return isAdminRole(actor.role) ? {} : { createdById: actor.id };
+}
+
 /** Prisma filter scoping user lists to the demo accounts for a demo reader. */
 function demoScope(context: GraphQLContext) {
   return isDemoReader(context) ? { email: { in: [...DEMO_EMAILS] } } : {};
@@ -779,12 +797,10 @@ const rawResolvers = {
 
     shareLinks: async (_: any, __: any, context: GraphQLContext) => {
       const actor = actorOf(context);
-      assertCan(actor, 'share.manage');
+      assertCan(actor, 'project.view');
 
-      // Admin sees all live links, other roles only their own (same rule as revoke).
-      const where = isAdminRole(actor.role)
-        ? { revokedAt: null }
-        : { createdById: actor.id, revokedAt: null };
+      // A read: admin sees all live links, other roles only their own (see shareLinkScope).
+      const where = { revokedAt: null, ...shareLinkScope(context, actor) };
 
       const links = await prisma.shareLink.findMany({
         where,
@@ -797,8 +813,8 @@ const rawResolvers = {
 
     // Story 4.4 (aditif): link untuk TEPAT SATU target — dipakai bagian
     // "Link aktif" share-modal (Story 4.6). Hak lihat SAMA dengan halaman
-    // Shared: isAdminLike → semua link tim untuk target itu, role lain hanya
-    // link dengan createdById miliknya; daftar kosong = [] (bukan error yang
+    // Shared (shareLinkScope): isAdminLike → semua link tim untuk target itu, role lain hanya
+    // link dengan createdById miliknya, akun baca demo hanya link Project demo; daftar kosong = [] (bukan error yang
     // membocorkan bahwa link orang lain ada). Turunan targetType/targetName/
     // url memakai decorateShareLink yang sama dengan `shareLinks`.
     shareLinksForTarget: async (
@@ -807,7 +823,7 @@ const rawResolvers = {
       context: GraphQLContext,
     ) => {
       const actor = actorOf(context);
-      assertCan(actor, 'share.manage');
+      assertCan(actor, 'project.view');
 
       const targets = [
         fileId ? { fileId } : null,
@@ -822,7 +838,7 @@ const rawResolvers = {
         where: {
           ...targets[0],
           revokedAt: null,
-          ...(isAdminRole(actor.role) ? {} : { createdById: actor.id }),
+          ...shareLinkScope(context, actor),
         },
         // createdBy ikut dimuat di sini supaya baris "dibuat {nama}" tidak
         // menembakkan satu query per link (database dev berkolam satu koneksi).

@@ -71,8 +71,8 @@ on `worker` routes they name the credential (`bootstrap token`, `registered work
 | `Query.projects` | session | project.view |
 | `Query.searchFiles` | session | project.view |
 | `Query.searchFolders` | session | project.view |
-| `Query.shareLinks` | session | share.manage |
-| `Query.shareLinksForTarget` | session | share.manage |
+| `Query.shareLinks` | session | project.view |
+| `Query.shareLinksForTarget` | session | project.view |
 | `Query.storageStats` | session | instance.configure |
 | `Query.unreadNotificationCount` | session | self |
 | `Query.uploadSession` | session | upload |

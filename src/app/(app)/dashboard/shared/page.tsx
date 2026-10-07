@@ -28,6 +28,8 @@ import { useTranslations } from "next-intl";
 import { useToast, useHumanizeError } from "@/components/feedback/ToastProvider";
 import { ConfirmDialog } from "@/components/overlay/Dialog";
 import { ButtonDanger } from "@/components/form/buttons";
+import { useAuth } from "@/components/AuthContext";
+import { canShare } from "@/lib/permissions";
 import { StatusChip } from "@/components/form/StatusChip";
 import { EmptyState, SkeletonRow, ErrorBox } from "@/components/dashboard/states";
 import TagPill from "@/components/tag-pill/TagPill";
@@ -144,6 +146,11 @@ export default function SharedLinksPage() {
   const t = useTranslations("shared");
   const tc = useTranslations("common");
   const humanize = useHumanizeError();
+  const { user } = useAuth();
+  /** Listing is a read; creating and revoking links need share.manage. */
+  const mayManage = canShare(user);
+  /** If the server ever refuses the list (a permission answer, not a failure), show the empty state. */
+  const forbidden = !!error?.graphQLErrors?.some((e) => e.extensions?.code === "FORBIDDEN");
 
   /** Baris yang sedang dikonfirmasi pencabutannya (null = tidak ada dialog). */
   const [pending, setPending] = useState<ShareLinkRow | null>(null);
@@ -199,7 +206,7 @@ export default function SharedLinksPage() {
           <p className={`${styles.loadingText} spine-body`}>{t("loading")}</p>
           <SkeletonRow rows={3} variant="card" />
         </div>
-      ) : error ? (
+      ) : error && !forbidden ? (
         <ErrorBox
           title={t("errorTitle")}
           text={t("errorText")}
@@ -209,7 +216,7 @@ export default function SharedLinksPage() {
         <EmptyState
           variant="ghost"
           title={t("emptyTitle")}
-          text={t("emptyText")}
+          text={mayManage || !user ? t("emptyText") : t("emptyTextReadOnly")}
         />
       ) : (
         <div className={styles.table} role="table" aria-label={t("tableLabel")}>
@@ -235,7 +242,7 @@ export default function SharedLinksPage() {
           </div>
 
           {links.map((link) => (
-            <LinkRow key={link.id} link={link} onRevoke={() => setPending(link)} />
+            <LinkRow key={link.id} link={link} onRevoke={mayManage ? () => setPending(link) : undefined} />
           ))}
         </div>
       )}
@@ -296,7 +303,7 @@ function modeLabel(mode: string, t: SharedT): string {
  * Di bawah 900 px baris yang sama berubah menjadi kartu tiga lapis
  * (kolom jadi baris ber-label) — DOM-nya satu, hanya CSS-nya beralih.
  */
-function LinkRow({ link, onRevoke }: { link: ShareLinkRow; onRevoke: () => void }) {
+function LinkRow({ link, onRevoke }: { link: ShareLinkRow; onRevoke?: () => void }) {
   const t = useTranslations("shared");
   const tc = useTranslations("common");
   const f = useFormat();
@@ -381,17 +388,19 @@ function LinkRow({ link, onRevoke }: { link: ShareLinkRow; onRevoke: () => void 
       </div>
 
       <div className={`${styles.cell} ${styles.cellAction}`} role="cell">
-        <ButtonDanger
-          variant="outline"
-          className={styles.revokeBtn}
-          onClick={onRevoke}
-          aria-label={t("revokeLabel", { path: `/s/${link.slug}` })}
-        >
-          <span className={styles.revokeIcon} aria-hidden="true">
-            {ICON_REVOKE}
-          </span>
-          {tc("revokeLink")}
-        </ButtonDanger>
+        {onRevoke ? (
+          <ButtonDanger
+            variant="outline"
+            className={styles.revokeBtn}
+            onClick={onRevoke}
+            aria-label={t("revokeLabel", { path: `/s/${link.slug}` })}
+          >
+            <span className={styles.revokeIcon} aria-hidden="true">
+              {ICON_REVOKE}
+            </span>
+            {tc("revokeLink")}
+          </ButtonDanger>
+        ) : null}
       </div>
     </div>
   );
