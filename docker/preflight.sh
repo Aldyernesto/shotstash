@@ -115,16 +115,29 @@ if ! printf '%s' "$port" | grep -Eq '^[0-9]+$' || [ "$port" -lt 1 ] || [ "$port"
 fi
 
 in_use=0
-checked=1
+checked=0
 if command -v ss >/dev/null 2>&1; then
+  checked=1
   ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "[:.]$port\$" && in_use=1
-elif command -v lsof >/dev/null 2>&1; then
-  lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 && in_use=1
-elif command -v nc >/dev/null 2>&1; then
+fi
+# BusyBox lsof (Alpine and other BusyBox systems) ignores every option, lists
+# all open files and exits 0, so it says nothing about the port: skip it and
+# fall back to nc. A real lsof decides only when it prints a listener on the
+# port; finding none is not proof (without root it cannot see other users'
+# processes), so nc gets asked as well.
+lsof_bin="$(command -v lsof 2>/dev/null)"
+lsof_asked=0
+if [ "$checked" = 0 ] && [ -n "$lsof_bin" ] && ! readlink -f "$lsof_bin" 2>/dev/null | grep -q 'busybox$' && ! lsof --help 2>&1 | grep -q BusyBox; then
+  checked=1
+  lsof_asked=1
+  lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | grep -Eq "[:.]$port[[:space:]]+[(]LISTEN[)]" && in_use=1
+fi
+if { [ "$checked" = 0 ] || [ "$lsof_asked" = 1 ]; } && [ "$in_use" = 0 ] && command -v nc >/dev/null 2>&1; then
+  checked=1
   nc -z 127.0.0.1 "$port" >/dev/null 2>&1 && in_use=1
-else
-  checked=0
-  echo "Cannot check port $port (install ss, lsof or nc)."
+fi
+if [ "$checked" = 0 ]; then
+  echo "Cannot check port $port: install ss (iproute2), a full lsof (BusyBox lsof cannot filter by port) or nc."
 fi
 if [ "$in_use" = 1 ]; then
   # A running Shotstash of this checkout holds the port legitimately.

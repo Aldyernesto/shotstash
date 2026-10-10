@@ -1,6 +1,7 @@
 // docker/preflight.sh: the Docker Compose version gate (2.24.4 for the images
-// and demo overrides) and the architecture warning. Runs the real script in a
-// temporary checkout with stub `docker` and `uname` commands first on PATH.
+// and demo overrides), the architecture warning and the port check. Runs the
+// real script in a temporary checkout with stub `docker` and `uname` commands
+// first on PATH; the port tests use a PATH that holds only stubs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -121,3 +122,163 @@ test('preflight warns (never fails) on an architecture without published images'
     }
   });
 });
+
+// The port check, with ss, lsof and nc replaced by stubs on a PATH that holds
+// nothing else (the host's own ss or lsof must not answer). Basic tools the
+// script needs are forwarded to the host's copies.
+const BASIC_TOOLS = [
+  "awk",
+  "cat",
+  "cut",
+  "dirname",
+  "grep",
+  "head",
+  "readlink",
+  "sed",
+  "tail",
+  "tr",
+];
+
+function isolatedBin(dir, stubs) {
+  const bin = path.join(dir, "isolated");
+  mkdirSync(bin, { recursive: true });
+  for (const tool of BASIC_TOOLS) {
+    const where = spawnSync("sh", ["-c", `command -v ${tool}`], {
+      encoding: "utf8",
+    }).stdout.trim();
+    assert.ok(where, `test setup: ${tool} not found on this machine`);
+    writeFileSync(path.join(bin, tool), `#!/bin/sh\nexec "${where}" "$@"\n`, {
+      mode: 0o755,
+    });
+  }
+  writeFileSync(
+    path.join(bin, "docker"),
+    '#!/bin/sh\nif [ "$1" = compose ] && [ "$2" = version ] && [ "${3:-}" = --short ]; then echo 2.31.0; fi\nexit 0\n',
+    { mode: 0o755 },
+  );
+  writeFileSync(path.join(bin, "uname"), "#!/bin/sh\necho x86_64\n", {
+    mode: 0o755,
+  });
+  for (const [name, body] of Object.entries(stubs))
+    writeFileSync(path.join(bin, name), `#!/bin/sh\n${body}\n`, {
+      mode: 0o755,
+    });
+  return bin;
+}
+
+function runPort(dir, stubs, port = 3005) {
+  const bin = isolatedBin(dir, stubs);
+  const env = { SHOTSTASH_PORT: String(port), COMPOSE_FILE: IMAGES };
+  for (const k of ["SYSTEMROOT", "SystemRoot", "TEMP", "TMP", "HOME"])
+    if (process.env[k]) env[k] = process.env[k];
+  env.PATH = bin;
+  // an absolute sh, since PATH below holds only the stubs (cygpath: Git Bash on Windows)
+  const sh =
+    spawnSync(
+      "sh",
+      ["-c", 'p=$(command -v sh); cygpath -w "$p" 2>/dev/null || echo "$p"'],
+      { encoding: "utf8" },
+    ).stdout.trim() || "sh";
+  return spawnSync(sh, [path.join(dir, "docker/preflight.sh")], {
+    cwd: dir,
+    env,
+    encoding: "utf8",
+  });
+}
+
+// BusyBox lsof: ignores every option, prints open files, exits 0; its usage
+// banner goes to stderr.
+const BUSYBOX_LSOF =
+  'if [ "$1" = --help ]; then echo "BusyBox v1.37.0 (2025-01-17) multi-call binary." >&2; exit 0; fi\necho "1 /usr/local/bin/dockerd"\nexit 0';
+const REAL_LSOF_LISTENING =
+  'if [ "$1" = --help ]; then echo "lsof: illegal option"; exit 1; fi\necho "COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME"\necho "node 4242 me 22u IPv6 0x1 0t0 TCP *:3005 (LISTEN)"\nexit 0';
+const REAL_LSOF_FREE =
+  'if [ "$1" = --help ]; then echo "lsof: illegal option"; exit 1; fi\nexit 1';
+// A real lsof that exits 0 but lists no listener on the port.
+const REAL_LSOF_OTHER =
+  'if [ "$1" = --help ]; then echo "lsof: illegal option"; exit 1; fi\necho "COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME"\necho "sshd 10 root 3u IPv4 0x2 0t0 TCP *:22 (LISTEN)"\nexit 0';
+const NC_FREE = "exit 1";
+const NC_TAKEN = "exit 0";
+
+test(
+  "preflight does not trust BusyBox lsof and asks nc instead",
+  { skip: !hasSh && "no sh" },
+  () => {
+    withCheckout((dir) => {
+      const free = runPort(dir, { lsof: BUSYBOX_LSOF, nc: NC_FREE });
+      assert.equal(free.status, 0, free.stdout + free.stderr);
+      assert.doesNotMatch(free.stdout, /in use/);
+      assert.match(free.stdout, /Preflight passed\. Start/);
+    });
+    withCheckout((dir) => {
+      const taken = runPort(dir, { lsof: BUSYBOX_LSOF, nc: NC_TAKEN });
+      assert.equal(taken.status, 1, taken.stdout + taken.stderr);
+      assert.match(taken.stdout, /Port 3005 is in use/);
+    });
+  },
+);
+
+test(
+  "preflight counts a real lsof only when it prints a listener on the port",
+  { skip: !hasSh && "no sh" },
+  () => {
+    withCheckout((dir) => {
+      const taken = runPort(dir, { lsof: REAL_LSOF_LISTENING, nc: NC_FREE });
+      assert.equal(taken.status, 1, taken.stdout + taken.stderr);
+      assert.match(taken.stdout, /Port 3005 is in use/);
+    });
+    for (const lsof of [REAL_LSOF_FREE, REAL_LSOF_OTHER]) {
+      withCheckout((dir) => {
+        const free = runPort(dir, { lsof, nc: NC_FREE });
+        assert.equal(free.status, 0, free.stdout + free.stderr);
+        assert.match(free.stdout, /Preflight passed\. Start/);
+      });
+      withCheckout((dir) => {
+        // lsof without root cannot see other users' listeners: nc still gets asked
+        const taken = runPort(dir, { lsof, nc: NC_TAKEN });
+        assert.equal(taken.status, 1, taken.stdout + taken.stderr);
+        assert.match(taken.stdout, /Port 3005 is in use/);
+      });
+    }
+  },
+);
+
+test(
+  "preflight prefers ss over lsof and nc",
+  { skip: !hasSh && "no sh" },
+  () => {
+    const ssFree =
+      'echo "State Recv-Q Send-Q Local Address:Port Peer Address:Port"\necho "LISTEN 0 4096 0.0.0.0:22 0.0.0.0:*"';
+    const ssTaken = `${ssFree}\necho "LISTEN 0 511 *:3005 *:*"`;
+    withCheckout((dir) => {
+      const free = runPort(dir, {
+        ss: ssFree,
+        lsof: REAL_LSOF_LISTENING,
+        nc: NC_TAKEN,
+      });
+      assert.equal(free.status, 0, free.stdout + free.stderr);
+      assert.match(free.stdout, /Preflight passed\. Start/);
+    });
+    withCheckout((dir) => {
+      const taken = runPort(dir, { ss: ssTaken, nc: NC_FREE });
+      assert.equal(taken.status, 1, taken.stdout + taken.stderr);
+      assert.match(taken.stdout, /Port 3005 is in use/);
+    });
+  },
+);
+
+test(
+  "preflight passes without the port check when no ss, full lsof or nc exists",
+  { skip: !hasSh && "no sh" },
+  () => {
+    withCheckout((dir) => {
+      const r = runPort(dir, { lsof: BUSYBOX_LSOF });
+      assert.equal(r.status, 0, r.stdout + r.stderr);
+      assert.match(
+        r.stdout,
+        /Cannot check port 3005: install ss \(iproute2\), a full lsof \(BusyBox lsof cannot filter by port\) or nc\./,
+      );
+      assert.match(r.stdout, /Preflight passed except the port check/);
+    });
+  },
+);
