@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.1](https://github.com/Aldyernesto/shotstash/compare/v0.4.0...v0.4.1) (2026-10-10)
+
+
+### Bug fixes
+
+* **install:** preflight no longer reports a free port as taken on BusyBox ([a46b8e2](https://github.com/Aldyernesto/shotstash/commit/a46b8e21123aa40d7ea8b4fdb53c05e859759e9e))
+
+
+### Documentation
+
+* **launch:** Show HN text with verified install time, test coverage and harder answers ([752d103](https://github.com/Aldyernesto/shotstash/commit/752d1034da682d76edbf82dfdf17ff9b0e72b3d8))
+
 ## [0.4.0](https://github.com/Aldyernesto/shotstash/compare/v0.3.0...v0.4.0) (2026-10-07)
 
 
